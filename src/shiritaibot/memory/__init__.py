@@ -179,6 +179,15 @@ class ShortTermMemory:
         rows = await self.store.list("short_term", scope="owner", limit=200)
         cutoff = (now() - timedelta(days=self.days)).isoformat()
         rows = [r for r in rows if r.get("summary") and r["created"] >= cutoff]
-        if query:
-            rows = [r for r in rows if query.lower() in canonical(r).lower()]
+        terms = query.lower().split()
+        if terms:
+            texts = [(r, canonical(r).lower()) for r in rows]
+            matched = [r for r, text in texts if all(t in text for t in terms)]
+            if not matched and len(terms) > 1:
+                # Fall back to any-term matches, ranked by how many terms hit, newest first.
+                hits = [(r, sum(t in text for t in terms)) for r, text in texts]
+                hits = [(r, n) for r, n in hits if n]
+                hits.sort(key=lambda item: (item[1], item[0]["created"]), reverse=True)
+                matched = [r for r, _ in hits]
+            rows = matched
         return rows[:limit]

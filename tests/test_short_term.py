@@ -186,3 +186,53 @@ async def test_handoff_waits_for_main_turn_without_breaking_tool_pairs(memory_ap
         return any(r["text"] == "接着聊" for r in await app.store.list("reply"))
 
     await eventually(replied)
+
+
+async def _put_summaries(app, rows):
+    base = now()
+    for age, (key, summary) in enumerate(rows):
+        created = (base - timedelta(minutes=age)).isoformat()
+        await app.store.put(
+            "short_term", key, {"summary": summary, "created": created, "loop": "main"}, "owner"
+        )
+
+
+async def test_recent_query_matches_all_terms_before_any_term(memory_app):
+    app = memory_app
+    await _put_summaries(
+        app,
+        [
+            ("newest-weather", "查询了天气"),
+            ("both", "讨论了用 Python 写的天气脚本"),
+            ("python-only", "写了 Python 脚本"),
+        ],
+    )
+    ids = [r["id"] for r in await app.short_term.recent("python 天气")]
+    assert ids == ["both"]
+
+
+async def test_recent_query_falls_back_to_ranked_any_term(memory_app):
+    app = memory_app
+    await _put_summaries(
+        app,
+        [
+            ("newest-one-hit", "查询了天气"),
+            ("two-hits", "Python 天气脚本"),
+            ("older-one-hit", "写了 Python 代码"),
+            ("no-hit", "无关内容"),
+        ],
+    )
+    ids = [r["id"] for r in await app.short_term.recent("python 天气 股票")]
+    assert ids == ["two-hits", "newest-one-hit", "older-one-hit"]
+    assert await app.short_term.recent("股票 基金") == []
+
+
+async def test_recent_single_term_and_empty_query(memory_app):
+    app = memory_app
+    await _put_summaries(app, [("weather", "查询了天气预报"), ("code", "写了 Python 代码")])
+    assert [r["id"] for r in await app.short_term.recent("天气")] == ["weather"]
+    assert [r["id"] for r in await app.short_term.recent("PYTHON")] == ["code"]
+    assert [r["id"] for r in await app.short_term.recent("天气预")] == ["weather"]
+    assert await app.short_term.recent("股票") == []
+    assert {r["id"] for r in await app.short_term.recent()} == {"weather", "code"}
+    assert {r["id"] for r in await app.short_term.recent("")} == {"weather", "code"}
