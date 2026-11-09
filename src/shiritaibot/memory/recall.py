@@ -14,9 +14,9 @@ from shiritaibot.memory.longterm import (
     is_live,
     keywords,
     ref,
-    tokenize,
 )
 from shiritaibot.memory.times import minute
+from shiritaibot.store import memory_context_key
 
 log = get_logger("记忆")
 RRF_K = 60
@@ -58,7 +58,7 @@ class MemoryRecall:
             link_route += await memory.card_facts(entity)
         link_route += await memory.entity_events(linked)
         add(link_route)
-        words = keywords(await tokenize(text))
+        words = keywords(await memory.tokens(text))
         hits = await memory.bm25(words)
         # One keyword is enough for a one-word question; otherwise ask for two.
         need = min(2, len(words))
@@ -226,13 +226,14 @@ class MemoryRecall:
         record = await self.memory.store.get("memory_injected", ctx.session)
         if not record:
             return {}
-        epoch = await self.memory.store.get("session_epoch", ctx.session)
-        state = await self.memory.store.get("context_state", ctx.session) or {}
+        key = memory_context_key(ctx.session, ctx.memory_profile)
+        epoch = await self.memory.history_store.get("session_epoch", key)
+        state = await self.memory.history_store.get("context_state", key) or {}
         cutoff = max(epoch["seq"] if epoch else 0, state.get("seq", 0))
         turns = {entry["turn"] for entry in record["items"].values()}
         visible = set()
         for turn in turns:
-            rows = await self.memory.rows(
+            rows = await self.memory.history_store.query(
                 "SELECT MIN(seq) AS seq FROM messages WHERE session=? AND turn=?",
                 (ctx.session, turn),
             )

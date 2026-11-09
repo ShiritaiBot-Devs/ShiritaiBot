@@ -12,6 +12,7 @@ from shiritaibot.meme.tools import meme_tools
 from shiritaibot.memory.tools import memory_tools
 from shiritaibot.routine import FINISHED, KEEP_FINISHED, RoutineItem
 from shiritaibot.skill.tools import skill_tools
+from shiritaibot.store import MEMORY_PROFILE_FILTER
 from shiritaibot.tools import TEXT, schema
 from shiritaibot.tools.qq import download_qq_file, qq_tools, session_dir
 from shiritaibot.tools.web_search import search_token, search_web
@@ -55,10 +56,10 @@ async def register_builtin(app) -> None:
         offset = args.get("offset", 0)
         rows = await app.store.query(
             "SELECT seq,turn,data,created FROM messages WHERE session=? "
-            "AND (?=0 OR seq<?) AND (? IS NULL OR seq=?) "
+            f"AND {MEMORY_PROFILE_FILTER} AND (?=0 OR seq<?) AND (? IS NULL OR seq=?) "
             "AND instr(lower(COALESCE(json_extract(data,'$._original_content'),json_extract(data,'$.content'),'')),lower(?))>0 "
             "AND COALESCE(json_extract(data,'$._command'),0)=0 ORDER BY seq DESC LIMIT ?",
-            (ctx.session, before, before, seq, seq, query, limit + 1),
+            (ctx.session, ctx.memory_profile, before, before, seq, seq, query, limit + 1),
         )
         messages = []
         for row in reversed(rows[:limit]):
@@ -86,8 +87,12 @@ async def register_builtin(app) -> None:
         }
 
     def group_context_available(ctx):
-        settings = app.config.value.group_context
-        return settings.enabled and settings.query_tool and ctx.session.startswith("group:")
+        settings = app.config.value
+        return (
+            settings.group_context_enabled(ctx.session)
+            and settings.group_context.query_tool
+            and ctx.session.startswith("group:")
+        )
 
     async def group_context_query(ctx, args):
         # Session is derived from the caller; one group cannot read another.
@@ -120,7 +125,9 @@ async def register_builtin(app) -> None:
         }
 
     async def proactive_recall(ctx, args):
-        return await app.short_term.recent(args.get("query", ""), args.get("limit", 10))
+        return await app.short_term.recent(
+            args.get("query", ""), args.get("limit", 10), memory_profile=ctx.memory_profile
+        )
 
     async def routine_list(ctx, args):
         statuses = ("open", "scheduled") + (FINISHED if args.get("include_finished") else ())
@@ -178,7 +185,11 @@ async def register_builtin(app) -> None:
 
     async def artifact_read(ctx, args):
         row = await app.store.get("artifact", args["id"])
-        if not row or row["scope"] != ctx.session:
+        if (
+            not row
+            or row["scope"] != ctx.session
+            or row.get("memory_profile", "default") != ctx.memory_profile
+        ):
             raise PublicError("当前会话不能访问该产物")
         offset = args.get("offset", 0)
         return {"text": row["content"][offset : offset + 12000], "total": len(row["content"])}
@@ -365,7 +376,7 @@ async def register_builtin(app) -> None:
             timeout=180,
         ),
     ]
-    entries += memory_tools(app.memory)
+    entries += memory_tools(app.memory_for)
     entries += qq_tools(app)
     entries += meme_tools(app)
     entries += knowledge_tools(app)

@@ -276,3 +276,30 @@ footer .muted {
     display: none;
   }
 }
+
+@media (max-width: 520px) {
+  .console-header {
+    gap: 8px;
+    padding-inline: 14px;
+  }
+
+  .console-crumb,
+  .console-actions button {
+    white-space: nowrap;
+  }
+
+  .console-crumb > :not([aria-current]),
+  .console-action-label {
+    display: none;
+  }
+
+  .console-actions {
+    gap: 6px;
+  }
+
+  .console-actions button {
+    min-width: 36px;
+    min-height: 36px;
+    padding: 6px 8px;
+  }
+}

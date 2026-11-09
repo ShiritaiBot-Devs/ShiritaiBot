@@ -16,6 +16,7 @@ from shiritaibot.core.logs import brief, get_logger
 from shiritaibot.memory.judge import MemoryJudge
 from shiritaibot.memory.times import month, parse_bound, parse_time, relative_words, render_time
 from shiritaibot.memory.vectors import VectorIndex
+from shiritaibot.store import MEMORY_PROFILE_FILTER
 
 log = get_logger("记忆")
 
@@ -95,8 +96,8 @@ def keywords(words: list[str]) -> list[str]:
     return list(seen)
 
 
-def tokenize_sync(text: str) -> list[str]:
-    return list(jieba.cut_for_search(text))
+def tokenize_sync(text: str, tokenizer: jieba.Tokenizer = jieba.dt) -> list[str]:
+    return list(tokenizer.cut_for_search(text))
 
 
 async def tokenize(text: str) -> list[str]:
@@ -104,8 +105,10 @@ async def tokenize(text: str) -> list[str]:
 
 
 class MemoryManager:
-    def __init__(self, store, config, llm=None):
+    def __init__(self, store, config, llm=None, *, history_store=None):
         self.store, self.config, self.llm = store, config, llm
+        self.history_store = history_store if history_store is not None else store
+        self.tokenizer = jieba.dt if history_store is None else jieba.Tokenizer()
         self.vectors = VectorIndex(store, llm)
         self.judge = MemoryJudge(llm, config, store)
         self.aliases: dict[str, set[int]] = {}
@@ -199,7 +202,10 @@ class MemoryManager:
         self.aliases = index
         # Whole names keep the tokenizer from splitting people and projects apart.
         words = [row["name"] for row in rows]
-        await asyncio.to_thread(lambda: [jieba.add_word(word) for word in words])
+        await asyncio.to_thread(lambda: [self.tokenizer.add_word(word) for word in words])
+
+    async def tokens(self, text: str) -> list[str]:
+        return await asyncio.to_thread(tokenize_sync, text, self.tokenizer)
 
     def link(self, text: str) -> list[int]:
         """Entities whose name or alias occurs in the text, longest match first."""
@@ -260,9 +266,9 @@ class MemoryManager:
         target = normalize(quote)
         if len(target) < 2:
             raise PublicError("evidence 太短，请原样摘录支持这条记忆的原文")
-        rows = await self.rows(
-            "SELECT data FROM messages WHERE session=? AND turn=? ORDER BY seq",
-            (ctx.session, ctx.turn),
+        rows = await self.history_store.query(
+            f"SELECT data FROM messages WHERE session=? AND turn=? AND {MEMORY_PROFILE_FILTER} ORDER BY seq",
+            (ctx.session, ctx.turn, ctx.memory_profile),
         )
         found = None
         samples: list[str] = []
@@ -325,7 +331,7 @@ class MemoryManager:
     async def index(self, refs: list[str]) -> None:
         items = await self.load(refs)
         texts = {key: self.plain(item) for key, item in items.items()}
-        tokens = {key: " ".join(await tokenize(text)) for key, text in texts.items()}
+        tokens = {key: " ".join(await self.tokens(text)) for key, text in texts.items()}
         async with self.tx() as db:
             for key in refs:
                 await db.execute("DELETE FROM mem_fts WHERE id=?", (key,))
@@ -1203,7 +1209,7 @@ class MemoryManager:
             linked = self.link(query)
             add([ref("e", e) for e in linked])
             add(await self.entity_events(linked, 20))
-            add([key for key, _ in await self.bm25(keywords(await tokenize(query)))])
+            add([key for key, _ in await self.bm25(keywords(await self.tokens(query)))])
             add([key for key, score in await self.vectors.search(query) if score >= 0.3])
             if include_history:
                 pattern = f"%{query.strip()}%"

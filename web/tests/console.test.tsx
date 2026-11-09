@@ -15,6 +15,7 @@ import type { ApiClient } from "../src/api/client";
 import type { Action } from "../src/pages/common";
 import type { PluginInfo, Settings } from "../src/api/types";
 import { Dashboard } from "../src/pages/Dashboard";
+import { AdaptersPage } from "../src/pages/AdaptersPage";
 import { ModelsPage } from "../src/pages/ModelsPage";
 import { ChatPage } from "../src/pages/ChatPage";
 import { LogsPage } from "../src/pages/LogsPage";
@@ -28,6 +29,7 @@ import { SkillsPage } from "../src/pages/SkillsPage";
 import { SecretField } from "../src/components/SecretField";
 import { NoticeProvider, useNotice } from "../src/hooks/useNotice";
 import { FieldForm } from "../src/components/FieldForm";
+import { createAdapter } from "../src/config/schema";
 import { PAGES, pageFromHash } from "../src/navigation";
 import { App } from "../src/App";
 import { baseConfig } from "./fixtures";
@@ -160,6 +162,96 @@ function ConfigHost({
     </QueryClientProvider>
   );
 }
+
+describe("adapter configuration", () => {
+  it("switches from OneBot to Feishu with the isolated memory default", async () => {
+    const config = baseConfig();
+    const onConfig = vi.fn();
+    const client = fakeClient({ config: vi.fn().mockResolvedValue(config) });
+    render(
+      <ConfigHost
+        page={AdaptersPage}
+        client={client}
+        initial={config}
+        onConfig={onConfig}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "添加" }));
+    expect(screen.getByLabelText("WebSocket 地址")).toBeTruthy();
+    await user.selectOptions(screen.getByLabelText("适配器类型"), "feishu");
+    expect(screen.queryByLabelText("WebSocket 地址")).toBeNull();
+    expect((screen.getByLabelText("记忆库") as HTMLSelectElement).value).toBe(
+      "feishu",
+    );
+    expect(
+      (screen.getByLabelText("群聊唤醒词") as HTMLTextAreaElement).value,
+    ).toBe("小知");
+    expect(
+      (screen.getByLabelText("记录飞书群上下文") as HTMLInputElement).checked,
+    ).toBe(false);
+    await user.selectOptions(screen.getByLabelText("记忆库"), "default");
+    expect(onConfig.mock.lastCall?.[0].adapters[0]).toMatchObject({
+      type: "feishu",
+      memory_profile: "default",
+    });
+  });
+
+  it("keeps a saved secret write-only and reports the live permission issue for the applied app", async () => {
+    const config = baseConfig();
+    config.adapters = [
+      {
+        ...createAdapter([]),
+        id: "feishu-main",
+        type: "feishu",
+        enabled: true,
+        app_id: "cli_example",
+        app_secret: "",
+        app_secret_configured: true,
+      },
+    ];
+    const client = fakeClient({
+      config: vi.fn().mockResolvedValue(config),
+      health: vi.fn().mockResolvedValue({
+        adapters: { "feishu-main": "connected" },
+        adapter_diagnostics: {
+          "feishu-main": "请开通 im:message:send_as_bot。",
+        },
+      }),
+    });
+    const onConfig = vi.fn();
+    render(
+      <ConfigHost
+        page={AdaptersPage}
+        client={client}
+        initial={config}
+        onConfig={onConfig}
+      />,
+    );
+    expect(
+      await screen.findByText("请开通 im:message:send_as_bot。"),
+    ).toBeTruthy();
+    const secretInput = screen.getByLabelText("App Secret") as HTMLInputElement;
+    expect(secretInput.value).toBe("");
+    expect(secretInput.type).toBe("password");
+    expect(screen.getByPlaceholderText("已配置 · 留空保留")).toBe(secretInput);
+    fireEvent.change(screen.getByLabelText("App ID"), {
+      target: { value: "cli_another" },
+    });
+    expect(screen.getByPlaceholderText("输入应用密钥")).toBe(secretInput);
+    expect(secretInput.value).toBe("");
+    expect(screen.getByText("待保存")).toBeTruthy();
+    expect(screen.queryByText("请开通 im:message:send_as_bot。")).toBeNull();
+    fireEvent.change(screen.getByLabelText("App Secret"), {
+      target: { value: "new-secret" },
+    });
+    await userEvent.selectOptions(screen.getByLabelText("平台"), "lark");
+    expect(onConfig.mock.lastCall?.[0].adapters[0]).toMatchObject({
+      domain: "lark",
+      app_secret: "",
+    });
+  });
+});
 
 describe("skills page", () => {
   it("shows skill content, toggles a skill and uploads a package", async () => {
@@ -1584,7 +1676,11 @@ describe("identity, personas and context settings", () => {
         />
       );
     }
-    render(<Host />);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Host />
+      </QueryClientProvider>,
+    );
     const user = userEvent.setup();
     expect(
       (screen.getByLabelText("主人私聊 Agent 需要关键词") as HTMLInputElement)

@@ -7,6 +7,7 @@ import { Field } from "../components/FieldForm";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
 import { ScopeToolsField } from "../components/ScopeToolsField";
 import { POLICY_FIELDS } from "../config/schema";
+import { adapterSessionId } from "../lib/sessions";
 import type {
   PermissionPreset,
   SessionPolicy,
@@ -87,7 +88,9 @@ export function ApprovalsPage({
   const owner =
     session.startsWith("web:") ||
     row?.owner ||
-    config.adapters.some((a) => session === `private:${a.id}:${a.owner_id}`);
+    config.adapters.some(
+      (a) => session === adapterSessionId(a, "private", a.owner_id),
+    );
   const fallback = session.startsWith("group:")
     ? policy.group_default
     : owner

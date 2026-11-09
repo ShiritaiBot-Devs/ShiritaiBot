@@ -48,7 +48,7 @@ function FirstRunChecklist({
       page: "settings",
     },
     {
-      label: "连接 NapCat（适配器）",
+      label: "连接 QQ 或飞书（适配器）",
       done: data.adapters.some((adapter) => adapter.enabled),
       page: "adapters",
     },
@@ -115,7 +115,7 @@ export function OverviewPage({
       <div className="metrics">
         {(
           [
-            ["协议连接", adapters.length, "已配置的 OneBot 实例"],
+            ["协议连接", adapters.length, "已启用的适配器实例"],
             ["可用工具", health.data?.tools.length ?? 0, "内置能力与插件"],
             ["等待审批", pending.length, "需要你的确认"],
             ["子代理任务", health.data?.subagents ?? 0, "正在执行或排队"],
@@ -165,7 +165,7 @@ export function OverviewPage({
               </div>
             ))
           ) : (
-            <EmptyState text="还没有连接 QQ，在「协议连接」中添加实例。" />
+            <EmptyState text="在「协议连接」中添加 QQ 或飞书实例。" />
           )}
           <button
             type="button"

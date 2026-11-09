@@ -9,6 +9,7 @@ from shiritaibot.core import Context, PublicError, canonical, now
 from shiritaibot.core.logs import brief, describe_session, get_logger
 from shiritaibot.memory.longterm import MemoryManager
 from shiritaibot.memory.recall import MemoryRecall
+from shiritaibot.store import MEMORY_PROFILE_FILTER, owner_memory_scope
 
 __all__ = ["MemoryManager", "MemoryRecall", "ShortTermMemory"]
 log = get_logger("记忆")
@@ -31,8 +32,11 @@ class ShortTermMemory:
         return await self.store.put("proactive_trace", key, row, "owner")
 
     async def enqueue(self, ctx: Context, status: str) -> None:
-        scope = "owner" if ctx.owner and ctx.mode == "agent" and not ctx.group else ctx.session
+        owner_scope = owner_memory_scope(ctx.memory_profile)
         turn = await self.store.get("turn", ctx.turn) or {}
+        scope = turn.get("memory_scope") or (
+            owner_scope if ctx.owner and ctx.mode == "agent" and not ctx.group else ctx.session
+        )
         cfg = self.config.value if self.config else None
         await self.store.insert(
             "memory_summary",
@@ -42,12 +46,13 @@ class ShortTermMemory:
                 "turn_status": status,
                 "status": "pending",
                 "memory_scope": scope,
+                "memory_profile": ctx.memory_profile,
                 "loop": "proactive" if ctx.background else "main",
                 "assistant_name": turn.get(
                     "assistant_name", cfg.assistant_name if cfg else "ShiritaiBot"
                 ),
                 "owner_name": turn.get("owner_name", cfg.owner_name if cfg else "主人")
-                if scope == "owner"
+                if scope == owner_scope
                 else "用户",
             },
         )
@@ -62,7 +67,8 @@ class ShortTermMemory:
         )
         for item in rows:
             row = json.loads(item["data"])
-            private = row["memory_scope"] == "owner"
+            profile = row.get("memory_profile", "default")
+            private = row["memory_scope"] == owner_memory_scope(profile)
             await self.enqueue(
                 Context(
                     row["scope"],
@@ -71,6 +77,7 @@ class ShortTermMemory:
                     private,
                     background=row["loop"] == "proactive",
                     turn=row["id"],
+                    memory_profile=profile,
                 ),
                 row["status"],
             )
@@ -79,8 +86,8 @@ class ShortTermMemory:
 
     async def compress(self, row: dict) -> None:
         messages = await self.store.query(
-            "SELECT data FROM messages WHERE session=? AND turn=? ORDER BY seq",
-            (row["session"], row["id"]),
+            f"SELECT data FROM messages WHERE session=? AND turn=? AND {MEMORY_PROFILE_FILTER} ORDER BY seq",
+            (row["session"], row["id"], row.get("memory_profile", "default")),
         )
         # Provider-specific opaque reasoning is not part of an episode summary.
         assistant_name = row.get("assistant_name", "ShiritaiBot")
@@ -175,8 +182,12 @@ class ShortTermMemory:
             except TimeoutError:
                 pass
 
-    async def recent(self, query: str = "", limit: int = 20) -> list[dict]:
-        rows = await self.store.list("short_term", scope="owner", limit=200)
+    async def recent(
+        self, query: str = "", limit: int = 20, *, memory_profile: str = "default"
+    ) -> list[dict]:
+        rows = await self.store.list(
+            "short_term", scope=owner_memory_scope(memory_profile), limit=200
+        )
         cutoff = (now() - timedelta(days=self.days)).isoformat()
         rows = [r for r in rows if r.get("summary") and r["created"] >= cutoff]
         terms = query.lower().split()

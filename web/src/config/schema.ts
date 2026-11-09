@@ -13,6 +13,7 @@ export type FieldKind =
   | "boolean"
   | "select"
   | "secret"
+  | "write-only"
   | "list"
   | "time"
   | "json"
@@ -202,14 +203,24 @@ export const EMBEDDING_MODEL_FIELDS: FieldSpec[] = [
   ...PRICE_FIELDS,
 ];
 
-export const ADAPTER_FIELDS: FieldSpec[] = [
+const ADAPTER_COMMON_FIELDS: FieldSpec[] = [
   { key: "id", label: "实例标识", kind: "text" },
+  {
+    key: "type",
+    label: "适配器类型",
+    kind: "select",
+    options: ["onebot11", "feishu"],
+    optionLabels: { onebot11: "QQ · OneBot V11", feishu: "飞书应用机器人" },
+  },
   {
     key: "enabled",
     label: "启用连接",
     kind: "boolean",
     help: "保存后连接此协议端，接收消息并发送回复。",
   },
+];
+
+const ONEBOT_FIELDS: FieldSpec[] = [
   {
     key: "url",
     label: "WebSocket 地址",
@@ -258,6 +269,64 @@ export const ADAPTER_FIELDS: FieldSpec[] = [
     help: "避免协议端只是短暂重连时就误启动。两次自动启动至少间隔 5 分钟。",
   },
 ];
+
+export function adapterFields(
+  item: AdapterConfig,
+  hasSavedSecret: boolean,
+): FieldSpec[] {
+  if (item.type !== "feishu")
+    return [...ADAPTER_COMMON_FIELDS, ...ONEBOT_FIELDS];
+  return [
+    ...ADAPTER_COMMON_FIELDS,
+    {
+      key: "domain",
+      label: "平台",
+      kind: "select",
+      options: ["feishu", "lark"],
+      optionLabels: { feishu: "飞书", lark: "Lark" },
+    },
+    { key: "app_id", label: "App ID", kind: "text", placeholder: "cli_…" },
+    {
+      key: "app_secret",
+      label: "App Secret",
+      kind: "write-only",
+      placeholder: hasSavedSecret ? "已配置 · 留空保留" : "输入应用密钥",
+    },
+    {
+      key: "owner_id",
+      label: "主人 Open ID",
+      kind: "text",
+      placeholder: "ou_…",
+      help: "飞书私聊只响应主人，可使用 Agent 工具。",
+    },
+    {
+      key: "memory_profile",
+      label: "记忆库",
+      kind: "select",
+      options: ["feishu", "default"],
+      optionLabels: { feishu: "独立飞书记忆库", default: "现有默认记忆库" },
+      help: "用于主人的飞书私聊。",
+    },
+    {
+      key: "groups",
+      label: "允许的群聊",
+      kind: "list",
+      help: "每项填写一个 oc_ 开头的群聊 ID。",
+    },
+    {
+      key: "wake_keywords",
+      label: "群聊唤醒词",
+      kind: "list",
+      help: "消息以任一唤醒词开头时回复。",
+    },
+    {
+      key: "feishu_group_context",
+      label: "记录飞书群上下文",
+      kind: "boolean",
+      help: "开启后，回复时参考当前群的近期消息。",
+    },
+  ];
+}
 
 const SUBAGENT_COMMON_FIELDS: FieldSpec[] = [
   { key: "id", label: "实例标识", kind: "text" },
@@ -971,6 +1040,7 @@ export function createAdapter(rows: AdapterConfig[]): AdapterConfig {
   return {
     id: uniqueId("qq-main", rows),
     enabled: false,
+    type: "onebot11",
     url: "ws://127.0.0.1:3001",
     token: "",
     self_id: "",
@@ -980,6 +1050,10 @@ export function createAdapter(rows: AdapterConfig[]): AdapterConfig {
     ignore_users: [],
     auto_start: [],
     auto_start_after: 60,
+    domain: "feishu",
+    wake_keywords: ["小知"],
+    feishu_group_context: false,
+    memory_profile: "feishu",
   };
 }
 

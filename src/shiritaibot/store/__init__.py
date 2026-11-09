@@ -13,6 +13,15 @@ from shiritaibot.core.logs import get_logger
 # Call sites log a readable line themselves; this keeps the raw activity kind for debugging.
 log = get_logger("活动")
 GROUP_MESSAGES_KEPT = 2000
+MEMORY_PROFILE_FILTER = "COALESCE(json_extract(data,'$._memory_profile'),'default')=?"
+
+
+def memory_context_key(session: str, profile: str) -> str:
+    return session if profile == "default" else f"memory:{profile}:{session}"
+
+
+def owner_memory_scope(profile: str) -> str:
+    return "owner" if profile == "default" else f"memory:{profile}"
 
 
 class Store:
@@ -120,31 +129,43 @@ class Store:
         )
         return [json.loads(row["data"]) for row in rows]
 
-    async def append(self, session: str, turn: str, message: dict) -> None:
+    async def append(
+        self, session: str, turn: str, message: dict, *, memory_profile: str | None = None
+    ) -> None:
+        if memory_profile is not None:
+            message = {**message, "_memory_profile": memory_profile}
         await self.execute(
             "INSERT INTO messages(session,turn,data,created) VALUES(?,?,?,?)",
             (session, turn, canonical(message), now().timestamp()),
         )
 
     async def history(
-        self, session: str, limit: int = 200, *, include_commands: bool = True
+        self,
+        session: str,
+        limit: int = 200,
+        *,
+        include_commands: bool = True,
+        memory_profile: str = "default",
     ) -> list[dict]:
-        epoch = await self.get("session_epoch", session)
+        epoch = await self.get("session_epoch", memory_context_key(session, memory_profile))
         condition = "" if include_commands else " AND COALESCE(json_extract(data,'$._command'),0)=0"
         rows = await self.query(
             "SELECT data FROM (SELECT seq,data FROM messages WHERE session=? AND seq>?"
+            f" AND {MEMORY_PROFILE_FILTER}"
             + condition
             + " ORDER BY seq DESC LIMIT ?) ORDER BY seq",
-            (session, epoch["seq"] if epoch else 0, limit),
+            (session, epoch["seq"] if epoch else 0, memory_profile, limit),
         )
         return [json.loads(row["data"]) for row in rows]
 
-    async def reset_history(self, session: str) -> None:
+    async def reset_history(self, session: str, *, memory_profile: str = "default") -> None:
+        key = memory_context_key(session, memory_profile)
         rows = await self.query(
-            "SELECT COALESCE(MAX(seq),0) AS seq FROM messages WHERE session=?", (session,)
+            f"SELECT COALESCE(MAX(seq),0) AS seq FROM messages WHERE session=? AND {MEMORY_PROFILE_FILTER}",
+            (session, memory_profile),
         )
-        await self.put("session_epoch", session, {"seq": rows[0]["seq"]})
-        await self.delete("context_state", session)
+        await self.put("session_epoch", key, {"seq": rows[0]["seq"]})
+        await self.delete("context_state", key)
 
     async def record_group(
         self, session: str, message_id: str, sender: str, name: str, text: str, triggered: bool

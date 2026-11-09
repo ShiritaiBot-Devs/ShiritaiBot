@@ -4,6 +4,7 @@ import json
 
 from shiritaibot.core import PublicError, canonical
 from shiritaibot.core.logs import describe_session, get_logger
+from shiritaibot.store import MEMORY_PROFILE_FILTER, memory_context_key
 
 log = get_logger("上下文")
 
@@ -53,16 +54,18 @@ class ContextManager:
         *,
         owner: bool,
         current_turn: str = "",
+        memory_profile: str = "default",
     ) -> list[dict]:
-        epoch = await self.store.get("session_epoch", session)
+        key = memory_context_key(session, memory_profile)
+        epoch = await self.store.get("session_epoch", key)
         epoch_seq = epoch["seq"] if epoch else 0
-        state = await self.store.get("context_state", session) or {}
+        state = await self.store.get("context_state", key) or {}
         if state.get("epoch_seq", 0) != epoch_seq:
             state = {}
         rows = await self.store.query(
             "SELECT seq,turn,data FROM messages WHERE session=? AND seq>? AND turn!=? "
-            "AND COALESCE(json_extract(data,'$._command'),0)=0 ORDER BY seq",
-            (session, max(epoch_seq, state.get("seq", 0)), current_turn),
+            f"AND {MEMORY_PROFILE_FILTER} AND COALESCE(json_extract(data,'$._command'),0)=0 ORDER BY seq",
+            (session, max(epoch_seq, state.get("seq", 0)), current_turn, memory_profile),
         )
 
         groups: list[list[dict]] = []
@@ -144,7 +147,7 @@ class ContextManager:
             if split or summary != state.get("summary", ""):
                 await self.store.put(
                     "context_state",
-                    session,
+                    key,
                     {
                         "seq": groups[split - 1][-1]["_seq"]
                         if split

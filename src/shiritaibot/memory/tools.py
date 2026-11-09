@@ -24,10 +24,13 @@ def private(ctx: Context) -> None:
         raise PublicError("当前上下文无权访问私人记忆")
 
 
-def memory_tools(memory) -> list[Tool]:
-    async def search(ctx, args):
+def memory_tools(memory_for) -> list[Tool]:
+    def selected(ctx: Context):
         private(ctx)
-        return await memory.search(
+        return memory_for(ctx.memory_profile)
+
+    async def search(ctx, args):
+        return await selected(ctx).search(
             query=args.get("query", ""),
             entity=args.get("entity", ""),
             kind=args.get("kind", ""),
@@ -38,11 +41,10 @@ def memory_tools(memory) -> list[Tool]:
         )
 
     async def get(ctx, args):
-        private(ctx)
-        return await memory.get(args["id"])
+        return await selected(ctx).get(args["id"])
 
     async def save(ctx, args):
-        private(ctx)
+        memory = selected(ctx)
         kind = args["kind"]
         if kind == "entity":
             if not args.get("name") and not args.get("entity"):
@@ -79,12 +81,10 @@ def memory_tools(memory) -> list[Tool]:
         )
 
     async def forget(ctx, args):
-        private(ctx)
-        return await memory.forget(args["id"], args["reason"])
+        return await selected(ctx).forget(args["id"], args["reason"])
 
     async def resolve(ctx, args):
-        private(ctx)
-        return await memory.resolve_conflict(
+        return await selected(ctx).resolve_conflict(
             ctx, args["conflict"], args["decision"], args["owner_quote"], args.get("note", "")
         )
 

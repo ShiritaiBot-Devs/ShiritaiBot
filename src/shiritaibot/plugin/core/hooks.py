@@ -291,7 +291,9 @@ class HookBus:
 
     def matches(self, handler: Handler, event: MessageEvent) -> bool:
         kind = MessageType.GROUP if event.is_group else MessageType.PRIVATE
-        platform = Platform.WEB if event.platform == "web" else Platform.QQ
+        platform = {"qq": Platform.QQ, "web": Platform.WEB, "feishu": Platform.FEISHU}.get(
+            event.platform, Platform(0)
+        )
         return bool(kind & handler.types) and bool(platform & handler.platforms)
 
     def match_command(self, text: str) -> tuple[Handler, str] | None:

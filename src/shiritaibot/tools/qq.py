@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from shiritaibot.adapters.feishu import Feishu
 from shiritaibot.adapters.onebot11 import describe, file_ref, qq_download_url, segments
 from shiritaibot.core import Context, PublicError, Tool
 from shiritaibot.tools import TEXT, schema
@@ -50,7 +51,7 @@ SENSITIVE_FILES = frozenset(
         "state.sqlite3-wal",
     }
 )
-SENSITIVE_DIRS = frozenset({"logs"})
+SENSITIVE_DIRS = frozenset({"logs", "memory-profiles"})
 
 
 def session_dir(home: Path, kind: str, session: str) -> Path:
@@ -95,7 +96,7 @@ async def download_qq_file(app, session: str, ref: str) -> dict:
     if not row or row["scope"] != session:
         raise PublicError("文件引用不属于当前会话")
     bot = app.adapters.instances.get(row["adapter"])
-    if not bot:
+    if not bot or isinstance(bot, Feishu):
         raise PublicError("文件所属 OneBot 实例不可用")
     data = row["data"]
     if not data.get("file_id", data.get("id")) and not data.get("url"):
@@ -154,7 +155,7 @@ def owner_only(ctx: Context) -> None:
 def qq_tools(app) -> list[Tool]:
     def bot_for(ctx: Context, args: dict):
         owner_only(ctx)
-        instances = app.adapters.instances
+        instances = {key: bot for key, bot in app.adapters.instances.items() if not isinstance(bot, Feishu)}
         adapter = args.get("adapter", "")
         if not adapter:
             parts = ctx.session.split(":")

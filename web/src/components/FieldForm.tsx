@@ -194,6 +194,18 @@ export function Control({
   if (spec.kind === "secret") {
     return <SecretField value={String(value ?? "")} onChange={onChange} />;
   }
+  if (spec.kind === "write-only") {
+    return (
+      <input
+        aria-label={spec.label}
+        type="password"
+        autoComplete="new-password"
+        placeholder={spec.placeholder}
+        value={String(value ?? "")}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    );
+  }
   return (
     <input
       aria-label={spec.label}

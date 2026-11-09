@@ -3,6 +3,7 @@ import type { ApiClient } from "../api/client";
 import type { Settings } from "../api/types";
 import { Field, FieldForm } from "../components/FieldForm";
 import { InstanceCollection } from "../components/InstanceCollection";
+import { adapterSessionId } from "../lib/sessions";
 import {
   BASIC_SETTINGS_FIELDS,
   PROACTIVE_FIELDS,
@@ -26,7 +27,7 @@ function GroupTools({ client, config }: { client: ApiClient; config: Settings })
       adapter.groups.map((group) => ({
         adapter: adapter.id,
         group,
-        session: `group:${adapter.id}:${group}`,
+        session: adapterSessionId(adapter, "group", group),
       })),
     );
   const results = useQueries({

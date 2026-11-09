@@ -25,7 +25,15 @@ describe("sessionTitle", () => {
     );
     expect(sessionTitle("private:qq:2064438401")).toBe("QQ 2064438401");
     expect(sessionTitle("group:qq:820215017")).toBe("群 820215017");
-    expect(sessionTitle("background:proactive:08c31f9a")).toBe("后台任务 08c31f");
+    expect(sessionTitle("private:team:feishu.cli_demo/ou_demo")).toBe(
+      "飞书私聊 ou_demo",
+    );
+    expect(sessionTitle("group:team:lark.cli_demo/oc_demo")).toBe(
+      "Lark群聊 oc_demo",
+    );
+    expect(sessionTitle("background:proactive:08c31f9a")).toBe(
+      "后台任务 08c31f",
+    );
     expect(sessionTitle("custom:abc")).toBe("custom:abc");
   });
 });
@@ -35,6 +43,12 @@ describe("sessionRole", () => {
     expect(sessionRole("web:owner")).toBe("local");
     expect(sessionRole("private:qq:1")).toBe("private");
     expect(sessionRole("group:qq:1")).toBe("group");
+    expect(sessionRole("private:team:feishu.cli_demo/ou_demo")).toBe(
+      "feishu-private",
+    );
+    expect(sessionRole("group:team:feishu.cli_demo/oc_demo")).toBe(
+      "feishu-group",
+    );
     expect(sessionRole("background:proactive:x")).toBe("background");
     expect(sessionRole("other:1")).toBe("local");
   });
@@ -96,7 +110,10 @@ describe("sessionGroups", () => {
       "group",
       "background",
     ]);
-    expect(groups[0].items.map((item) => item.id)).toEqual(["web:a", "web:owner"]);
+    expect(groups[0].items.map((item) => item.id)).toEqual([
+      "web:a",
+      "web:owner",
+    ]);
     expect(groups[1].items.map((item) => item.id)).toEqual([
       "private:qq:2",
       "private:qq:1",

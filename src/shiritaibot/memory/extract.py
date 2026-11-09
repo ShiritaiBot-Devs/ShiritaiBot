@@ -13,6 +13,7 @@ import json
 import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from fnmatch import fnmatchcase
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
@@ -30,8 +31,11 @@ from shiritaibot.memory.longterm import (
 )
 from shiritaibot.memory.times import parse_time, relative_words
 from shiritaibot.proactive import PREPARE_SESSION, describe_event, first_object
+from shiritaibot.store import MEMORY_PROFILE_FILTER, owner_memory_scope
 
 log = get_logger("记忆")
+# Feishu's durable private session key includes its region and app binding.
+FEISHU_PRIVATE_SESSIONS = ("private:*:feishu.cli_*/ou_*", "private:*:lark.cli_*/ou_*")
 # Tool output that is itself memory or history would only be learned back in a loop.
 EXCLUDED_TOOLS = {
     "memory_search",
@@ -160,8 +164,9 @@ def open_questions(questions: dict, facts: list, events: list) -> dict:
 
 
 class MemoryExtractor:
-    def __init__(self, memory: MemoryManager, store, config, llm):
+    def __init__(self, memory: MemoryManager, store, config, llm, *, profile: str = "default"):
         self.memory, self.store, self.config, self.llm = memory, store, config, llm
+        self.profile = profile
         self.wake = asyncio.Event()
         self.lock = asyncio.Lock()
         self.backoff: dict[str, tuple[float, float]] = {}
@@ -169,19 +174,34 @@ class MemoryExtractor:
     # ---- scheduling ----------------------------------------------------------
 
     async def sessions(self) -> list[str]:
+        if self.profile != "default":
+            rows = await self.store.query(
+                "SELECT DISTINCT scope AS id FROM records WHERE kind='turn' "
+                "AND json_extract(data,'$.memory_scope')=? AND json_extract(data,'$.loop')='main'",
+                (owner_memory_scope(self.profile),),
+            )
+            return [row["id"] for row in rows]
         rows = await self.store.query(
             "SELECT id FROM records WHERE kind='session' "
             "AND json_extract(data,'$.owner')=1 AND json_extract(data,'$.mode')='agent' "
-            "AND json_extract(data,'$.group')=0 AND json_extract(data,'$.background')=0"
+            "AND json_extract(data,'$.group')=0 AND json_extract(data,'$.background')=0 "
+            "UNION SELECT scope AS id FROM records WHERE kind='turn' "
+            "AND json_extract(data,'$.memory_scope')='owner' AND json_extract(data,'$.loop')='main' "
+            "AND (scope GLOB ? OR scope GLOB ?)",
+            FEISHU_PRIVATE_SESSIONS,
         )
         return [row["id"] for row in rows]
 
     async def open(self) -> None:
-        """Start existing sessions at their current end: history is not backfilled."""
+        """Skip legacy history without dropping unprocessed profile-tagged messages."""
+        if self.profile != "default":
+            return
         for session in await self.sessions():
+            if any(fnmatchcase(session, pattern) for pattern in FEISHU_PRIVATE_SESSIONS):
+                continue  # Feishu uses persisted per-turn eligibility from its first message.
             await self.store.execute(
                 "INSERT OR IGNORE INTO mem_cursor SELECT ?,COALESCE(MAX(seq),0),? FROM messages "
-                "WHERE session=?",
+                "WHERE session=? AND json_extract(data,'$._memory_profile') IS NULL",
                 (session, now().timestamp(), session),
             )
 
@@ -205,7 +225,12 @@ class MemoryExtractor:
             return
         async with self.lock:
             stamp = now().timestamp()
-            for job in await self.store.with_status("memory_extract", ("pending",)):
+            jobs = (
+                await self.store.with_status("memory_extract", ("pending",))
+                if self.profile == "default"
+                else []
+            )
+            for job in jobs:
                 if job.get("retry_at", 0) > stamp:
                     continue
                 try:
@@ -260,12 +285,22 @@ class MemoryExtractor:
     async def chat_job(self, session: str) -> bool:
         """Read one due window of a private session; True when there may be more."""
         cfg = self.config.value.memory
-        cursor = await self.store.query("SELECT seq FROM mem_cursor WHERE session=?", (session,))
+        cursor = await self.memory.rows("SELECT seq FROM mem_cursor WHERE session=?", (session,))
         start = cursor[0]["seq"] if cursor else 0
+        args = (session, start, self.profile)
+        eligibility = ""
+        if self.profile != "default" or any(
+            fnmatchcase(session, pattern) for pattern in FEISHU_PRIVATE_SESSIONS
+        ):
+            eligibility = (
+                " AND turn IN (SELECT id FROM records WHERE kind='turn' AND scope=? "
+                "AND json_extract(data,'$.memory_scope')=? AND json_extract(data,'$.loop')='main')"
+            )
+            args += (session, owner_memory_scope(self.profile))
         rows = await self.store.query(
-            "SELECT seq,turn,data,created FROM messages WHERE session=? AND seq>? ORDER BY seq "
-            "LIMIT 400",
-            (session, start),
+            "SELECT seq,turn,data,created FROM messages WHERE session=? AND seq>? "
+            f"AND {MEMORY_PROFILE_FILTER}{eligibility} ORDER BY seq LIMIT 400",
+            args,
         )
         if not rows:
             return False
@@ -310,7 +345,7 @@ class MemoryExtractor:
             end = seq
         if any(line.role == "owner" for line in segment):
             await self.process(await self.window(segment, [], describe_session(session)))
-        await self.store.execute(
+        await self.memory.store.execute(
             "INSERT INTO mem_cursor VALUES(?,?,?) ON CONFLICT(session) DO UPDATE "
             "SET seq=excluded.seq,updated=excluded.updated",
             (session, end, now().timestamp()),
@@ -731,7 +766,7 @@ class MemoryExtractor:
         )
 
     async def related_facts(self, subject: int | None, content: str) -> list[dict]:
-        rows = await self.store.query(
+        rows = await self.memory.rows(
             "SELECT * FROM mem_fact WHERE subject IS ? AND status IN ('active','conflicted') "
             "ORDER BY as_of DESC LIMIT 40",
             (subject,),
@@ -746,7 +781,7 @@ class MemoryExtractor:
         if occurred is None or not people:
             return []
         marks = ",".join("?" * len(people))
-        return await self.store.query(
+        return await self.memory.rows(
             "SELECT DISTINCT v.* FROM mem_event v JOIN mem_participant p ON p.event=v.id "
             f"WHERE v.status='active' AND p.entity IN ({marks}) AND v.occurred_at BETWEEN ? AND ? "
             "LIMIT 8",

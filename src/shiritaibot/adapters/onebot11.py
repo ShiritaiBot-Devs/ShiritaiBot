@@ -15,6 +15,8 @@ from zoneinfo import ZoneInfo
 
 from websockets.asyncio.client import connect
 
+from shiritaibot.adapters.feishu import Feishu
+from shiritaibot.adapters.feishu_transport import FeishuSendError
 from shiritaibot.api.event import MessageEvent
 from shiritaibot.core import (
     Actor,
@@ -258,7 +260,7 @@ class OneBot:
 class AdapterHub:
     def __init__(self, config, vault, store):
         self.config, self.vault, self.store = config, vault, store
-        self.instances: dict[str, OneBot] = {}
+        self.instances: dict[str, OneBot | Feishu] = {}
         self.tasks: list[asyncio.Task] = []
         self.runtime: RuntimePort | None = None
         self.permissions: ApprovalPort | None = None
@@ -274,12 +276,34 @@ class AdapterHub:
 
     async def start(self) -> None:
         for cfg in self.config.value.adapters:
-            if cfg.enabled:
+            if not cfg.enabled:
+                continue
+            bot: OneBot | Feishu
+            if cfg.type == "feishu":
+                assert self.runtime is not None and self.permissions is not None
+                get_logger(cfg.id).log("启动飞书应用机器人长连接")
+                bot = Feishu(
+                    cfg,
+                    self.vault,
+                    self.store,
+                    self.runtime,
+                    self.permissions,
+                    self.enqueue,
+                    self.hooks,
+                )
+            else:
                 get_logger(cfg.id).log(f"启动协议端（OneBot 11 → {cfg.url}）")
                 bot = OneBot(cfg, self.vault, self.store, self.receive)
-                self.instances[cfg.id] = bot
-                self.tasks.append(asyncio.create_task(bot.run()))
+            self.instances[cfg.id] = bot
+            self.tasks.append(asyncio.create_task(bot.run()))
         self.tasks.append(asyncio.create_task(self.flush()))
+
+    def diagnostics(self) -> dict[str, str]:
+        return {
+            key: bot.diagnostic
+            for key, bot in self.instances.items()
+            if isinstance(bot, Feishu) and bot.diagnostic
+        }
 
     async def close(self) -> None:
         for task in self.tasks:
@@ -551,6 +575,9 @@ class AdapterHub:
             await self.store.put("reply", uid(), {"text": text, "at": now().isoformat()}, session)
             return
         text = clean_outbound(text)
+        if self.config.value.feishu_session(session) is not None and injector is not None:
+            text = injector.plain(text)
+            injector = None
         # <meme> markers become their own sticker messages, splitting the text around them.
         pieces = injector.split(text) if injector is not None else [text]
         expires = now().timestamp() + 86400
@@ -595,8 +622,15 @@ class AdapterHub:
         ]
 
     async def notify_owner(self, text: str, *, handoff: bool = True) -> None:
-        target = next((a for a in self.config.value.adapters if a.enabled and a.owner_id), None)
-        session = f"private:{target.id}:{target.owner_id}" if target else "web:owner"
+        target = next(
+            (
+                a
+                for a in self.config.value.adapters
+                if a.type == "onebot11" and a.enabled and a.owner_id
+            ),
+            None,
+        )
+        session = target.owner_session() if target else "web:owner"
         if not handoff:
             # Approval prompts must be visible while the requesting turn waits for approval;
             # plugins cannot rewrite or cancel them.
@@ -622,6 +656,9 @@ class AdapterHub:
                         f"消息超过 24 小时仍未发出，已放弃：{brief(row['text'], 60)}"
                     )
                 elif not bot or bot.status != "connected":
+                    continue
+                elif isinstance(bot, Feishu):
+                    await self.flush_feishu(bot, row, kind, target)
                     continue
                 elif (message := await self.outgoing(row)) is None:
                     row["status"] = "failed"
@@ -660,3 +697,35 @@ class AdapterHub:
                     await asyncio.sleep(0.7)
                 await self.store.put("outbox", row["id"], row, row["scope"])
             await asyncio.sleep(1)
+
+    async def flush_feishu(self, bot: Feishu, row: dict, kind: str, target: str) -> None:
+        if not bot.can_deliver(kind, target) or row.get("meme"):
+            row["status"] = "failed"
+            await self.store.put("outbox", row["id"], row, row["scope"])
+            return
+        # Persist before submitting. A crash during a request leaves a visible uncertain
+        # receipt rather than repeating the message after Feishu's deduplication window.
+        row["status"] = "uncertain"
+        await self.store.put("outbox", row["id"], row, row["scope"])
+        try:
+            receipt = await bot.send_text(kind, target, row["text"], row["id"])
+        except FeishuSendError as exc:
+            if not exc.uncertain:
+                row["status"] = "pending" if exc.code == "not_connected" else "failed"
+                await self.store.put("outbox", row["id"], row, row["scope"])
+            bot.log.warning(str(exc))
+        except Exception as exc:
+            bot.log.warning(f"飞书发送未确认（{type(exc).__name__}）。")
+        else:
+            row.update(status="sent", receipt=receipt)
+            await self.store.put("outbox", row["id"], row, row["scope"])
+            if kind == "group" and bot.config.feishu_group_context:
+                await self.store.record_group(
+                    row["scope"],
+                    f"feishu:self:{row['id']}",
+                    bot.self_id,
+                    self.config.value.assistant_name,
+                    row["text"],
+                    False,
+                )
+        await asyncio.sleep(0.7)

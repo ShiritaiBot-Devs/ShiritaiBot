@@ -83,6 +83,7 @@ class Vault:
             provider.api_key = await protect(provider.api_key)
         for adapter in result.adapters:
             adapter.token = await protect(adapter.token)
+            adapter.app_secret = await protect(adapter.app_secret)
         for search_provider in ("tavily", "serpapi", "deepseek"):
             search = getattr(result.web_search, search_provider)
             search.api_key = await protect(search.api_key)
@@ -142,13 +143,16 @@ class Permissions:
 
     def session_policy(self, ctx: Context) -> SessionPolicy:
         policy = self.config.value.policy
-        return policy.sessions.get(ctx.session) or (
+        result = policy.sessions.get(ctx.session) or (
             policy.group_default
             if ctx.group or ctx.session.startswith("group:")
             else policy.owner_default
             if ctx.owner or ctx.session.startswith("web:")
             else policy.private_default
         )
+        if ctx.group and self.config.value.feishu_session(ctx.session) is not None:
+            return result.model_copy(update={"mode": "chat"})
+        return result
 
     def context(self, ctx: Context) -> Context:
         if ctx.background:
@@ -206,7 +210,7 @@ class Permissions:
         body = {
             "tool": tool.name,
             "args": args,
-            "hash": fingerprint([ctx.session, tool.name, args]),
+            "hash": fingerprint([ctx.session, ctx.memory_profile, tool.name, args]),
             "status": "pending",
             "reviewer": "model",
             "turn": ctx.turn,
@@ -228,7 +232,9 @@ class Permissions:
                 cfg.routes["approval"] = cfg.routes.get("approval") or cfg.routes.get("light", [])
                 # The conversation is context, not evidence: a dozen recent lines is enough
                 # and keeps the fallback round-trip short.
-                history = await self.store.history(ctx.session, limit=12, include_commands=False)
+                history = await self.store.history(
+                    ctx.session, limit=12, include_commands=False, memory_profile=ctx.memory_profile
+                )
                 request = {
                     "session": ctx.session,
                     "background": ctx.background,
@@ -371,7 +377,7 @@ class Permissions:
         body = {
             "tool": tool.name,
             "args": args,
-            "hash": fingerprint([ctx.session, tool.name, args]),
+            "hash": fingerprint([ctx.session, ctx.memory_profile, tool.name, args]),
             "status": "pending",
             "expires": now().timestamp() + self.config.value.policy.approval_timeout,
             "turn": ctx.turn,

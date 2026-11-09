@@ -191,7 +191,7 @@ export function ChatWorkspace({
           />
         ) : (
           <p className="muted chat-readonly">
-            这里只发送 WebUI 会话。QQ 会话请直接在 QQ 里对话。
+            这里只发送 WebUI 会话。其他会话请返回原平台对话。
           </p>
         )}
       </main>
