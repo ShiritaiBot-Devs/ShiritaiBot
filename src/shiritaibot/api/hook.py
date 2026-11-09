@@ -46,7 +46,8 @@ class MessageType(enum.Flag):
 class Platform(enum.Flag):
     QQ = enum.auto()
     WEB = enum.auto()
-    ALL = QQ | WEB
+    FEISHU = enum.auto()
+    ALL = QQ | WEB | FEISHU
 
 
 class Permission(enum.Enum):

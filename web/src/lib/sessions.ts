@@ -1,7 +1,13 @@
-import type { TurnRecord } from "../api/types";
+import type { AdapterConfig, TurnRecord } from "../api/types";
 import { TIME_ZONE } from "./utils";
 
-export type SessionGroupKey = "local" | "private" | "group" | "background";
+export type SessionGroupKey =
+  | "local"
+  | "private"
+  | "group"
+  | "feishu-private"
+  | "feishu-group"
+  | "background";
 
 export interface SessionItem {
   id: string;
@@ -14,16 +20,43 @@ export interface SessionGroup {
   items: SessionItem[];
 }
 
-const GROUP_ORDER: SessionGroupKey[] = ["local", "private", "group", "background"];
+const GROUP_ORDER: SessionGroupKey[] = [
+  "local",
+  "private",
+  "group",
+  "feishu-private",
+  "feishu-group",
+  "background",
+];
 
 const GROUP_LABELS: Record<SessionGroupKey, string> = {
   local: "本机",
   private: "QQ 私聊",
   group: "QQ 群聊",
+  "feishu-private": "飞书私聊",
+  "feishu-group": "飞书群聊",
   background: "后台任务",
 };
 
+const FEISHU_SESSION =
+  /^(private|group):[^:]+:(feishu|lark)\.cli_[A-Za-z0-9]+\/((?:ou|oc)_[A-Za-z0-9]+)$/;
+
+export function adapterSessionId(
+  adapter: AdapterConfig,
+  kind: "private" | "group",
+  target: string,
+): string {
+  const binding =
+    adapter.type === "feishu"
+      ? `${adapter.domain ?? "feishu"}.${adapter.app_id ?? ""}/`
+      : "";
+  return `${kind}:${adapter.id}:${binding}${target}`;
+}
+
 export function sessionRole(id: string): SessionGroupKey {
+  const feishu = FEISHU_SESSION.exec(id);
+  if (feishu)
+    return feishu[1] === "private" ? "feishu-private" : "feishu-group";
   if (id.startsWith("private:")) return "private";
   if (id.startsWith("group:")) return "group";
   if (id.startsWith("background:")) return "background";
@@ -39,7 +72,8 @@ function clock(timestamp: number): string {
     minute: "2-digit",
     hour12: false,
   }).formatToParts(new Date(timestamp));
-  const at = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  const at = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? "";
   return `${at("month")}-${at("day")} ${at("hour")}:${at("minute")}`;
 }
 
@@ -49,7 +83,8 @@ function day(timestamp: number): string {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(new Date(timestamp));
-  const at = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  const at = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? "";
   return `${at("month")}-${at("day")}`;
 }
 
@@ -59,6 +94,12 @@ export function sessionTitle(id: string): string {
     const rest = id.slice(4);
     if (/^\d+$/.test(rest)) return `对话 ${clock(Number(rest))}`;
     return `对话 ${rest}`;
+  }
+  const feishu = FEISHU_SESSION.exec(id);
+  if (feishu) {
+    const platform = feishu[2] === "lark" ? "Lark" : "飞书";
+    const kind = feishu[1] === "private" ? "私聊" : "群聊";
+    return `${platform}${kind} ${feishu[3]}`;
   }
   const private_ = /^private:[^:]+:([^:]+)$/.exec(id);
   if (private_) return `QQ ${private_[1]}`;

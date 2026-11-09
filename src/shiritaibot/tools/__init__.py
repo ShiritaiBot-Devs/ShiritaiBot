@@ -55,7 +55,12 @@ class ToolRegistry:
             result = redact_secrets(canonical(value), self.secrets)
             if len(result) > 16000:
                 key = uid()
-                await self.store.put("artifact", key, {"content": result}, ctx.session)
+                await self.store.put(
+                    "artifact",
+                    key,
+                    {"content": result, "memory_profile": ctx.memory_profile},
+                    ctx.session,
+                )
                 result = canonical({"preview": result[:12000], "artifact": key, "truncated": True})
             await self.store.activity("tool.completed", name, ctx.session)
             return result

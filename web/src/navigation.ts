@@ -119,7 +119,7 @@ export const PAGES: PageMeta[] = [
   {
     id: "adapters",
     label: "协议连接",
-    subtitle: "OneBot V11 协议连接。",
+    subtitle: "管理 QQ 和飞书连接。",
     icon: Network,
   },
   {

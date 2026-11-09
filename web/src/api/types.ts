@@ -55,6 +55,7 @@ export interface ModelPricing {
 }
 
 export interface AdapterConfig extends Instance {
+  type?: "onebot11" | "feishu";
   url: string;
   token: string;
   self_id: string;
@@ -64,6 +65,13 @@ export interface AdapterConfig extends Instance {
   ignore_users: string[];
   auto_start: string[];
   auto_start_after: number;
+  app_id?: string;
+  app_secret?: string;
+  app_secret_configured?: boolean;
+  domain?: "feishu" | "lark";
+  wake_keywords?: string[];
+  feishu_group_context?: boolean;
+  memory_profile?: "feishu" | "default";
 }
 
 export interface SubagentConfig extends Instance {
@@ -447,6 +455,7 @@ export interface Health {
   restart_available: boolean;
   config_version: number;
   adapters: Record<string, string>;
+  adapter_diagnostics?: Record<string, string>;
   plugins: string[];
   tools: string[];
   actors: number;

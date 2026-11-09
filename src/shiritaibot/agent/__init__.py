@@ -8,6 +8,7 @@ from collections import Counter, deque
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
+from functools import partial
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -26,6 +27,7 @@ from shiritaibot.proactive import (
     LoopResult,
     parse_loop_result,
 )
+from shiritaibot.store import owner_memory_scope
 
 # Minimum Jev probability for Chat; the LLM router is likewise told to prefer Work.
 ROUTER_CHAT_THRESHOLD = 0.6
@@ -204,6 +206,7 @@ class SessionActor:
             and not self.current.done()
             and self.context
             and ctx.actor == self.context.actor
+            and ctx.memory_profile == self.context.memory_profile
             and ctx.mode == "agent"
         ):
             self.steering.append(text)
@@ -220,7 +223,10 @@ class SessionActor:
             and policy.debounce_seconds > 0
         ):
             at = asyncio.get_running_loop().time()
-            if self.buffered and self.buffered[-1][0].actor != ctx.actor:
+            if self.buffered and (
+                self.buffered[-1][0].actor != ctx.actor
+                or self.buffered[-1][0].memory_profile != ctx.memory_profile
+            ):
                 self._finish_batch()
             if not self.buffered:
                 self.first_buffered = at
@@ -332,15 +338,14 @@ class AgentRuntime:
         store,
         llm,
         registry,
-        memory,
+        memory_for,
         deliver,
         short_term=None,
         emotion=None,
         skills=None,
     ):
         self.config, self.store, self.llm = config, store, llm
-        self.registry, self.memory, self.deliver = registry, memory, deliver
-        self.recall = MemoryRecall(memory) if memory is not None else None
+        self.registry, self.memory_for, self.deliver = registry, memory_for, deliver
         # Turn -> P(the message relies on the past), from the router's decision model.
         self.recall_hints: dict[str, float] = {}
         self.short_term = short_term
@@ -378,6 +383,7 @@ class AgentRuntime:
                     "group": ctx.group,
                     "background": ctx.background,
                     "tool_policy": ctx.tool_policy,
+                    "memory_profile": ctx.memory_profile,
                 },
             )
         if text.strip().startswith("/"):
@@ -411,7 +417,11 @@ class AgentRuntime:
 
     async def group_context(self, ctx: Context, cfg, tools: list[dict]) -> str:
         settings = cfg.group_context
-        if not settings.enabled or not ctx.session.startswith("group:") or ctx.background:
+        if (
+            not cfg.group_context_enabled(ctx.session)
+            or not ctx.session.startswith("group:")
+            or ctx.background
+        ):
             return ""
         rows = []
         if settings.inject_messages:
@@ -458,7 +468,9 @@ class AgentRuntime:
             return "agent"
         if not cfg.routes.get("router"):
             return "agent"
-        recent = await self.store.history(ctx.session, limit=4, include_commands=False)
+        recent = await self.store.history(
+            ctx.session, limit=4, include_commands=False, memory_profile=ctx.memory_profile
+        )
         lines = [
             f"{'用户' if m['role'] == 'user' else '助手'}：{_plain(m)[:300]}"
             for m in recent
@@ -523,6 +535,9 @@ class AgentRuntime:
 
     async def _turn(self, actor: SessionActor, ctx: Context, text: str) -> None:
         ctx = replace(self.registry.permissions.context(ctx), turn=uid())
+        append = partial(
+            self.store.append, ctx.session, ctx.turn, memory_profile=ctx.memory_profile
+        )
         if ctx.interject:
             # A passing remark is one cheap chat turn: no tools, no policy upgrade.
             ctx = replace(ctx, mode="chat", allowed_tools=())
@@ -532,7 +547,11 @@ class AgentRuntime:
             selected_persona.get("persona", "") if selected_persona else "",
             owner=ctx.owner,
         )
-        if not ctx.background and ctx.session.startswith(("private:", "group:")):
+        if (
+            not ctx.background
+            and ctx.session.startswith(("private:", "group:"))
+            and cfg.feishu_session(ctx.session) is None
+        ):
             # Only QQ sends stickers; the block is config-only, so it stays cache-stable.
             system += meme_prompt(cfg)
         if ctx.interject:
@@ -543,9 +562,11 @@ class AgentRuntime:
                 "不想接话、或者不确定是否合适时，只输出 <pass>，不要输出任何其他内容。\n"
                 "</interject>"
             )
-        emotion_block = await self.emotion.context(ctx, cfg) if self.emotion else ""
-        if self.emotion and not ctx.interject:
-            await self.emotion.observe(ctx, text)
+        emotion_block = ""
+        if self.emotion and ctx.memory_profile == "default":
+            emotion_block = await self.emotion.context(ctx, cfg)
+            if not ctx.interject:
+                await self.emotion.observe(ctx, text)
         route = await self.route(ctx, cfg, text)
         selected = await self.store.get("session_model", ctx.session)
         if selected and selected.get("model"):
@@ -571,7 +592,8 @@ class AgentRuntime:
             "actor": ctx.actor,
             "started": now().isoformat(),
             "steps": 0,
-            "memory_scope": "owner"
+            "memory_profile": ctx.memory_profile,
+            "memory_scope": owner_memory_scope(ctx.memory_profile)
             if ctx.owner and ctx.mode == "agent" and not ctx.group
             else ctx.session,
             "loop": "proactive" if ctx.background else "main",
@@ -602,9 +624,10 @@ class AgentRuntime:
                 blocks = [emotion_block] if emotion_block else []
                 # Chat never calls the private memory interface, even for the owner in a group.
                 if ctx.owner and ctx.mode == "agent" and not ctx.group:
-                    if self.recall is not None and cfg.memory.inject:
+                    if cfg.memory.inject:
+                        recall = MemoryRecall(self.memory_for(ctx.memory_profile))
                         blocks.append(
-                            await self.recall.render(
+                            await recall.render(
                                 ctx,
                                 text,
                                 cfg.memory.inject_chars,
@@ -612,7 +635,10 @@ class AgentRuntime:
                             )
                         )
                     if self.short_term:
-                        blocks.append(recent_lines(await self.short_term.recent(limit=5), zone))
+                        summaries = await self.short_term.recent(
+                            limit=5, memory_profile=ctx.memory_profile
+                        )
+                        blocks.append(recent_lines(summaries, zone))
                 user = {
                     "role": "user",
                     "_speaker": cfg.owner_name if ctx.owner else name or ctx.actor,
@@ -625,7 +651,7 @@ class AgentRuntime:
                 # Persist the original input even if context compression fails.
                 # Interject turns carry a synthetic observation, not something anyone said.
                 if not ctx.interject:
-                    await self.store.append(ctx.session, ctx.turn, user)
+                    await append(user)
                 tools = [] if ctx.interject else self.registry.specs(ctx)
                 # Proactive turns report their conclusion through an internal tool.
                 proactive = ctx.background and ctx.session.startswith(PREPARE_SESSION)
@@ -644,6 +670,7 @@ class AgentRuntime:
                         current,
                         owner=ctx.owner,
                         current_turn=ctx.turn,
+                        memory_profile=ctx.memory_profile,
                     ),
                     None,
                 )
@@ -658,7 +685,7 @@ class AgentRuntime:
                             "_original_content": steering,
                             "_speaker": cfg.owner_name if ctx.owner else name or ctx.actor,
                         }
-                        await self.store.append(ctx.session, ctx.turn, item)
+                        await append(item)
                         history.append(item)
                     if context_chars(history) > cfg.policy.max_context_chars * 2:
                         raise PublicError("本轮上下文达到限制，请开启新会话或减少输入")
@@ -693,14 +720,14 @@ class AgentRuntime:
                     }
                     if reply.calls:
                         message["tool_calls"] = reply.calls
-                    await self.store.append(ctx.session, ctx.turn, message)
+                    await append(message)
                     history.append(message)
                     if not reply.calls:
                         if proactive and not nudged and not _is_loop_result(reply.text):
                             nudged = True
                             log.warning("模型未调用 proactive_report 提交结论，已提醒一次")
                             item = {"role": "user", "content": "请调用 proactive_report 提交结论。"}
-                            await self.store.append(ctx.session, ctx.turn, item)
+                            await append(item)
                             history.append(item)
                             continue
                         if not proactive:
@@ -761,7 +788,7 @@ class AgentRuntime:
                                     f"工具 {function['name']} 失败，用时 {spent:.1f}s：{summary}"
                                 )
                         result = {"role": "tool", "tool_call_id": call["id"], "content": output}
-                        await self.store.append(ctx.session, ctx.turn, result)
+                        await append(result)
                         history.append(result)
                     if report is not None:
                         log.log(
@@ -792,7 +819,7 @@ class AgentRuntime:
                 f"本轮失败：{error}",
                 exc=None if isinstance(exc, (PublicError, TimeoutError)) else exc,
             )
-            await self.store.append(ctx.session, ctx.turn, {"role": "assistant", "content": error})
+            await append({"role": "assistant", "content": error})
             final = error
             await self.deliver(ctx.session, error)
         finally:

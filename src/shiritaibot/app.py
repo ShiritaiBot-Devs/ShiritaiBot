@@ -8,7 +8,7 @@ from shiritaibot.adapters.onebot11 import AdapterHub
 from shiritaibot.agent import AgentRuntime
 from shiritaibot.auth import Permissions, Vault
 from shiritaibot.config import ConfigService, Settings
-from shiritaibot.core import EventBus
+from shiritaibot.core import EventBus, PublicError
 from shiritaibot.core.logs import get_logger
 from shiritaibot.emotion import EmotionManager
 from shiritaibot.knowledge import KnowledgeBase
@@ -51,6 +51,8 @@ class Application:
         self.store = Store(self.home, self.bus)
         self.tasks: list[asyncio.Task] = []
         self.configure_lock = asyncio.Lock()
+        self.memories: dict[str, MemoryManager] = {}
+        self.feishu_extractor: MemoryExtractor | None = None
 
     async def start(self) -> None:
         log.log(f"正在启动，数据目录 {self.home}")
@@ -68,6 +70,8 @@ class Application:
         self.permissions.llm = self.llm
         self.memory = MemoryManager(self.store, self.config, self.llm)
         await self.memory.open()
+        self.memories["default"] = self.memory
+        await self.open_feishu_memory(self.config.value)
         self.short_term = ShortTermMemory(self.store, self.llm, config=self.config)
         await self.short_term.recover()
         self.memes = MemeManager(self.store, self.config, self.llm)
@@ -104,7 +108,7 @@ class Application:
             self.store,
             self.llm,
             self.registry,
-            self.memory,
+            self.memory_for,
             self.deliver,
             self.short_term,
             emotion=self.emotion,
@@ -119,7 +123,7 @@ class Application:
         await self.plugins.start()
         await self.mcp.start()
         await self.adapters.start()
-        self.tasks = [
+        self.tasks += [
             asyncio.create_task(self.routine.run()),
             asyncio.create_task(self.proactive.run()),
             asyncio.create_task(self.short_term.run()),
@@ -135,6 +139,44 @@ class Application:
             f"启动完成：{len(self.registry.tools)} 个工具，{len(self.plugins.loaded)} 个插件，"
             f"{len(self.adapters.instances)} 个协议端，{len(self.mcp.servers)} 个 MCP 服务；主动性引擎"
             + ("已启用" if cfg.proactive.enabled else "未启用")
+        )
+
+    def memory_for(self, profile: str) -> MemoryManager:
+        memory = self.memories.get(profile)
+        if memory is None:
+            raise PublicError("记忆库不存在或未配置")
+        return memory
+
+    async def open_feishu_memory(self, settings: Settings) -> None:
+        if "feishu" in self.memories:
+            return
+        folder = self.home / "memory-profiles" / "feishu"
+        configured = any(
+            adapter.type == "feishu" and adapter.memory_profile == "feishu"
+            for adapter in settings.adapters
+        )
+        if not configured and not await asyncio.to_thread((folder / "state.sqlite3").is_file):
+            return
+        await asyncio.to_thread(folder.mkdir, mode=0o700, parents=True, exist_ok=True)
+        store = Store(folder, self.bus)
+        await store.open()
+        memory = MemoryManager(store, self.config, self.llm, history_store=self.store)
+        try:
+            await memory.open()
+        except BaseException:
+            await store.close()
+            raise
+        self.memories["feishu"] = memory
+        self.feishu_extractor = MemoryExtractor(
+            memory, self.store, self.config, self.llm, profile="feishu"
+        )
+        maintenance = MemoryMaintenance(memory, store, None)
+        self.tasks.extend(
+            [
+                asyncio.create_task(memory.run()),
+                asyncio.create_task(self.feishu_extractor.run()),
+                asyncio.create_task(maintenance.run()),
+            ]
         )
 
     async def deliver(self, session: str, text: str) -> None:
@@ -210,7 +252,17 @@ class Application:
         async with self.configure_lock:
             log.log("配置已更新，正在重载协议端、内置工具与插件")
             previous = self.config.value
+            settings = settings.model_copy(deep=True)
+            saved_feishu = {
+                (item.id, item.app_id, item.domain): item.app_secret
+                for item in previous.adapters
+                if item.type == "feishu"
+            }
+            for item in settings.adapters:
+                if item.type == "feishu" and not item.app_secret:
+                    item.app_secret = saved_feishu.get((item.id, item.app_id, item.domain), "")
             settings = await self.vault.protect_settings(settings, await self.plugins.schemas())
+            await self.open_feishu_memory(settings)
             await self.config.save(settings)
             await self.refresh_secret_list()
             if settings.adapters != previous.adapters:
@@ -233,5 +285,7 @@ class Application:
         await self.mcp.close()
         await self.adapters.close()
         await self.llm.close()
+        if (memory := self.memories.get("feishu")) is not None:
+            await memory.store.close()
         await self.store.close()
         log.log("已关闭")

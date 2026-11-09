@@ -17,7 +17,7 @@ class MessageResult:
 
 @dataclass(eq=False)
 class MessageEvent:
-    """An incoming message from QQ or the WebUI (AstrBot's ``AstrMessageEvent``).
+    """An incoming message from an adapter or the WebUI.
 
     ``text`` is the plain text the user typed; file, image and reply references the model
     receives are not part of it. Edits to the fields do not change what the model sees —
@@ -28,8 +28,8 @@ class MessageEvent:
     text: str
     sender_id: str
     sender_name: str = ""
-    platform: str = "qq"  # "qq" | "web"
-    adapter: str = ""  # Adapter instance id for QQ messages.
+    platform: str = "qq"  # "qq" | "feishu" | "web"
+    adapter: str = ""  # Adapter instance id for messaging platforms.
     group_id: str = ""
     message_id: str = ""
     is_owner: bool = False

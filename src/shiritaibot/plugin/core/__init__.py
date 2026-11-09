@@ -12,6 +12,7 @@ from typing import Any, Awaitable, Callable
 
 from jsonschema import Draft202012Validator
 
+from shiritaibot.adapters.feishu import Feishu
 from shiritaibot.api import Context, Plugin, PluginSettings
 from shiritaibot.api.hook import tool_spec
 from shiritaibot.config import PluginConfig
@@ -111,7 +112,8 @@ class PluginManager:
         ]
 
     def platform(self, adapter_id: str):
-        return self.adapters.instances.get(adapter_id) if self.adapters is not None else None
+        bot = self.adapters.instances.get(adapter_id) if self.adapters is not None else None
+        return None if isinstance(bot, Feishu) else bot
 
     async def kv_get(self, plugin: str, key: str, default: Any = None) -> Any:
         row = await self.store.get("plugin_kv", f"{plugin}:{key}")

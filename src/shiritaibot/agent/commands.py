@@ -58,7 +58,7 @@ async def command(runtime, ctx, text):
                 await asyncio.gather(actor.task, return_exceptions=True)
                 if runtime.actors.get(ctx.session) is actor:
                     runtime.actors.pop(ctx.session, None)
-            await runtime.store.reset_history(ctx.session)
+            await runtime.store.reset_history(ctx.session, memory_profile=ctx.memory_profile)
             answer = "已开始新上下文。历史记录和长期记忆已保留。"
         elif name == "stop":
             if actor:
@@ -204,7 +204,8 @@ async def command(runtime, ctx, text):
                 "\n".join(f"{row['id']} · {row.get('status', '')}" for row in rows) or "暂无任务"
             )
         elif name == "memory":
-            rows = (await runtime.memory.search(query=argument, limit=10))["results"]
+            memory = runtime.memory_for(ctx.memory_profile)
+            rows = (await memory.search(query=argument, limit=10))["results"]
             answer = "长期记忆：\n" + (
                 "\n".join(row["text"][:500] for row in rows) or "没有匹配的记忆"
             )
@@ -219,10 +220,16 @@ async def command(runtime, ctx, text):
         answer = str(exc)
     turn = uid()
     await runtime.store.append(
-        ctx.session, turn, {"role": "user", "content": text, "_command": True}
+        ctx.session,
+        turn,
+        {"role": "user", "content": text, "_command": True},
+        memory_profile=ctx.memory_profile,
     )
     await runtime.store.append(
-        ctx.session, turn, {"role": "assistant", "content": answer, "_command": True}
+        ctx.session,
+        turn,
+        {"role": "assistant", "content": answer, "_command": True},
+        memory_profile=ctx.memory_profile,
     )
     await runtime.deliver(ctx.session, answer)
     return "command"

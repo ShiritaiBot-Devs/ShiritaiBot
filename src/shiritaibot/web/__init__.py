@@ -7,6 +7,7 @@ import secrets
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
@@ -185,6 +186,7 @@ def create_app(
             "restart_available": request_restart is not None,
             "config_version": runtime.config.version,
             "adapters": {k: x.status for k, x in runtime.adapters.instances.items()},
+            "adapter_diagnostics": runtime.adapters.diagnostics(),
             "plugins": list(runtime.plugins.loaded),
             "mcp": {k: x.status for k, x in runtime.mcp.servers.items()},
             "tools": sorted(runtime.registry.tools),
@@ -234,7 +236,12 @@ def create_app(
 
     @api.get("/api/config", dependencies=protected)
     async def config():
-        return runtime.config.value.model_dump()
+        data = runtime.config.value.model_dump()
+        for adapter in data["adapters"]:
+            configured = bool(adapter.pop("app_secret"))
+            if adapter["type"] == "feishu":
+                adapter.update(app_secret="", app_secret_configured=configured)
+        return data
 
     @api.put("/api/config", dependencies=protected)
     async def save_config(body: Settings):
@@ -261,7 +268,7 @@ def create_app(
         owner = row.get("owner", session.startswith("web:"))
         if session.startswith("private:"):
             owner = owner or any(
-                session == f"private:{adapter.id}:{adapter.owner_id}"
+                session == adapter.owner_session()
                 for adapter in runtime.config.value.adapters
             )
         ctx = Context(
@@ -354,8 +361,11 @@ def create_app(
         return {"level": level}
 
     @api.get("/api/history", dependencies=protected)
-    async def history(session: str = "web:owner"):
-        return await runtime.store.history(session)
+    async def history(session: str = "web:owner", profile: Literal["default", "feishu"] | None = None):
+        adapter = runtime.config.value.feishu_session(session)
+        return await runtime.store.history(
+            session, memory_profile=profile or (adapter.memory_profile if adapter else "default")
+        )
 
     @api.post("/api/messages", dependencies=protected)
     async def message(body: MessageInput):
@@ -383,26 +393,34 @@ def create_app(
         return {"ok": True}
 
     # Read-only: the Agent maintains memory through tools (DESIGN.md §1.1).
+    @api.get("/api/memory/profiles", dependencies=protected)
+    async def memory_profiles():
+        names = {"default": "默认记忆库", "feishu": "飞书记忆库"}
+        return [{"id": profile, "name": names[profile]} for profile in runtime.memories]
+
     @api.get("/api/memory", dependencies=protected)
     async def memories(
         kind: str = "",
         q: str = "",
         page: int | None = Query(default=None, ge=1),
         page_size: int = Query(default=20, ge=1, le=100),
+        profile: Literal["default", "feishu"] = "default",
     ):
         if kind not in {"", "entity", "fact", "event", "conflict"}:
             raise HTTPException(422, "无效的记忆类型")
+        memory = runtime.memory_for(profile)
         if page is not None:
-            return await runtime.memory.browse_page(kind, q[:200], page, page_size)
-        return await runtime.memory.browse(kind[:20], q[:200])
+            return await memory.browse_page(kind, q[:200], page, page_size)
+        return await memory.browse(kind[:20], q[:200])
 
     @api.get("/api/memory/status", dependencies=protected)
-    async def memory_status():
-        return await runtime.memory.vectors.status(await runtime.memory.documents())
+    async def memory_status(profile: Literal["default", "feishu"] = "default"):
+        memory = runtime.memory_for(profile)
+        return await memory.vectors.status(await memory.documents())
 
     @api.get("/api/memory/{key}", dependencies=protected)
-    async def memory_detail(key: str):
-        return await runtime.memory.get(key)
+    async def memory_detail(key: str, profile: Literal["default", "feishu"] = "default"):
+        return await runtime.memory_for(profile).get(key)
 
     @api.get("/api/memes", dependencies=protected)
     async def memes(

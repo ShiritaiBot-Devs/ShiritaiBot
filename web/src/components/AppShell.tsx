@@ -103,30 +103,32 @@ export function AppShell({
         </div>
       </aside>
       <main id="main-content">
-        <header>
-          <div>
+        <header className="console-header">
+          <div className="console-crumb">
             <span className="muted">本机控制台</span>
             <ChevronRight size={13} aria-hidden="true" />
             <span aria-current="page">{meta.label}</span>
           </div>
-          <div>
+          <div className="console-actions">
             <span className="local-badge">仅本机</span>
             <button
               type="button"
               className="chat-mode-button"
+              aria-label="对话模式"
               onClick={onOpenChat}
             >
               <MessageSquare size={14} aria-hidden="true" />
-              对话模式
+              <span className="console-action-label">对话模式</span>
             </button>
             <button
               type="button"
               className="update-button"
+              aria-label="检查更新"
               onClick={onCheckUpdate}
               title={updateAvailable ? "有可用的新版本" : "检查更新"}
             >
               <CloudDownload size={14} aria-hidden="true" />
-              检查更新
+              <span className="console-action-label">检查更新</span>
               {updateAvailable && (
                 <span className="update-dot" aria-label="有新版本" />
               )}

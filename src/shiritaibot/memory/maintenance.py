@@ -60,6 +60,8 @@ class MemoryMaintenance:
 
     async def remind_conflicts(self, stamp: float) -> int:
         """Hand long-unasked conflicts to the Proactive Engine as one low-priority digest."""
+        if self.emit is None:
+            return 0
         rows = await self.memory.rows(
             "SELECT * FROM mem_conflict WHERE status='open' AND created<? "
             "AND (asked_at IS NULL OR asked_at<?) ORDER BY id LIMIT 10",

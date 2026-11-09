@@ -71,6 +71,7 @@ class Context:
     tool_policy: dict[str, Any] | None = None
     # Group chatter the Bot may answer or pass on; a pass is not delivered.
     interject: bool = False
+    memory_profile: Literal["default", "feishu"] = "default"
 
 
 @dataclass(slots=True)

@@ -113,6 +113,7 @@ class ModelConfig(Instance):
 
 
 class AdapterConfig(Instance):
+    type: Literal["onebot11", "feishu"] = "onebot11"
     url: str = "ws://127.0.0.1:3001"
     token: str = ""
     self_id: str = ""
@@ -124,6 +125,45 @@ class AdapterConfig(Instance):
     # process itself disappeared. One argv element per entry; empty disables it.
     auto_start: list[str] = Field(default_factory=list)
     auto_start_after: int = Field(default=60, ge=5, le=3600)
+    app_id: str = Field(default="", pattern=r"^(cli_[A-Za-z0-9]+)?$")
+    app_secret: str = Field(default="", max_length=10000, repr=False)
+    domain: Literal["feishu", "lark"] = "feishu"
+    wake_keywords: list[str] = Field(default_factory=lambda: ["小知"])
+    feishu_group_context: bool = False
+    memory_profile: Literal["default", "feishu"] = "feishu"
+
+    @model_validator(mode="before")
+    @classmethod
+    def omit_write_only_indicator(cls, value):
+        if isinstance(value, dict) and "app_secret_configured" in value:
+            value = {key: item for key, item in value.items() if key != "app_secret_configured"}
+        return value
+
+    @field_validator("wake_keywords")
+    @classmethod
+    def adapter_keywords(cls, value: list[str]) -> list[str]:
+        return list(dict.fromkeys(word.strip() for word in value if word.strip()))
+
+    @model_validator(mode="after")
+    def feishu_ids(self) -> AdapterConfig:
+        if self.type == "feishu":
+            if self.owner_id and not re.fullmatch(r"ou_[A-Za-z0-9]+", self.owner_id):
+                raise ValueError("飞书主人 ID 必须是 ou_ 开头的 open_id")
+            if any(not re.fullmatch(r"oc_[A-Za-z0-9]+", group) for group in self.groups):
+                raise ValueError("飞书群 ID 必须是 oc_ 开头的 chat_id")
+            if self.groups and not self.wake_keywords:
+                raise ValueError("配置飞书群时至少填写一个句首唤醒词")
+        return self
+
+    @property
+    def feishu_binding(self) -> str:
+        return f"{self.domain}.{self.app_id}"
+
+    def owner_session(self) -> str:
+        target = (
+            f"{self.feishu_binding}/{self.owner_id}" if self.type == "feishu" else self.owner_id
+        )
+        return f"private:{self.id}:{target}"
 
     @field_validator("auto_start")
     @classmethod
@@ -647,6 +687,25 @@ class Settings(Model):
             prompt += f"\n当前用户是主人，请称呼对方为 {self.owner_name}。"
         return prompt
 
+    def feishu_session(self, session: str) -> AdapterConfig | None:
+        kind, _, rest = session.partition(":")
+        adapter_id, _, target = rest.partition(":")
+        if kind not in {"private", "group"} or "/" not in target:
+            return None
+        binding = target.partition("/")[0]
+        return next(
+            (
+                a
+                for a in self.adapters
+                if a.type == "feishu" and a.id == adapter_id and a.feishu_binding == binding
+            ),
+            None,
+        )
+
+    def group_context_enabled(self, session: str) -> bool:
+        adapter = self.feishu_session(session)
+        return adapter.feishu_group_context if adapter is not None else self.group_context.enabled
+
     @model_validator(mode="after")
     def references(self) -> Settings:
         for items in [
@@ -720,8 +779,12 @@ class Settings(Model):
             raise ValueError("上下文压缩模型引用了不存在或未启用的模型/提供商")
         if self.private_require_keyword and not self.wake_keywords:
             raise ValueError("private keyword activation requires at least one wake keyword")
+        if sum(a.enabled and a.type == "feishu" for a in self.adapters) > 1:
+            raise ValueError("当前每个 ShiritaiBot 实例支持启用一个飞书长连接")
         for a in self.adapters:
-            if not a.url.startswith(("ws://", "wss://")) or "@" in a.url or "?" in a.url:
+            if a.type == "onebot11" and (
+                not a.url.startswith(("ws://", "wss://")) or "@" in a.url or "?" in a.url
+            ):
                 raise ValueError(
                     f"协议端「{a.id}」的地址必须是 ws:// 或 wss://，且不能内嵌账号密码或查询参数"
                 )
