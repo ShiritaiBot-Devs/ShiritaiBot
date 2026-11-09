@@ -565,6 +565,77 @@
   overflow-wrap: anywhere;
 }
 
+.instance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.feishu-qr-dialog {
+  box-sizing: border-box;
+  width: min(440px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 24px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.feishu-qr-dialog::backdrop {
+  background: color-mix(in srgb, var(--text-strong) 36%, transparent);
+}
+
+.feishu-qr-dialog h2 {
+  margin: 0;
+}
+
+.feishu-qr-dialog p {
+  overflow-wrap: anywhere;
+}
+
+.feishu-qr-dialog .field-grid {
+  margin-bottom: 0;
+}
+
+.feishu-qr-code {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin-top: 16px;
+}
+
+.feishu-qr-code svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.feishu-qr-code p {
+  margin: 0;
+}
+
+.feishu-qr-enable {
+  flex-direction: row;
+  align-items: center;
+}
+
+.feishu-qr-enable input {
+  width: auto;
+  flex: none;
+  margin: 0;
+}
+
+.feishu-qr-actions {
+  justify-content: flex-end;
+}
+
+.feishu-qr-error {
+  color: var(--danger);
+}
+
 /* Models */
 
 .model-section {

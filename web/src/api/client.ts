@@ -3,6 +3,8 @@ import type {
   ConfigSaveResult,
   DiagnosticsResult,
   DiscoveredModel,
+  FeishuQrAdapter,
+  FeishuQrRegistration,
   Health,
   HistoryMessage,
   KnowledgeDetail,
@@ -75,6 +77,15 @@ export interface ApiClient {
   config(): Promise<Settings>;
   tools(session?: string): Promise<ToolCatalog>;
   saveConfig(settings: Settings): Promise<ConfigSaveResult>;
+  startFeishuQr(
+    domain: FeishuQrRegistration["domain"],
+  ): Promise<FeishuQrRegistration>;
+  feishuQrStatus(id: string): Promise<FeishuQrRegistration>;
+  cancelFeishuQr(id: string): Promise<void>;
+  applyFeishuQr(
+    id: string,
+    adapter: FeishuQrAdapter,
+  ): Promise<{ adapter_id: string }>;
   diagnostics(): Promise<DiagnosticsResult>;
   records<K extends RecordKind>(kind: K): Promise<RecordMap[K][]>;
   recordsPage<K extends RecordKind>(
@@ -228,6 +239,18 @@ export function createClient(getToken: () => string): ApiClient {
       request<ToolCatalog>("/tools?session=" + encodeURIComponent(session)),
     saveConfig: (settings) =>
       request<ConfigSaveResult>("/config", "PUT", settings),
+    startFeishuQr: (domain) =>
+      request("/adapters/feishu/qr", "POST", { domain }),
+    feishuQrStatus: (id) =>
+      request("/adapters/feishu/qr/" + encodeURIComponent(id)),
+    cancelFeishuQr: (id) =>
+      request("/adapters/feishu/qr/" + encodeURIComponent(id), "DELETE"),
+    applyFeishuQr: (id, adapter) =>
+      request(
+        "/adapters/feishu/qr/" + encodeURIComponent(id) + "/apply",
+        "POST",
+        adapter,
+      ),
     diagnostics: () => request<DiagnosticsResult>("/diagnostics"),
     records: <K extends RecordKind>(kind: K) =>
       request<RecordMap[K][]>("/records/" + kind),

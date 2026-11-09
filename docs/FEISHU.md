@@ -2,14 +2,23 @@
 
 飞书可作为 ShiritaiBot 的聊天入口。主人直接私聊机器人，指定群里的成员也可用句首关键词唤醒它。运行 ShiritaiBot 的机器需要能访问飞书开放平台，长连接由 ShiritaiBot 主动建立。
 
-## 创建应用和绑定主人
+## 扫码创建
+
+在管理台打开「协议连接 → 扫码创建飞书」，点击「生成二维码」，用手机确认创建。回到管理台选好记忆库，点「保存并连接」。已有飞书连接时，可以先把新实例保存为未启用。
+
+如果企业要求发布或审批，到飞书开放平台处理。连接可用后，按下文绑定主人。
+
+## 手动接入
 
 1. 在飞书开放平台创建**企业自建应用**，添加机器人能力，复制 App ID 和 App Secret。
 2. 在 ShiritaiBot 管理台的「协议连接」添加飞书机器人，填入应用凭证并保存。首版每个 ShiritaiBot 实例启用一个飞书长连接，可和 QQ 同时运行。
 3. 在飞书开发者后台的「事件与回调」选择长连接，并订阅 `im.message.receive_v1`。在权限管理中开通 `im:message.p2p_msg:readonly` 和 `im:message:send_as_bot`。发布应用版本，将需要使用的账号纳入可用范围。
-4. 用主人账号给机器人发一条测试私聊。管理台的连接提示会显示最近一条私聊的发送者 `open_id`。核对发送账号后将它填入「主人 Open ID」并保存，再发一条消息验证回复。每个应用的 `open_id` 独立，按当前应用收到的值填写。
 
-飞书可能要求长连接先上线，才能保存事件订阅方式。配置示意见 [飞书长连接文档](https://open.feishu.cn/document/ukTMukTMukTM/uYDNxYjL2QTM24iN0EjN/event-subscription-configure-)。
+飞书可能要求长连接先上线，才能保存事件订阅方式。配置示意见 [飞书长连接文档](https://open.feishu.cn/document/ukTMukTMukTM/uYDNxYjL2QTM24iN0EjN/event-subscription-configure-/request-url-configuration-case)。
+
+## 绑定主人
+
+用主人账号给机器人发一条测试私聊。管理台的连接提示会显示最近一条私聊的发送者 `open_id`。核对发送账号后将它填入「主人 Open ID」并保存，再发一条消息验证回复。每个应用的 `open_id` 独立，按当前应用收到的值填写。
 
 ## 群唤醒
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from shiritaibot.adapters.onebot11 import AdapterHub
 from shiritaibot.agent import AgentRuntime
 from shiritaibot.auth import Permissions, Vault
-from shiritaibot.config import ConfigService, Settings
+from shiritaibot.config import AdapterConfig, ConfigService, Settings
 from shiritaibot.core import EventBus, PublicError
 from shiritaibot.core.logs import get_logger
 from shiritaibot.emotion import EmotionManager
@@ -41,6 +41,10 @@ ROUTE_LABELS = {
     "vision": "视觉（vision）路由",
     "meme": "表情（meme）路由",
 }
+
+
+class FeishuAdapterConflict(PublicError):
+    pass
 
 
 class Application:
@@ -250,29 +254,52 @@ class Application:
 
     async def reconfigure(self, settings: Settings) -> None:
         async with self.configure_lock:
-            log.log("配置已更新，正在重载协议端、内置工具与插件")
-            previous = self.config.value
-            settings = settings.model_copy(deep=True)
-            saved_feishu = {
-                (item.id, item.app_id, item.domain): item.app_secret
-                for item in previous.adapters
-                if item.type == "feishu"
-            }
-            for item in settings.adapters:
-                if item.type == "feishu" and not item.app_secret:
-                    item.app_secret = saved_feishu.get((item.id, item.app_id, item.domain), "")
-            settings = await self.vault.protect_settings(settings, await self.plugins.schemas())
-            await self.open_feishu_memory(settings)
-            await self.config.save(settings)
-            await self.refresh_secret_list()
-            if settings.adapters != previous.adapters:
-                await self.adapters.close()
-                await self.adapters.start()
-            else:
-                log.log("协议端配置未变化，保持现有连接")
-            await register_builtin(self)
-            await self.plugins.reload_all()
-            await self.mcp.reload()
+            await self._reconfigure_locked(settings)
+
+    async def add_feishu_adapter(self, adapter: AdapterConfig) -> int:
+        async with self.configure_lock:
+            current = self.config.value
+            for existing in current.adapters:
+                if existing.id == adapter.id:
+                    raise FeishuAdapterConflict("已有同名适配器，请修改实例标识。")
+                if existing.type == "feishu":
+                    if existing.feishu_binding == adapter.feishu_binding:
+                        raise FeishuAdapterConflict("此飞书应用已添加。")
+                    if existing.enabled and adapter.enabled:
+                        raise FeishuAdapterConflict("已有启用的飞书连接，请将新实例保存为未启用。")
+            data = current.model_dump()
+            data["adapters"].append(adapter.model_dump())
+            await self._reconfigure_locked(
+                Settings.model_validate(data), restart_adapters=adapter.enabled
+            )
+            return self.config.version
+
+    async def _reconfigure_locked(
+        self, settings: Settings, *, restart_adapters: bool = True
+    ) -> None:
+        log.log("配置已更新，正在重载协议端、内置工具与插件")
+        previous = self.config.value
+        settings = settings.model_copy(deep=True)
+        saved_feishu = {
+            (item.id, item.app_id, item.domain): item.app_secret
+            for item in previous.adapters
+            if item.type == "feishu"
+        }
+        for item in settings.adapters:
+            if item.type == "feishu" and not item.app_secret:
+                item.app_secret = saved_feishu.get((item.id, item.app_id, item.domain), "")
+        settings = await self.vault.protect_settings(settings, await self.plugins.schemas())
+        await self.open_feishu_memory(settings)
+        await self.config.save(settings)
+        await self.refresh_secret_list()
+        if restart_adapters and settings.adapters != previous.adapters:
+            await self.adapters.close()
+            await self.adapters.start()
+        else:
+            log.log("保持现有协议端连接")
+        await register_builtin(self)
+        await self.plugins.reload_all()
+        await self.mcp.reload()
 
     async def close(self) -> None:
         log.log("正在关闭…")

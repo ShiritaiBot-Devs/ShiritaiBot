@@ -335,7 +335,7 @@ function ConsoleApp() {
       case "models":
         return <ModelsPage {...configProps} />;
       case "adapters":
-        return <AdaptersPage {...configProps} />;
+        return <AdaptersPage {...configProps} dirty={draft.dirty} />;
       case "subagents":
         return <SubagentsPage {...configProps} />;
       case "plugins":

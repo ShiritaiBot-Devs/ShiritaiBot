@@ -14,6 +14,8 @@ interface InstanceCollectionProps<T extends Instance> {
   fields: FieldSpec[] | ((item: T) => FieldSpec[]);
   subtitle: (item: T) => string;
   emptyText: string;
+  headerAction?: ReactNode;
+  initialSelectedId?: string;
   renderStatus?: (item: T) => ReactNode;
   renderActions?: (item: T, update: (next: T) => void) => ReactNode;
   renderExtra?: (item: T, update: (next: T) => void) => ReactNode;
@@ -27,11 +29,18 @@ export function InstanceCollection<T extends Instance>({
   fields,
   subtitle,
   emptyText,
+  headerAction,
+  initialSelectedId,
   renderStatus,
   renderActions,
   renderExtra,
 }: InstanceCollectionProps<T>) {
-  const [selected, setSelected] = useState(0);
+  const [selected, setSelected] = useState(() =>
+    Math.max(
+      0,
+      items.findIndex((item) => item.id === initialSelectedId),
+    ),
+  );
   const index = Math.min(selected, Math.max(0, items.length - 1));
   const item = items[index];
 
@@ -56,10 +65,13 @@ export function InstanceCollection<T extends Instance>({
     <section className="panel">
       <div className="panel-head">
         <h2>{title}</h2>
-        <button type="button" onClick={add}>
-          <Plus size={14} />
-          添加
-        </button>
+        <div className="instance-actions">
+          {headerAction}
+          <button type="button" onClick={add}>
+            <Plus size={14} />
+            添加
+          </button>
+        </div>
       </div>
       {items.length === 0 ? (
         <EmptyState text={emptyText} />

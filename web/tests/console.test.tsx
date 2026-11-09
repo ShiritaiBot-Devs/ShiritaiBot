@@ -13,7 +13,11 @@ import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ApiClient } from "../src/api/client";
 import type { Action } from "../src/pages/common";
-import type { PluginInfo, Settings } from "../src/api/types";
+import type {
+  FeishuQrRegistration,
+  PluginInfo,
+  Settings,
+} from "../src/api/types";
 import { Dashboard } from "../src/pages/Dashboard";
 import { AdaptersPage } from "../src/pages/AdaptersPage";
 import { ModelsPage } from "../src/pages/ModelsPage";
@@ -150,20 +154,104 @@ function ConfigHost({
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <Page
-        client={client}
-        act={act}
-        config={config}
-        setConfig={(next) => {
-          onConfig(next);
-          setConfig(next);
-        }}
-      />
+      <NoticeProvider>
+        <Page
+          client={client}
+          act={act}
+          config={config}
+          setConfig={(next) => {
+            onConfig(next);
+            setConfig(next);
+          }}
+        />
+      </NoticeProvider>
     </QueryClientProvider>
   );
 }
 
 describe("adapter configuration", () => {
+  it("waits for QR authorization and saves a second Feishu adapter disabled", async () => {
+    Object.defineProperties(HTMLDialogElement.prototype, {
+      showModal: {
+        configurable: true,
+        value(this: HTMLDialogElement) {
+          this.setAttribute("open", "");
+        },
+      },
+      close: {
+        configurable: true,
+        value(this: HTMLDialogElement) {
+          this.removeAttribute("open");
+        },
+      },
+    });
+    try {
+      const config = baseConfig();
+      config.adapters = [
+        { ...createAdapter([]), id: "existing", type: "feishu", enabled: true },
+      ];
+      let authorize!: (result: FeishuQrRegistration) => void;
+      const confirmation = new Promise<FeishuQrRegistration>((resolve) => {
+        authorize = resolve;
+      });
+      const applyFeishuQr = vi.fn().mockResolvedValue({ adapter_id: "feishu" });
+      const client = fakeClient({
+        config: vi.fn().mockResolvedValue(config),
+        startFeishuQr: vi.fn().mockResolvedValue({
+          id: "registration-id",
+          domain: "feishu",
+          status: "waiting",
+          expires_in: 600,
+          qr_url: "https://open.feishu.cn/page/cli?user_code=example",
+        }),
+        feishuQrStatus: vi.fn().mockReturnValue(confirmation),
+        cancelFeishuQr: vi.fn().mockResolvedValue(undefined),
+        applyFeishuQr,
+      });
+      const onConfig = vi.fn();
+      render(
+        <ConfigHost
+          page={AdaptersPage}
+          client={client}
+          initial={config}
+          onConfig={onConfig}
+        />,
+      );
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "扫码创建飞书" }));
+      const dialog = within(
+        screen.getByRole("dialog", { name: "扫码创建飞书机器人" }),
+      );
+      await user.click(dialog.getByRole("button", { name: "生成二维码" }));
+      expect(await dialog.findByText("等待手机确认")).toBeTruthy();
+      expect(dialog.queryByRole("button", { name: "保存为未启用" })).toBeNull();
+      await reactAct(async () => {
+        authorize({
+          id: "registration-id",
+          domain: "feishu",
+          status: "authorized",
+          expires_in: 600,
+          app_id: "cli_example",
+        });
+      });
+      expect(applyFeishuQr).not.toHaveBeenCalled();
+      await user.click(
+        await dialog.findByRole("button", { name: "保存为未启用" }),
+      );
+      expect(applyFeishuQr).toHaveBeenCalledWith("registration-id", {
+        adapter_id: "feishu",
+        enabled: false,
+        memory_profile: "feishu",
+      });
+      expect(onConfig).not.toHaveBeenCalled();
+      expect(await screen.findByText("飞书实例已保存为未启用。")).toBeTruthy();
+    } finally {
+      cleanup();
+      Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+      Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
+    }
+  });
+
   it("switches from OneBot to Feishu with the isolated memory default", async () => {
     const config = baseConfig();
     const onConfig = vi.fn();

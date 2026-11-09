@@ -32,6 +32,7 @@ from shiritaibot.store.statistics import statistics
 from shiritaibot.tools.builtin import register_builtin
 from shiritaibot.updater import Updater
 from shiritaibot.web.exchange_rates import ExchangeRates
+from shiritaibot.web.feishu_qr import FeishuQrApply, FeishuQrRegistration, FeishuQrStart
 
 
 class SecretInput(Model):
@@ -90,6 +91,7 @@ def create_app(
     updater: Updater | None = None,
 ) -> FastAPI:
     runtime = Application(home)
+    feishu_qr = FeishuQrRegistration(runtime)
     manager = logs.LogManager(home, log_level)
     web_log = logs.get_logger("WebUI")
     exchange_rates = ExchangeRates()
@@ -118,6 +120,7 @@ def create_app(
             try:
                 yield
             finally:
+                await feishu_qr.close()
                 await runtime.close()
         finally:
             manager.uninstall()
@@ -259,6 +262,22 @@ def create_app(
     @api.get("/api/config/schema", dependencies=protected)
     async def config_schema():
         return Settings.model_json_schema()
+
+    @api.post("/api/adapters/feishu/qr", dependencies=protected)
+    async def feishu_qr_start(body: FeishuQrStart):
+        return await feishu_qr.start(body.domain)
+
+    @api.get("/api/adapters/feishu/qr/{session_id}", dependencies=protected)
+    async def feishu_qr_status(session_id: str):
+        return feishu_qr.status(session_id)
+
+    @api.delete("/api/adapters/feishu/qr/{session_id}", dependencies=protected, status_code=204)
+    async def feishu_qr_cancel(session_id: str):
+        await feishu_qr.cancel(session_id)
+
+    @api.post("/api/adapters/feishu/qr/{session_id}/apply", dependencies=protected)
+    async def feishu_qr_apply(session_id: str, body: FeishuQrApply):
+        return await feishu_qr.apply(session_id, body)
 
     @api.get("/api/tools", dependencies=protected)
     async def tools(session: str = "web:owner"):

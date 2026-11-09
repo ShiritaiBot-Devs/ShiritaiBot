@@ -615,6 +615,22 @@ wheels = [
 ]
 
 [[package]]
+name = "lark-oapi"
+version = "1.7.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pycryptodome" },
+    { name = "requests" },
+    { name = "requests-toolbelt" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/08/da/8dc51e0e808b7f84c4598869a057aa46f0c0f8d27872e0ff87a6512f3b93/lark_oapi-1.7.5.tar.gz", hash = "sha256:81258795e7cfc5ef797e71aff14435359a2abaf698ef0e6f9d3857fe08b719ab", size = 2351682, upload-time = "2026-10-15T08:49:18.901Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/21/7b/54d1df1f73ac1339b7df051982d386223202add5560a97839cf6326e6adc/lark_oapi-1.7.5-py3-none-any.whl", hash = "sha256:ff70fd5cdf436e26d80bf903fdd7a80cbdbd71981b87ce4c2aa49bb95fc96020", size = 7711907, upload-time = "2026-10-15T08:49:16.653Z" },
+]
+
+[[package]]
 name = "lxml"
 version = "6.1.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1537,6 +1553,7 @@ dependencies = [
     { name = "jieba" },
     { name = "jsonschema" },
     { name = "lark-channel-sdk" },
+    { name = "lark-oapi" },
     { name = "numpy" },
     { name = "olefile" },
     { name = "openpyxl" },
@@ -1583,6 +1600,7 @@ requires-dist = [
     { name = "jieba", specifier = ">=0.42,<1" },
     { name = "jsonschema", specifier = ">=4.23,<5" },
     { name = "lark-channel-sdk", specifier = "==1.4.0" },
+    { name = "lark-oapi", specifier = "==1.7.5" },
     { name = "numpy", specifier = ">=2,<3" },
     { name = "olefile", specifier = ">=0.47,<1" },
     { name = "openpyxl", specifier = ">=3.1,<4" },

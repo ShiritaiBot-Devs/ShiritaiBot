@@ -74,6 +74,23 @@ export interface AdapterConfig extends Instance {
   memory_profile?: "feishu" | "default";
 }
 
+export interface FeishuQrRegistration {
+  id: string;
+  domain: "feishu" | "lark";
+  status: "waiting" | "authorized" | "applied" | "denied" | "expired" | "error";
+  expires_in: number;
+  qr_url?: string;
+  app_id?: string;
+  adapter_id?: string;
+  message?: string;
+}
+
+export interface FeishuQrAdapter {
+  adapter_id: string;
+  enabled: boolean;
+  memory_profile: "feishu" | "default";
+}
+
 export interface SubagentConfig extends Instance {
   kind: SubagentKind;
   command: string[];
