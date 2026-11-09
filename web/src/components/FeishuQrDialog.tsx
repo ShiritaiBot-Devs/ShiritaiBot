@@ -146,7 +146,7 @@ export function FeishuQrDialog({
 
   return (
     <dialog
-      className="feishu-qr-dialog"
+      className="adapter-dialog"
       ref={dialog}
       aria-labelledby={title}
       onCancel={(event) => {
@@ -255,7 +255,7 @@ export function FeishuQrDialog({
           {error}
         </p>
       )}
-      <div className="actions feishu-qr-actions">
+      <div className="actions adapter-dialog-actions">
         <button type="button" onClick={onClose} disabled={busy && authorized}>
           取消
         </button>

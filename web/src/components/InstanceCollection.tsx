@@ -6,30 +6,30 @@ import { FieldForm } from "./FieldForm";
 import type { FieldSpec } from "../config/schema";
 import { EmptyState } from "./EmptyState";
 
-interface InstanceCollectionProps<T extends Instance> {
+type InstanceCollectionProps<T extends Instance> = {
   title: string;
   items: T[];
-  create: () => T;
   onChange: (items: T[]) => void;
   fields: FieldSpec[] | ((item: T) => FieldSpec[]);
   subtitle: (item: T) => string;
   emptyText: string;
-  headerAction?: ReactNode;
   initialSelectedId?: string;
   renderStatus?: (item: T) => ReactNode;
   renderActions?: (item: T, update: (next: T) => void) => ReactNode;
   renderExtra?: (item: T, update: (next: T) => void) => ReactNode;
-}
+} & (
+  { create: () => T; onAdd?: never } | { create?: never; onAdd: () => void }
+);
 
 export function InstanceCollection<T extends Instance>({
   title,
   items,
   create,
+  onAdd,
   onChange,
   fields,
   subtitle,
   emptyText,
-  headerAction,
   initialSelectedId,
   renderStatus,
   renderActions,
@@ -45,6 +45,7 @@ export function InstanceCollection<T extends Instance>({
   const item = items[index];
 
   function add() {
+    if (onAdd) return onAdd();
     const next = [...items, create()];
     onChange(next);
     setSelected(next.length - 1);
@@ -66,7 +67,6 @@ export function InstanceCollection<T extends Instance>({
       <div className="panel-head">
         <h2>{title}</h2>
         <div className="instance-actions">
-          {headerAction}
           <button type="button" onClick={add}>
             <Plus size={14} />
             添加

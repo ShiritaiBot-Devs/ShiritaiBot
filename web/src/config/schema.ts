@@ -1036,11 +1036,14 @@ export function createProvider(rows: ProviderConfig[]): ProviderConfig {
   };
 }
 
-export function createAdapter(rows: AdapterConfig[]): AdapterConfig {
+export function createAdapter(
+  rows: AdapterConfig[],
+  type: NonNullable<AdapterConfig["type"]> = "onebot11",
+): AdapterConfig {
   return {
-    id: uniqueId("qq-main", rows),
+    id: uniqueId(type === "feishu" ? "feishu" : "qq-main", rows),
     enabled: false,
-    type: "onebot11",
+    type,
     url: "ws://127.0.0.1:3001",
     token: "",
     self_id: "",

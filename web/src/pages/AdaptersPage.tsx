@@ -1,7 +1,6 @@
 import { LoadingBar } from "../components/LoadingBar";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { QrCode } from "lucide-react";
 import type { AdapterConfig } from "../api/types";
 import { FeishuQrDialog } from "../components/FeishuQrDialog";
 import { InstanceCollection } from "../components/InstanceCollection";
@@ -27,14 +26,86 @@ function savedFeishuIdentity(current: AdapterConfig, saved?: AdapterConfig) {
   );
 }
 
+type AdapterType = NonNullable<AdapterConfig["type"]>;
+
+function AddAdapterDialog({
+  onClose,
+  onManual,
+  onQr,
+}: {
+  onClose: () => void;
+  onManual: (type: AdapterType) => void;
+  onQr: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const title = useId();
+  const [type, setType] = useState<AdapterType>("onebot11");
+
+  useEffect(() => {
+    const element = dialog.current!;
+    element.showModal();
+    return () => element.close();
+  }, []);
+
+  return (
+    <dialog
+      className="adapter-dialog"
+      ref={dialog}
+      aria-labelledby={title}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+    >
+      <h2 id={title}>添加机器人</h2>
+      <label className="field">
+        <span className="field-name">适配器类型</span>
+        <select
+          value={type}
+          onChange={(event) =>
+            setType(event.target.value === "feishu" ? "feishu" : "onebot11")
+          }
+        >
+          <option value="onebot11">QQ · OneBot V11</option>
+          <option value="feishu">飞书应用机器人</option>
+        </select>
+      </label>
+      <div className="actions adapter-dialog-actions">
+        <button type="button" onClick={onClose}>
+          取消
+        </button>
+        {type === "feishu" ? (
+          <>
+            <button type="button" onClick={() => onManual(type)}>
+              手动配置
+            </button>
+            <button type="button" className="primary" onClick={onQr}>
+              扫码一键创建
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="primary"
+            onClick={() => onManual(type)}
+          >
+            继续
+          </button>
+        )}
+      </div>
+    </dialog>
+  );
+}
+
 export function AdaptersPage({
   client,
   config,
   setConfig,
   dirty = false,
 }: ConfigPageProps & { dirty?: boolean }) {
-  const [qrOpen, setQrOpen] = useState(false);
-  const [qrSavedId, setQrSavedId] = useState<string>();
+  const [creation, setCreation] = useState<"choose" | "qr" | null>(null);
+  const [selection, setSelection] = useState<{ id: string; key: number }>();
+  const [pendingQrSelection, setPendingQrSelection] = useState<string>();
   const queryClient = useQueryClient();
   const { succeed, warn } = useNotice();
   const { data: savedConfig } = useQuery({
@@ -57,14 +128,40 @@ export function AdaptersPage({
     return savedConfig?.adapters.find((saved) => saved.id === item.id);
   }
 
-  const selectedId = items.some((item) => item.id === qrSavedId)
-    ? qrSavedId
-    : undefined;
+  const selectAdded = useCallback((id: string) => {
+    setSelection((previous) => ({ id, key: (previous?.key ?? 0) + 1 }));
+  }, []);
+
+  useEffect(() => {
+    if (
+      pendingQrSelection &&
+      config.adapters.some((adapter) => adapter.id === pendingQrSelection)
+    ) {
+      selectAdded(pendingQrSelection);
+      setPendingQrSelection(undefined);
+    }
+  }, [config.adapters, pendingQrSelection, selectAdded]);
+
+  function addManually(type: AdapterType) {
+    const adapter = createAdapter(items, type);
+    setConfig({ ...config, adapters: [...items, adapter] });
+    selectAdded(adapter.id);
+    setCreation(null);
+  }
+
+  function openQr() {
+    if (dirty) {
+      setCreation(null);
+      warn("请先保存或放弃未保存的配置，再创建飞书机器人。");
+      return;
+    }
+    setCreation("qr");
+  }
 
   const onQrSaved = useCallback(
     async (id: string, enabled: boolean) => {
-      setQrOpen(false);
-      setQrSavedId(id);
+      setCreation(null);
+      setPendingQrSelection(id);
       await Promise.all(
         ["config", "health", "diagnostics"].map((key) =>
           queryClient.invalidateQueries({ queryKey: [key] }),
@@ -80,26 +177,11 @@ export function AdaptersPage({
   return (
     <>
       <InstanceCollection<AdapterConfig>
-        key={selectedId}
+        key={selection?.key}
         title="适配器实例"
         items={items}
-        initialSelectedId={selectedId}
-        headerAction={
-          <button
-            type="button"
-            onClick={() => {
-              if (dirty) {
-                warn("请先保存或放弃未保存的配置，再创建飞书机器人。");
-                return;
-              }
-              setQrOpen(true);
-            }}
-          >
-            <QrCode size={14} />
-            扫码创建飞书
-          </button>
-        }
-        create={() => createAdapter(config.adapters)}
+        initialSelectedId={selection?.id}
+        onAdd={() => setCreation("choose")}
         onChange={(adapters) => {
           setConfig({
             ...config,
@@ -178,14 +260,21 @@ export function AdaptersPage({
           );
         }}
       />
-      {qrOpen && (
+      {creation === "choose" && (
+        <AddAdapterDialog
+          onClose={() => setCreation(null)}
+          onManual={addManually}
+          onQr={openQr}
+        />
+      )}
+      {creation === "qr" && (
         <FeishuQrDialog
           client={client}
           initialId={uniqueId("feishu", items)}
           canEnable={
             !items.some((item) => item.type === "feishu" && item.enabled)
           }
-          onClose={() => setQrOpen(false)}
+          onClose={() => setCreation(null)}
           onSaved={onQrSaved}
         />
       )}

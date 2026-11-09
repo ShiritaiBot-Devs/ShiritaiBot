@@ -608,7 +608,7 @@
   gap: 8px;
 }
 
-.feishu-qr-dialog {
+.adapter-dialog {
   box-sizing: border-box;
   width: min(440px, calc(100% - 24px));
   max-height: calc(100dvh - 24px);
@@ -620,19 +620,23 @@
   box-shadow: var(--shadow);
 }
 
-.feishu-qr-dialog::backdrop {
+.adapter-dialog::backdrop {
   background: color-mix(in srgb, var(--text-strong) 36%, transparent);
 }
 
-.feishu-qr-dialog h2 {
+.adapter-dialog h2 {
   margin: 0;
 }
 
-.feishu-qr-dialog p {
+.adapter-dialog > .field {
+  margin-top: 12px;
+}
+
+.adapter-dialog p {
   overflow-wrap: anywhere;
 }
 
-.feishu-qr-dialog .field-grid {
+.adapter-dialog .field-grid {
   margin-bottom: 0;
 }
 
@@ -664,7 +668,7 @@
   margin: 0;
 }
 
-.feishu-qr-actions {
+.adapter-dialog-actions {
   justify-content: flex-end;
 }
 

@@ -6,9 +6,11 @@ import re
 import secrets
 import time
 from dataclasses import dataclass, field
+from json import JSONDecodeError
 from typing import Literal
 from urllib.parse import urlsplit
 
+import httpx
 from fastapi import HTTPException
 from pydantic import Field
 
@@ -16,6 +18,7 @@ from shiritaibot.adapters.feishu_transport import DOMAINS, MESSAGE_EVENT
 from shiritaibot.app import Application, FeishuAdapterConflict
 from shiritaibot.config import AdapterConfig
 from shiritaibot.core import Model
+from shiritaibot.core.logs import get_logger
 
 FeishuDomain = Literal["feishu", "lark"]
 RegistrationStatus = Literal["waiting", "authorized", "denied", "expired", "error", "applied"]
@@ -24,6 +27,38 @@ START_TIMEOUT = 20
 MAX_QR_LIFETIME = 600
 APPLY_LIFETIME = 300
 MAX_SESSIONS = 8
+
+log = get_logger("飞书")
+RECOVERY_MESSAGE = (
+    "未能获取飞书应用凭据。若已在手机上创建，请在飞书开放平台查看 "
+    "App ID 和 App Secret，再手动配置。"
+)
+
+
+async def _register_app(**options):
+    # lark-oapi 1.7.5 uses a private flow without a transport hook. Keep its
+    # device code, domain switching and timing, and only normalize poll results.
+    from lark_oapi.scene.registration import _AsyncFlow
+
+    class RegistrationFlow(_AsyncFlow):
+        async def _post(self, data):
+            polling = data.get("action") == "poll"
+            try:
+                result = await super()._post(data)
+            except (httpx.RequestError, JSONDecodeError):
+                if not polling:
+                    raise
+                return {"error": "authorization_pending"}
+            if polling:
+                if not isinstance(result, dict):
+                    return {"error": "authorization_pending"}
+                if not result.get("error") and not (
+                    result.get("client_id") and result.get("client_secret")
+                ):
+                    return {**result, "error": "authorization_pending"}
+            return result
+
+    return await RegistrationFlow(**options).run()
 
 
 class FeishuQrStart(Model):
@@ -102,10 +137,21 @@ class FeishuQrRegistration:
         return result
 
     async def _register(self, session: Registration) -> None:
+        def fail(reason: str) -> None:
+            waiting = session.ready.done()
+            phase = "等待扫码结果" if waiting else "获取二维码"
+            log.warning(f"扫码创建失败（{phase}，{reason}）")
+            session.finish(
+                "error",
+                RECOVERY_MESSAGE if waiting else "未能获取飞书二维码，请检查网络后重试。",
+            )
+
         try:
-            # Load the full server SDK only when the setup flow is used.
-            from lark_oapi import aregister_app
-            from lark_oapi.scene.registration.errors import AppAccessDeniedError, AppExpiredError
+            from lark_oapi.scene.registration.errors import (
+                AppAccessDeniedError,
+                AppExpiredError,
+                RegisterAppError,
+            )
 
             try:
                 async with asyncio.timeout(START_TIMEOUT) as timeout:
@@ -141,7 +187,7 @@ class FeishuQrRegistration:
                         if info.get("status") == "domain_switched":
                             session.domain = "lark"
 
-                    result = await aregister_app(
+                    result = await _register_app(
                         on_qr_code=on_qr_code,
                         on_status_change=on_status_change,
                         source="shiritaibot",
@@ -166,9 +212,19 @@ class FeishuQrRegistration:
                 else:
                     session.finish("error", "获取二维码超时，请检查网络后重试。")
                 return
+            except RegisterAppError as exc:
+                if exc.code == "invalid_grant":
+                    session.finish("expired", "二维码已过期，请重新生成。")
+                else:
+                    fail("飞书返回注册错误")
+                return
+            except httpx.RequestError:
+                fail("飞书网络请求失败")
+                return
 
             if not isinstance(result, dict):
-                raise ValueError("invalid registration result")
+                fail("注册结果格式异常")
+                return
             app_id, secret = result.get("client_id"), result.get("client_secret")
             user_info = result.get("user_info")
             brand = user_info.get("tenant_brand") if isinstance(user_info, dict) else None
@@ -179,9 +235,12 @@ class FeishuQrRegistration:
                 or not isinstance(secret, str)
                 or not 0 < len(secret) <= 10000
                 or secret.startswith(("env:", "secret:"))
-                or (brand in {"feishu", "lark"} and brand != session.domain)
             ):
-                raise ValueError("invalid app credentials or region")
+                fail("应用凭据校验失败")
+                return
+            if isinstance(brand, str) and brand in {"feishu", "lark"} and brand != session.domain:
+                fail("注册平台不匹配")
+                return
             session.finish("authorized")
             session.app_id, session.app_secret = app_id, secret
             session.deadline = time.monotonic() + APPLY_LIFETIME
@@ -189,7 +248,7 @@ class FeishuQrRegistration:
             del result, user_info, secret
         except Exception:
             # SDK exceptions can embed upstream responses and verification URLs.
-            session.finish("error", "飞书扫码创建失败，请重试或改用手动配置。")
+            fail("注册响应或校验异常")
         finally:
             if not session.ready.done():
                 session.ready.set_result(None)

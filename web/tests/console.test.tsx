@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act as reactAct,
   cleanup,
@@ -31,6 +31,7 @@ import { MemesPage } from "../src/pages/MemesPage";
 import { McpPage } from "../src/pages/McpPage";
 import { SkillsPage } from "../src/pages/SkillsPage";
 import { SecretField } from "../src/components/SecretField";
+import { useConfigDraft } from "../src/hooks/useConfigDraft";
 import { NoticeProvider, useNotice } from "../src/hooks/useNotice";
 import { FieldForm } from "../src/components/FieldForm";
 import { createAdapter } from "../src/config/schema";
@@ -170,7 +171,7 @@ function ConfigHost({
 }
 
 describe("adapter configuration", () => {
-  it("waits for QR authorization and saves a second Feishu adapter disabled", async () => {
+  beforeEach(() => {
     Object.defineProperties(HTMLDialogElement.prototype, {
       showModal: {
         configurable: true,
@@ -185,77 +186,136 @@ describe("adapter configuration", () => {
         },
       },
     });
-    try {
-      const config = baseConfig();
-      config.adapters = [
-        { ...createAdapter([]), id: "existing", type: "feishu", enabled: true },
-      ];
-      let authorize!: (result: FeishuQrRegistration) => void;
-      const confirmation = new Promise<FeishuQrRegistration>((resolve) => {
-        authorize = resolve;
-      });
-      const applyFeishuQr = vi.fn().mockResolvedValue({ adapter_id: "feishu" });
-      const client = fakeClient({
-        config: vi.fn().mockResolvedValue(config),
-        startFeishuQr: vi.fn().mockResolvedValue({
-          id: "registration-id",
-          domain: "feishu",
-          status: "waiting",
-          expires_in: 600,
-          qr_url: "https://open.feishu.cn/page/cli?user_code=example",
-        }),
-        feishuQrStatus: vi.fn().mockReturnValue(confirmation),
-        cancelFeishuQr: vi.fn().mockResolvedValue(undefined),
-        applyFeishuQr,
-      });
-      const onConfig = vi.fn();
-      render(
-        <ConfigHost
-          page={AdaptersPage}
-          client={client}
-          initial={config}
-          onConfig={onConfig}
-        />,
-      );
-      const user = userEvent.setup();
-      await user.click(screen.getByRole("button", { name: "扫码创建飞书" }));
-      const dialog = within(
-        screen.getByRole("dialog", { name: "扫码创建飞书机器人" }),
-      );
-      await user.click(dialog.getByRole("button", { name: "生成二维码" }));
-      expect(await dialog.findByText("等待手机确认")).toBeTruthy();
-      expect(dialog.queryByRole("button", { name: "保存为未启用" })).toBeNull();
-      await reactAct(async () => {
-        authorize({
-          id: "registration-id",
-          domain: "feishu",
-          status: "authorized",
-          expires_in: 600,
-          app_id: "cli_example",
-        });
-      });
-      expect(applyFeishuQr).not.toHaveBeenCalled();
-      await user.click(
-        await dialog.findByRole("button", { name: "保存为未启用" }),
-      );
-      expect(applyFeishuQr).toHaveBeenCalledWith("registration-id", {
-        adapter_id: "feishu",
-        enabled: false,
-        memory_profile: "feishu",
-      });
-      expect(onConfig).not.toHaveBeenCalled();
-      expect(await screen.findByText("飞书实例已保存为未启用。")).toBeTruthy();
-    } finally {
-      cleanup();
-      Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
-      Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
-    }
   });
 
-  it("switches from OneBot to Feishu with the isolated memory default", async () => {
+  afterEach(() => {
+    cleanup();
+    Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+    Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
+  });
+
+  async function openAdapterPicker(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      await screen.findByRole("button", { name: "添加", exact: true }),
+    );
+    return within(screen.getByRole("dialog", { name: "添加机器人" }));
+  }
+
+  it("waits for QR authorization and saves a second Feishu adapter disabled", async () => {
+    let config = baseConfig();
+    config.adapters = [
+      createAdapter([]),
+      { ...createAdapter([]), id: "existing", type: "feishu", enabled: true },
+    ];
+    let authorize!: (result: FeishuQrRegistration) => void;
+    const confirmation = new Promise<FeishuQrRegistration>((resolve) => {
+      authorize = resolve;
+    });
+    const applyFeishuQr = vi.fn().mockImplementation(async () => {
+      config = {
+        ...config,
+        adapters: [
+          ...config.adapters,
+          {
+            ...createAdapter([]),
+            id: "feishu",
+            type: "feishu",
+            app_id: "cli_example",
+            app_secret_configured: true,
+          },
+        ],
+      };
+      return { adapter_id: "feishu" };
+    });
+    const client = fakeClient({
+      config: vi.fn().mockImplementation(async () => config),
+      startFeishuQr: vi.fn().mockResolvedValue({
+        id: "registration-id",
+        domain: "feishu",
+        status: "waiting",
+        expires_in: 600,
+        qr_url: "https://open.feishu.cn/page/cli?user_code=example",
+      }),
+      feishuQrStatus: vi.fn().mockReturnValue(confirmation),
+      cancelFeishuQr: vi.fn().mockResolvedValue(undefined),
+      applyFeishuQr,
+    });
+    const onConfig = vi.fn();
+    function LiveAdapters() {
+      const draft = useConfigDraft(client);
+      return draft.config ? (
+        <AdaptersPage
+          client={client}
+          act={act}
+          config={draft.config}
+          dirty={draft.dirty}
+          setConfig={(next) => {
+            onConfig(next);
+            draft.update(next);
+          }}
+        />
+      ) : null;
+    }
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NoticeProvider>
+          <LiveAdapters />
+        </NoticeProvider>
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+    expect(
+      await screen.findByRole("heading", { name: "qq-main", exact: true }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /扫码/ })).toBeNull();
+    const picker = await openAdapterPicker(user);
+    await user.selectOptions(picker.getByLabelText("适配器类型"), "feishu");
+    expect(client.startFeishuQr).not.toHaveBeenCalled();
+    expect(onConfig).not.toHaveBeenCalled();
+    await user.click(picker.getByRole("button", { name: "扫码一键创建" }));
+    expect(screen.queryByRole("dialog", { name: "添加机器人" })).toBeNull();
+    expect(client.startFeishuQr).not.toHaveBeenCalled();
+    const dialog = within(
+      screen.getByRole("dialog", { name: "扫码创建飞书机器人" }),
+    );
+    await user.click(dialog.getByRole("button", { name: "生成二维码" }));
+    expect(await dialog.findByText("等待手机确认")).toBeTruthy();
+    expect(dialog.queryByRole("button", { name: "保存为未启用" })).toBeNull();
+    await reactAct(async () => {
+      authorize({
+        id: "registration-id",
+        domain: "feishu",
+        status: "authorized",
+        expires_in: 600,
+        app_id: "cli_example",
+      });
+    });
+    expect(applyFeishuQr).not.toHaveBeenCalled();
+    await user.click(
+      await dialog.findByRole("button", { name: "保存为未启用" }),
+    );
+    expect(applyFeishuQr).toHaveBeenCalledWith("registration-id", {
+      adapter_id: "feishu",
+      enabled: false,
+      memory_profile: "feishu",
+    });
+    expect(onConfig).not.toHaveBeenCalled();
+    expect(await screen.findByText("飞书实例已保存为未启用。")).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: "feishu", exact: true }),
+    ).toBeTruthy();
+  });
+
+  it("opens the manual Feishu form with the isolated memory default", async () => {
     const config = baseConfig();
     const onConfig = vi.fn();
-    const client = fakeClient({ config: vi.fn().mockResolvedValue(config) });
+    const client = fakeClient({
+      config: vi.fn().mockResolvedValue(config),
+      startFeishuQr: vi.fn(),
+    });
     render(
       <ConfigHost
         page={AdaptersPage}
@@ -265,10 +325,13 @@ describe("adapter configuration", () => {
       />,
     );
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "添加" }));
-    expect(screen.getByLabelText("WebSocket 地址")).toBeTruthy();
-    await user.selectOptions(screen.getByLabelText("适配器类型"), "feishu");
+    const picker = await openAdapterPicker(user);
+    await user.selectOptions(picker.getByLabelText("适配器类型"), "feishu");
+    expect(onConfig).not.toHaveBeenCalled();
+    await user.click(picker.getByRole("button", { name: "手动配置" }));
+    expect(client.startFeishuQr).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("WebSocket 地址")).toBeNull();
+    expect(screen.getByLabelText("App ID")).toBeTruthy();
     expect((screen.getByLabelText("记忆库") as HTMLSelectElement).value).toBe(
       "feishu",
     );
@@ -279,10 +342,42 @@ describe("adapter configuration", () => {
       (screen.getByLabelText("记录飞书群上下文") as HTMLInputElement).checked,
     ).toBe(false);
     await user.selectOptions(screen.getByLabelText("记忆库"), "default");
-    expect(onConfig.mock.lastCall?.[0].adapters[0]).toMatchObject({
-      type: "feishu",
-      memory_profile: "default",
+    expect(onConfig.mock.lastCall?.[0].adapters).toMatchObject([
+      { type: "feishu", memory_profile: "default" },
+    ]);
+  });
+
+  it("leaves the adapter list untouched on cancel and still opens the QQ form", async () => {
+    const config = baseConfig();
+    const onConfig = vi.fn();
+    const client = fakeClient({
+      config: vi.fn().mockResolvedValue(config),
+      startFeishuQr: vi.fn(),
     });
+    render(
+      <ConfigHost
+        page={AdaptersPage}
+        client={client}
+        initial={config}
+        onConfig={onConfig}
+      />,
+    );
+    const user = userEvent.setup();
+    const picker = await openAdapterPicker(user);
+    await user.selectOptions(picker.getByLabelText("适配器类型"), "feishu");
+    await user.click(picker.getByRole("button", { name: "取消" }));
+    expect(screen.queryByRole("dialog", { name: "添加机器人" })).toBeNull();
+    expect(onConfig).not.toHaveBeenCalled();
+    expect(client.startFeishuQr).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("App ID")).toBeNull();
+
+    const qqPicker = await openAdapterPicker(user);
+    expect(qqPicker.queryByRole("button", { name: "扫码一键创建" })).toBeNull();
+    await user.click(qqPicker.getByRole("button", { name: "继续" }));
+    expect(screen.getByLabelText("WebSocket 地址")).toBeTruthy();
+    expect(onConfig.mock.lastCall?.[0].adapters).toMatchObject([
+      { type: "onebot11" },
+    ]);
   });
 
   it("keeps a saved secret write-only and reports the live permission issue for the applied app", async () => {

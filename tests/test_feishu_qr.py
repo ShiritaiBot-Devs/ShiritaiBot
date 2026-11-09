@@ -1,11 +1,16 @@
 import asyncio
+from urllib.parse import parse_qsl
 
-import lark_oapi
+import httpx
 import pytest
 from fastapi.testclient import TestClient
-from lark_oapi.scene.registration.errors import AppAccessDeniedError, AppExpiredError
+from lark_oapi.scene.registration.errors import (
+    AppAccessDeniedError,
+    AppExpiredError,
+    RegisterAppError,
+)
 
-from shiritaibot.web import create_app
+from shiritaibot.web import create_app, feishu_qr
 
 QR_API = "/api/adapters/feishu/qr"
 ADMIN = {"Authorization": "Bearer admin"}
@@ -31,7 +36,7 @@ def registration(tmp_path, monkeypatch):
                 raise
 
     sdk = RegistrationSdk()
-    monkeypatch.setattr(lark_oapi, "aregister_app", sdk)
+    monkeypatch.setattr(feishu_qr, "_register_app", sdk)
     with TestClient(create_app(tmp_path, token="admin")) as client:
         yield client, sdk
 
@@ -116,16 +121,94 @@ def test_feishu_qr_applies_once_and_protects_credentials(registration, tmp_path)
     [
         (AppAccessDeniedError("access_denied", APP_SECRET), "denied"),
         (AppExpiredError("expired_token", APP_SECRET), "expired"),
+        (RegisterAppError("invalid_grant", APP_SECRET), "expired"),
+        (RegisterAppError(APP_SECRET, APP_SECRET), "error"),
         (ValueError(APP_SECRET), "error"),
     ],
 )
-def test_feishu_qr_terminal_errors_are_redacted(registration, error, expected):
+def test_feishu_qr_terminal_errors_are_redacted(registration, error, expected, tmp_path):
     client, sdk = registration
     start = client.post(QR_API, json={}, headers=ADMIN).json()
     client.portal.call(sdk.result.set_exception, error)
     status = client.get(f"{QR_API}/{start['id']}", headers=ADMIN)
     assert status.json()["status"] == expected
     assert APP_SECRET not in status.text and "qr_url" not in status.json()
+    if expected == "error":
+        assert "App ID 和 App Secret" in status.json()["message"]
+        log = (tmp_path / "logs" / "shiritaibot.log").read_text()
+        assert "等待扫码结果" in log and APP_SECRET not in log
+
+
+def test_feishu_qr_poll_waits_for_complete_credentials_after_transient_errors(
+    tmp_path, monkeypatch
+):
+    registration_url = "https://accounts.feishu.cn/oauth/v1/app/registration"
+    confirm = asyncio.Event()
+    waiting_for_confirmation = asyncio.Event()
+    requests = []
+    polls = 0
+
+    async def handle(request):
+        nonlocal polls
+        form = dict(parse_qsl(request.content.decode()))
+        requests.append(form)
+        if form["action"] == "init":
+            return httpx.Response(200, json={"supported_auth_methods": ["client_secret"]})
+        if form["action"] == "begin":
+            return httpx.Response(
+                200,
+                json={
+                    "device_code": "fixture-device",
+                    "verification_uri_complete": "https://accounts.feishu.cn/page/launcher",
+                    "interval": 0,
+                    "expires_in": 30,
+                },
+            )
+
+        polls += 1
+        if polls == 1:
+            raise httpx.ConnectError("temporary connection failure", request=request)
+        if polls == 2:
+            return httpx.Response(503, text="temporarily unavailable")
+        if polls == 3:
+            return httpx.Response(200, json={"client_id": "cli_created"})
+        waiting_for_confirmation.set()
+        await confirm.wait()
+        return httpx.Response(
+            200,
+            json={
+                "client_id": "cli_created",
+                "client_secret": APP_SECRET,
+                "user_info": {"tenant_brand": "feishu", "open_id": SCANNER_ID},
+            },
+        )
+
+    original_post = httpx.AsyncClient.post
+
+    async def post(self, url, **options):
+        if url != registration_url:
+            return await original_post(self, url, **options)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+            return await original_post(http, url, **options)
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
+
+    async def wait_for_poll():
+        await asyncio.wait_for(waiting_for_confirmation.wait(), 2)
+
+    with TestClient(create_app(tmp_path, token="admin")) as client:
+        start = client.post(QR_API, json={}, headers=ADMIN).json()
+        endpoint = f"{QR_API}/{start['id']}"
+        client.portal.call(wait_for_poll)
+        assert client.get(endpoint, headers=ADMIN).json()["status"] == "waiting"
+
+        client.portal.call(confirm.set)
+        status = client.get(endpoint, headers=ADMIN)
+        assert status.json()["status"] == "authorized"
+        assert status.json()["app_id"] == "cli_created"
+        assert APP_SECRET not in status.text and SCANNER_ID not in status.text
+        assert [form["action"] for form in requests] == ["init", "begin"] + ["poll"] * 4
+        assert {form["device_code"] for form in requests[2:]} == {"fixture-device"}
 
 
 def test_feishu_qr_cancel_stops_sdk_and_rejects_untrusted_links(registration):
