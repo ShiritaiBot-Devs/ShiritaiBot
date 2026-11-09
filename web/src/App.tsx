@@ -360,7 +360,7 @@ function ConsoleApp() {
       onNavigate={navigate}
       pendingApprovals={pending}
       online={health.isSuccess && !restarting}
-      version={"v" + (health.data?.version ?? "0.2.0")}
+      version={"v" + (health.data?.version ?? "0.2.3")}
       onOpenChat={() => setMode("chat")}
       onRestart={() => void restart()}
       restarting={restarting}
