@@ -7,14 +7,14 @@ import re
 import shutil
 import stat
 import tempfile
-import tomllib
 import zipfile
 from pathlib import Path, PurePosixPath
 
 import httpx
-from jsonschema import Draft202012Validator
 
 from shiritaibot.core import PublicError
+
+from .manifest import MANIFESTS, manifest_file, read_manifest
 
 MAX_ARCHIVE = 20 * 1024 * 1024
 MAX_UNPACKED = 100 * 1024 * 1024
@@ -59,6 +59,16 @@ def extract_entries(archive: zipfile.ZipFile, stage: Path) -> None:
                 shutil.copyfileobj(source, output)
 
 
+def plugin_root(stage: Path) -> Path:
+    """The extracted plugin directory: the archive root, or its only folder with a manifest."""
+    if manifest_file(stage):
+        return stage
+    found = {path.parent for name in MANIFESTS for path in stage.rglob(name)}
+    if len(found) != 1:
+        raise PublicError("ZIP 中应包含一个插件及其 metadata.yaml 或 plugin.toml")
+    return found.pop()
+
+
 def install_archive(root: Path, key: str, data: bytes) -> None:
     validate_id(key)
     if len(data) > MAX_ARCHIVE:
@@ -75,20 +85,10 @@ def install_archive(root: Path, key: str, data: bytes) -> None:
             with tempfile.TemporaryDirectory(prefix=".install-", dir=root) as staging:
                 stage = Path(staging)
                 extract_entries(archive, stage)
-                manifests = list(stage.rglob("plugin.toml"))
-                manifest = stage / "plugin.toml"
-                if not manifest.is_file():
-                    if len(manifests) != 1:
-                        raise PublicError("ZIP 中应包含一个插件及其 plugin.toml")
-                    manifest = manifests[0]
-                directory = manifest.parent
-                meta = tomllib.loads(manifest.read_text("utf-8"))
-                if meta.get("api") != 1 or not (directory / "main.py").is_file():
-                    raise PublicError("插件需要 api = 1 的清单和 main.py 入口")
-                schema = meta.get("settings_schema", {"type": "object"})
-                Draft202012Validator.check_schema(schema)
-                if schema.get("type") != "object" or not isinstance(meta.get("settings", {}), dict):
-                    raise PublicError("插件配置定义无效")
+                directory = plugin_root(stage)
+                error = read_manifest(directory)["error"]
+                if error:
+                    raise PublicError(error)
                 compile((directory / "main.py").read_text("utf-8"), "main.py", "exec")
                 directory.rename(destination)
     except PublicError:

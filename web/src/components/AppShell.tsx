@@ -1,3 +1,4 @@
+import { LoadingBar } from "./LoadingBar";
 import type { ReactNode } from "react";
 import {
   ChevronRight,
@@ -82,7 +83,13 @@ export function AppShell({
               className={"dot " + (online ? "on" : "")}
               aria-hidden="true"
             />
-            {restarting ? "正在重启…" : online ? "系统运行中" : "连接未就绪"}
+            {restarting ? (
+              <LoadingBar compact label="正在重启…" />
+            ) : online ? (
+              "系统运行中"
+            ) : (
+              "连接未就绪"
+            )}
             <small>{version}</small>
           </div>
           <button
@@ -93,12 +100,14 @@ export function AppShell({
             title={restartHint}
             aria-label={restarting ? "正在重启" : "重启"}
           >
-            <RotateCw
-              size={16}
-              className={restarting ? "spinner" : undefined}
-              aria-hidden="true"
-            />
-            <span>{restarting ? "正在重启…" : "重启"}</span>
+            {restarting ? (
+              <LoadingBar compact label="正在重启…" />
+            ) : (
+              <>
+                <RotateCw size={16} aria-hidden="true" />
+                <span>重启</span>
+              </>
+            )}
           </button>
         </div>
       </aside>

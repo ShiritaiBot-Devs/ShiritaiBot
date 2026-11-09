@@ -1,3 +1,4 @@
+import { LoadingBar } from "./LoadingBar";
 import { useEffect, useId, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
@@ -267,11 +268,13 @@ export function FeishuQrDialog({
             }
             onClick={() => void save()}
           >
-            {busy
-              ? "正在保存…"
-              : adapter.enabled && canEnable
-                ? "保存并连接"
-                : "保存为未启用"}
+            {busy ? (
+              <LoadingBar compact label="正在保存…" />
+            ) : adapter.enabled && canEnable ? (
+              "保存并连接"
+            ) : (
+              "保存为未启用"
+            )}
           </button>
         ) : !waiting && stage !== "applied" ? (
           <button
@@ -280,7 +283,13 @@ export function FeishuQrDialog({
             disabled={busy}
             onClick={() => void start()}
           >
-            {busy ? "正在生成…" : terminal ? "重新生成二维码" : "生成二维码"}
+            {busy ? (
+              <LoadingBar compact label="正在生成…" />
+            ) : terminal ? (
+              "重新生成二维码"
+            ) : (
+              "生成二维码"
+            )}
           </button>
         ) : null}
       </div>

@@ -1,3 +1,4 @@
+import { LoadingBar } from "../components/LoadingBar";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download, Search, Trash2, Upload } from "lucide-react";
@@ -224,6 +225,7 @@ function SearchPanel({ client }: { client: ApiClient }) {
           检索
         </button>
       </form>
+      {hits.isFetching && <LoadingBar label="检索知识库" />}
       {hits.error && (
         <QueryErrorNotice message={`检索失败：${hits.error.message}`} />
       )}

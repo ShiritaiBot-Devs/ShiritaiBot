@@ -664,7 +664,8 @@ describe("models workspace", () => {
       await user.click(button);
       expect(button.disabled).toBe(true);
       expect(button.getAttribute("aria-busy")).toBe("true");
-      expect(button.querySelector(".spinner")).toBeTruthy();
+      expect(within(button).getByRole("progressbar")).toBeTruthy();
+      expect(button.textContent).toBe("");
       expect(other.disabled).toBe(false);
       await user.click(button);
       expect(testModel).toHaveBeenCalledTimes(1);
@@ -674,7 +675,7 @@ describe("models workspace", () => {
       });
       expect(button.disabled).toBe(false);
       expect(button.textContent).toBe("测试当前配置");
-      expect(button.querySelector(".spinner")).toBeNull();
+      expect(within(button).queryByRole("progressbar")).toBeNull();
       expect(errors.length).toBe(failure ? 1 : 0);
     },
   );
@@ -1782,6 +1783,10 @@ describe("identity, personas and context settings", () => {
       target: { value: "小知\n助手" },
     });
     await user.click(screen.getByLabelText("主人私聊 Agent 需要关键词"));
+    await user.click(screen.getByRole("tab", { name: "人格设定" }));
+    expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe(
+      "settings-tab-persona",
+    );
     await user.click(screen.getByRole("button", { name: "添加" }));
     await user.clear(screen.getByLabelText("人格标识"));
     await user.type(screen.getByLabelText("人格标识"), "kind");
@@ -1790,6 +1795,10 @@ describe("identity, personas and context settings", () => {
     await user.clear(screen.getByLabelText("人格提示词"));
     await user.type(screen.getByLabelText("人格提示词"), "秘密提示词");
     await user.selectOptions(screen.getByLabelText("默认人格"), "kind");
+    await user.click(screen.getByRole("tab", { name: "通用设定" }));
+    expect((screen.getByLabelText("助手称呼") as HTMLInputElement).value).toBe(
+      "小知",
+    );
     await user.selectOptions(
       screen.getByLabelText("上下文管理策略"),
       "compress",
@@ -1834,6 +1843,11 @@ describe("identity, personas and context settings", () => {
         query_tool: false,
       },
     });
+    screen.getByRole("tab", { name: "通用设定" }).focus();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe(
+      "settings-tab-persona",
+    );
     await user.clear(screen.getByLabelText("人格标识"));
     await user.type(screen.getByLabelText("人格标识"), "gentle");
     expect(latest.default_persona).toBe("gentle");
@@ -2242,6 +2256,7 @@ describe("paginated lists and web search settings", () => {
     render(withQuery(<Harness />));
     const user = userEvent.setup();
     expect(screen.getByLabelText("合并连续消息")).toBeTruthy();
+    await user.click(screen.getByRole("tab", { name: "扩展功能" }));
     await user.selectOptions(screen.getByLabelText("搜索深度"), "advanced");
     await user.selectOptions(screen.getByLabelText("搜索提供商"), "serpapi");
     await user.clear(screen.getByLabelText("搜索地区"));

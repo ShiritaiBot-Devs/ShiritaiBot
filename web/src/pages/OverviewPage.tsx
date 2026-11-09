@@ -1,5 +1,13 @@
+import { MetricIcon } from "../components/MetricIcon";
+import { LoadingBar } from "../components/LoadingBar";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, ArrowUpRight, CheckCircle2, Circle, Network } from "lucide-react";
+import {
+  Activity,
+  ArrowUpRight,
+  CheckCircle2,
+  Circle,
+  Network,
+} from "lucide-react";
 import type { ApiClient } from "../api/client";
 import type { PageId } from "../navigation";
 import { ApprovalCard } from "../components/ApprovalCard";
@@ -122,8 +130,17 @@ export function OverviewPage({
           ] as const
         ).map(([label, value, note]) => (
           <div className="metric" key={label}>
+            <MetricIcon label={label} />
             <span>{label}</span>
-            <strong>{value}</strong>
+            <strong>
+              {(
+                label === "等待审批" ? approvals.isPending : health.isPending
+              ) ? (
+                <LoadingBar compact label={`读取${label}`} />
+              ) : (
+                value
+              )}
+            </strong>
             <small>{note}</small>
           </div>
         ))}
@@ -153,7 +170,9 @@ export function OverviewPage({
             <h2>连接状态</h2>
             <Network size={17} aria-hidden="true" />
           </div>
-          {adapters.length ? (
+          {health.isPending ? (
+            <LoadingBar label="读取连接状态" />
+          ) : adapters.length ? (
             adapters.map(([id, status]) => (
               <div className="list-row" key={id}>
                 <span
@@ -181,7 +200,9 @@ export function OverviewPage({
             <h2>最近活动</h2>
             <Activity size={17} aria-hidden="true" />
           </div>
-          {activity.data?.length ? (
+          {activity.isPending ? (
+            <LoadingBar label="读取最近活动" />
+          ) : activity.data?.length ? (
             activity.data.slice(0, 5).map((row) => (
               <div className="activity-row" key={row.id}>
                 <span className="dot on" aria-hidden="true" />

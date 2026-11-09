@@ -1,3 +1,4 @@
+import { LoadingBar } from "./LoadingBar";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Menu, Settings } from "lucide-react";
@@ -148,7 +149,7 @@ export function ChatWorkspace({
               80;
           }}
         >
-          {history.isPending && <p className="muted">正在读取会话…</p>}
+          {history.isPending && <LoadingBar label="正在读取会话…" />}
           {history.error && (
             <QueryErrorNotice
               message={`读取会话失败：${history.error.message}`}
@@ -174,10 +175,12 @@ export function ChatWorkspace({
             />
           ))}
           {running.has(session) && (
-            <div className="typing" role="status" aria-label="助手正在回复">
-              <span />
-              <span />
-              <span />
+            <div
+              className="chat-loading"
+              role="status"
+              aria-label="助手正在回复"
+            >
+              <LoadingBar compact label="等待助手回复" />
             </div>
           )}
         </div>

@@ -1,3 +1,4 @@
+import { LoadingBar } from "./LoadingBar";
 import { useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { createClient } from "../api/client";
@@ -53,7 +54,11 @@ export function LoginView({
           className="primary"
           disabled={authenticating || busy}
         >
-          {authenticating || busy ? "验证中…" : "进入控制台"}
+          {authenticating || busy ? (
+            <LoadingBar compact label="验证中…" />
+          ) : (
+            "进入控制台"
+          )}
           <ArrowUpRight size={16} />
         </button>
       </form>

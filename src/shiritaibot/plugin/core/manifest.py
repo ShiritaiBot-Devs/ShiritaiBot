@@ -281,8 +281,11 @@ def read_v1(directory: Path) -> dict:
     }
 
 
+MANIFESTS = ("metadata.yaml", "plugin.toml")  # v2 first: it wins when both exist.
+
+
 def manifest_file(directory: Path) -> Path | None:
-    for name in ("metadata.yaml", "plugin.toml"):
+    for name in MANIFESTS:
         if (directory / name).is_file():
             return directory / name
     return None

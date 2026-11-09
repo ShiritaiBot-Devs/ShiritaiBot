@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { LoadingBar } from "./LoadingBar";
 
 export const PAGE_SIZE = 20;
 
@@ -21,6 +22,7 @@ export function Pagination({
   const current = Math.min(page, pages);
   return (
     <nav className="pagination" aria-label={label + "分页"}>
+      {loading && <LoadingBar label={`读取${label}`} />}
       <small className="muted" aria-live="polite">
         共 {total} 条 · 第 {current} / {pages} 页
       </small>

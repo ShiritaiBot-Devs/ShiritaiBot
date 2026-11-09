@@ -137,7 +137,7 @@ export const PAGES: PageMeta[] = [
   {
     id: "settings",
     label: "设置",
-    subtitle: "人格、联网搜索与主动性策略。",
+    subtitle: "管理ShiritaiBot的各项设置。",
     icon: Settings,
   },
 ];

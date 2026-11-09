@@ -1,3 +1,4 @@
+import { LoadingBar } from "./components/LoadingBar";
 import {
   useCallback,
   useEffect,
@@ -301,7 +302,7 @@ function ConsoleApp() {
 
   function content(api: ApiClient) {
     if (!draft.config) {
-      return draft.loading ? <p className="muted">正在读取配置…</p> : null;
+      return draft.loading ? <LoadingBar label="正在读取配置…" /> : null;
     }
     const configProps = {
       client: api,
@@ -389,7 +390,7 @@ function ConsoleApp() {
         queryClient.clear();
       }}
     >
-      {busy && <span className="sr-only">正在执行操作</span>}
+      {busy && <LoadingBar label="正在执行操作" />}
       {content(client)}
       {updateOpen && (
         <UpdateDialog

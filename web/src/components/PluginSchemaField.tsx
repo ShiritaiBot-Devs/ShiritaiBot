@@ -37,6 +37,7 @@ export function JsonSetting({
   return (
     <div className="field full">
       <span className="field-name">{label}</span>
+      {help}
       <textarea
         aria-label={label}
         aria-invalid={error}
@@ -69,7 +70,6 @@ export function JsonSetting({
           请填写有效的 JSON {Array.isArray(value) ? "数组" : "对象"}后保存。
         </small>
       )}
-      {help}
     </div>
   );
 }
@@ -87,7 +87,7 @@ function Help({ schema }: { schema: PluginSettingSchema }) {
   );
 }
 
-/** Label + control + help; obvious hints sit above the control so they are read first. */
+/** Keep descriptions below the setting name and before its control. */
 function Shell({
   label,
   schema,
@@ -101,16 +101,14 @@ function Shell({
   badge?: ReactNode;
   children: ReactNode;
 }) {
-  const obvious = schema["x-obvious-hint"];
   return (
     <div className={"field" + (full ? " full" : "")}>
       <span className="field-name">
         {label}
         {badge}
       </span>
-      {obvious && <Help schema={schema} />}
+      <Help schema={schema} />
       {children}
-      {!obvious && <Help schema={schema} />}
     </div>
   );
 }
@@ -179,13 +177,12 @@ function ObjectFieldset({
   return (
     <fieldset className="field full plugin-fieldset">
       <legend>{label}</legend>
-      {schema["x-obvious-hint"] && <Help schema={schema} />}
+      <Help schema={schema} />
       <SchemaFields
         properties={schema.properties ?? {}}
         value={record}
         onChange={onChange}
       />
-      {!schema["x-obvious-hint"] && <Help schema={schema} />}
     </fieldset>
   );
 }

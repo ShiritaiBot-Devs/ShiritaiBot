@@ -1,3 +1,4 @@
+import { LoadingBar } from "../components/LoadingBar";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
 import { useQuery } from "@tanstack/react-query";
 import { Details } from "../components/Details";
@@ -36,7 +37,7 @@ export function EventsPage({ client }: PageProps) {
       {!events.data?.items.length && !events.error && !events.isPending && (
         <EmptyState text="来自插件、提醒和子代理的事件会汇集在这里。" />
       )}
-      {events.isPending && <p className="muted">正在读取事件…</p>}
+      {events.isPending && <LoadingBar label="正在读取事件…" />}
       <Pagination
         label="主动动态"
         page={events.data?.page ?? page}

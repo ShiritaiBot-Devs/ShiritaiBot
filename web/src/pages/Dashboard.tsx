@@ -1,3 +1,5 @@
+import { LoadingBar } from "../components/LoadingBar";
+import { MetricIcon } from "../components/MetricIcon";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -432,6 +434,7 @@ export function Dashboard({ client }: { client: ApiClient }) {
                 className={`metric${label === "预估花费" ? " cost-metric" : ""}`}
                 key={label}
               >
+                <MetricIcon label={label} />
                 <span>{label}</span>
                 <strong>{value}</strong>
                 {label === "预估花费" && (
@@ -460,7 +463,10 @@ export function Dashboard({ client }: { client: ApiClient }) {
                         </a>
                       </>
                     ) : exchange.isPending ? (
-                      "正在获取汇率，暂按原币种显示"
+                      <LoadingBar
+                        compact
+                        label="正在获取汇率，暂按原币种显示"
+                      />
                     ) : (
                       "汇率暂不可用，按原币种显示"
                     )}
@@ -525,7 +531,7 @@ export function Dashboard({ client }: { client: ApiClient }) {
           </p>
         </>
       ) : (
-        !query.error && <p className="muted">正在读取统计…</p>
+        !query.error && <LoadingBar label="正在读取统计…" />
       )}
     </section>
   );

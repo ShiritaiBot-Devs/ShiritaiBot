@@ -1,3 +1,4 @@
+import { LoadingBar } from "./LoadingBar";
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -278,11 +279,11 @@ export function UpdateDialog({
                 aria-label="重新检查"
                 title="重新检查"
               >
-                <RefreshCw
-                  size={14}
-                  className={refreshing ? "spinner" : undefined}
-                  aria-hidden="true"
-                />
+                {refreshing ? (
+                  <LoadingBar compact label="检查更新" />
+                ) : (
+                  <RefreshCw size={14} aria-hidden="true" />
+                )}
               </button>
             )}
             <button
@@ -377,7 +378,7 @@ export function UpdateDialog({
                   )}
                 </>
               ) : releases.isPending || (showCommit && preview.isPending) ? (
-                <p className="muted">正在检查 GitHub…</p>
+                <LoadingBar label="正在检查 GitHub…" />
               ) : releases.isError ? (
                 <p role="alert">{releases.error.message}</p>
               ) : (
@@ -417,7 +418,7 @@ export function UpdateDialog({
                 {showCommit && page === 1 && (
                   <>
                     {preview.isPending && (
-                      <p className="muted">正在读取最新提交…</p>
+                      <LoadingBar label="正在读取最新提交…" />
                     )}
                     {preview.isError && (
                       <p role="alert">{preview.error.message}</p>
@@ -508,10 +509,7 @@ export function UpdateDialog({
                 {confirming && target ? (
                   <div className="update-confirm">
                     {inspecting ? (
-                      <span>
-                        正在下载 <code>{target.label}</code>
-                        ，比对本地修改…
-                      </span>
+                      <LoadingBar label="比对本地修改" />
                     ) : inspectError ? (
                       <>
                         <p role="alert">{inspectError}</p>
@@ -666,7 +664,7 @@ function Progress({
           ))}
         </ol>
       )}
-      {!done && !failed && <p className="update-message">{message}</p>}
+      {!done && !failed && <LoadingBar label={message || "更新中"} />}
       {output.length > 0 && !done && (
         <pre ref={log} className="update-log">
           {output.join("\n")}

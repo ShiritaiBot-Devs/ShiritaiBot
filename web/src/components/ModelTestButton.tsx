@@ -1,5 +1,5 @@
+import { LoadingBar } from "./LoadingBar";
 import { useRef, useState } from "react";
-import { LoaderCircle } from "lucide-react";
 import type { Action } from "../pages/common";
 
 export function ModelTestButton({
@@ -31,10 +31,7 @@ export function ModelTestButton({
       aria-busy={testing}
       onClick={() => void run()}
     >
-      {testing && (
-        <LoaderCircle size={15} className="spinner" aria-hidden="true" />
-      )}
-      {testing ? "测试中…" : "测试当前配置"}
+      {testing ? <LoadingBar compact label="测试中…" /> : "测试当前配置"}
     </button>
   );
 }

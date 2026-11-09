@@ -1,3 +1,4 @@
+import { LoadingBar } from "../components/LoadingBar";
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -394,11 +395,15 @@ export function ModelsPage({
               </p>
               {category === "embedding" && (
                 <p className="muted" aria-label="记忆向量状态">
-                  {status.data
-                    ? status.data.model
-                      ? `当前向量模型 ${status.data.model}：已索引 ${status.data.indexed} 条，待计算 ${status.data.pending} 条`
-                      : `未配置 Embedding：${status.data.pending} 条记忆只用名称链接和关键词检索`
-                    : "正在读取记忆向量状态…"}
+                  {status.data ? (
+                    status.data.model ? (
+                      `当前向量模型 ${status.data.model}：已索引 ${status.data.indexed} 条，待计算 ${status.data.pending} 条`
+                    ) : (
+                      `未配置 Embedding：${status.data.pending} 条记忆只用名称链接和关键词检索`
+                    )
+                  ) : (
+                    <LoadingBar compact label="正在读取记忆向量状态…" />
+                  )}
                 </p>
               )}
               {category === "text" && (
@@ -586,7 +591,11 @@ export function ModelsPage({
                       }}
                     >
                       <Download size={15} />
-                      {fetching ? "获取中…" : "获取提供商模型"}
+                      {fetching ? (
+                        <LoadingBar compact label="获取中…" />
+                      ) : (
+                        "获取提供商模型"
+                      )}
                     </button>
                     <button type="button" onClick={() => addModel()}>
                       <Plus size={15} />
@@ -714,9 +723,11 @@ export function ModelsPage({
                           }}
                         >
                           <BadgeDollarSign size={15} aria-hidden="true" />
-                          {pricing === position
-                            ? "获取中…"
-                            : "从提供商获取单价"}
+                          {pricing === position ? (
+                            <LoadingBar compact label="获取中…" />
+                          ) : (
+                            "从提供商获取单价"
+                          )}
                         </button>
                       </div>
                     </div>

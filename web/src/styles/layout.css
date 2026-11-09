@@ -13,12 +13,7 @@ aside {
   padding: 24px 14px 16px;
   overflow-x: hidden;
   overflow-y: auto;
-  background: linear-gradient(
-    180deg,
-    var(--pink-soft),
-    var(--bg) 48%,
-    var(--bg-raised)
-  );
+  background: #fafbfd;
   border-right: 1px solid var(--border);
   z-index: 10;
 }
@@ -82,12 +77,17 @@ nav button {
   font-size: 13px;
 }
 
-nav button:hover:not(:disabled) {
-  background: var(--accent-soft);
+aside nav button:hover:not(:disabled) {
+  background: #f0f4fb;
+}
+
+aside nav button:active:not(:disabled),
+aside nav button.active,
+aside nav button.active:hover:not(:disabled) {
+  background: #e3ebf8;
 }
 
 nav button.active {
-  background: var(--accent-soft);
   color: var(--accent);
 }
 
@@ -235,7 +235,7 @@ footer .muted {
   }
   .brand > span:last-child,
   .sidebar-status,
-  .restart-button span,
+  .restart-button > span:not(.loading-bar),
   nav button span,
   nav button b {
     display: none;

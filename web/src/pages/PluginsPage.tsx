@@ -1,3 +1,4 @@
+import { LoadingBar } from "../components/LoadingBar";
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
@@ -274,7 +275,7 @@ export function PluginsPage({
         </div>
       )}
       {discovery.isPending ? (
-        <p className="muted">正在扫描插件目录…</p>
+        <LoadingBar label="正在扫描插件目录…" />
       ) : discovery.isError ? (
         <p role="alert">{discovery.error.message}</p>
       ) : !rows.length ? (

@@ -1,3 +1,4 @@
+import { LoadingBar } from "../components/LoadingBar";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ApprovalCard } from "../components/ApprovalCard";
@@ -363,6 +364,7 @@ export function ApprovalsPage({
               </article>
             );
           })}
+          {catalog.isPending && <LoadingBar label="读取工具权限" />}
           {!catalog.isPending && !toolNames.length && (
             <EmptyState text="尚无已注册工具。" />
           )}

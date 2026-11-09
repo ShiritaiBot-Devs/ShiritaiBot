@@ -1,3 +1,4 @@
+import { LoadingBar } from "../components/LoadingBar";
 import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { QrCode } from "lucide-react";
@@ -166,7 +167,11 @@ export function AdaptersPage({
                   (label === CONNECTION_LABELS.connected ? " current" : "")
                 }
               >
-                {label}
+                {savedConnection && item.enabled && health.isPending ? (
+                  <LoadingBar compact label="读取连接状态" />
+                ) : (
+                  label
+                )}
               </span>
               {diagnostic && <p>{diagnostic}</p>}
             </div>

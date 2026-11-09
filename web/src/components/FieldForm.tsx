@@ -45,6 +45,10 @@ function NumberInput({
       max={spec.max}
       step={spec.step}
       value={text}
+      onWheel={(event) => {
+        // Release focus before the native wheel action, keeping page scrolling.
+        event.currentTarget.blur();
+      }}
       onChange={(event) => {
         const raw = event.target.value;
         setText(raw);
@@ -248,8 +252,8 @@ export function Field({
   return (
     <div className={"field" + (spec.full ? " full" : "")}>
       <span className="field-name">{spec.label}</span>
-      <Control spec={spec} value={value} onChange={onChange} />
       {help}
+      <Control spec={spec} value={value} onChange={onChange} />
     </div>
   );
 }

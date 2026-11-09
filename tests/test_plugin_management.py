@@ -22,6 +22,12 @@ class Entry(Plugin):
     async def call(self, ctx, args):
         return VALUE
 """
+V2_SOURCE = """from shiritaibot.api import Plugin, hook
+class V2(Plugin):
+    @hook.llm_tool("v2_tool", risk="safe")
+    async def call(self, ctx):
+        return self.config["greeting"]
+"""
 MANIFEST = """api = 1
 name = "Managed example"
 [settings_schema]
@@ -195,6 +201,11 @@ def test_configured_ids_without_directories_never_appear_in_plugin_api(tmp_path)
         {"plugin.toml": MANIFEST, "main.py": "syntax error :"},
         {"plugin.toml": 'api = 1\nsettings_schema = "bad"', "main.py": SOURCE},
         {"plugin.toml": MANIFEST},
+        {"metadata.yaml": "name: v2", "main.py": "syntax error :"},
+        {"metadata.yaml": "name: v2", "main.py": V2_SOURCE, "_conf_schema.json": '{"x": {}}'},
+        {"metadata.yaml": 'shiritaibot_version: ">=999"', "main.py": V2_SOURCE},
+        {"metadata.yaml": "name: v2"},
+        {"a/metadata.yaml": "name: a", "a/main.py": V2_SOURCE, "b/plugin.toml": MANIFEST},
     ],
 )
 async def test_reject_invalid_packages_without_installing_or_registering(app, files):
@@ -202,6 +213,24 @@ async def test_reject_invalid_packages_without_installing_or_registering(app, fi
         await app.plugins.install("invalid", plugin_zip(files))
     assert not (app.home / "plugins/invalid").exists()
     assert not any(p.id == "invalid" for p in app.config.value.plugins)
+
+
+@pytest.mark.parametrize("prefix", ["", "repo-main/"])
+async def test_install_v2_plugin_from_zip(app, prefix):
+    files = {
+        f"{prefix}metadata.yaml": "name: v2\ndisplay_name: V2 example",
+        f"{prefix}_conf_schema.json": '{"greeting": {"type": "string", "default": "hi"}}',
+        f"{prefix}main.py": V2_SOURCE,
+    }
+    result = {p["id"]: p for p in await app.plugins.install("v2_zip", plugin_zip(files))}
+    assert result["v2_zip"]["api"] == 2
+    assert result["v2_zip"]["name"] == "V2 example"
+    assert (app.home / "plugins/v2_zip/metadata.yaml").is_file()
+    cfg = next(p for p in app.config.value.plugins if p.id == "v2_zip")
+    cfg.enabled = True
+    await app.plugins.reload("v2_zip")
+    ctx = Context("web:owner", "owner", "agent", True)
+    assert json.loads(await app.registry.execute(ctx, "v2_tool", {})) == "hi"
 
 
 async def test_reject_zip_symlinks_and_reserved_ids(app):

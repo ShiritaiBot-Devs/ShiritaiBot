@@ -1,3 +1,4 @@
+import { LoadingBar } from "../components/LoadingBar";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -120,6 +121,7 @@ export function MemoryPage({ client }: PageProps) {
             </p>
             {open === row.id && (
               <div className="memory-detail">
+                {detail.isFetching && <LoadingBar label="读取记忆详情" />}
                 {detail.error && (
                   <QueryErrorNotice
                     message={`读取详情失败：${detail.error.message}`}
@@ -175,7 +177,7 @@ export function MemoryPage({ client }: PageProps) {
               }
             />
           )}
-        {memories.isPending && <p className="muted">正在读取记忆…</p>}
+        {memories.isPending && <LoadingBar label="正在读取记忆…" />}
         <Pagination
           label="记忆库"
           page={memories.data?.page ?? page}

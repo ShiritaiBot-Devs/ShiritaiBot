@@ -1,3 +1,4 @@
+import { LoadingBar } from "../components/LoadingBar";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -132,6 +133,7 @@ function RunLog({ client, act }: PageProps) {
           实时跟随
         </label>
       </div>
+      {feed.isPending && <LoadingBar label="读取日志" />}
       {feed.error && (
         <QueryErrorNotice message={`读取运行日志失败：${feed.error.message}`} />
       )}
@@ -155,7 +157,7 @@ function RunLog({ client, act }: PageProps) {
           ))}
         </div>
       ) : (
-        !feed.error && <EmptyState text="暂无运行日志。" />
+        !feed.error && !feed.isPending && <EmptyState text="暂无运行日志。" />
       )}
       <p className="muted raw-log-hint">
         「记录级别」决定终端、日志文件和本页记录哪些日志，修改后立即生效并在重启后保留；
@@ -173,6 +175,7 @@ function ActivityLog({ client }: Pick<PageProps, "client">) {
   });
   return (
     <>
+      {activity.isPending && <LoadingBar label="读取日志" />}
       {activity.error && (
         <QueryErrorNotice message={`读取日志失败：${activity.error.message}`} />
       )}
@@ -183,7 +186,9 @@ function ActivityLog({ client }: Pick<PageProps, "client">) {
           <span>{row.detail}</span>
         </div>
       ))}
-      {!activity.data?.length && !activity.error && <EmptyState />}
+      {!activity.data?.length && !activity.error && !activity.isPending && (
+        <EmptyState />
+      )}
     </>
   );
 }
@@ -236,6 +241,7 @@ function RawLog({ client }: Pick<PageProps, "client">) {
           刷新
         </button>
       </div>
+      {raw.isPending && <LoadingBar label="读取日志" />}
       {raw.error && (
         <QueryErrorNotice message={`读取原始日志失败：${raw.error.message}`} />
       )}
@@ -244,7 +250,7 @@ function RawLog({ client }: Pick<PageProps, "client">) {
           {text}
         </pre>
       ) : (
-        !raw.error && <EmptyState text="暂无日志输出。" />
+        !raw.error && !raw.isPending && <EmptyState text="暂无日志输出。" />
       )}
       <p className="muted raw-log-hint">
         日志文件：data/logs/shiritaibot.log（单文件 5 MB 滚动，保留 3 份）

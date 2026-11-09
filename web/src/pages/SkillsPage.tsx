@@ -1,3 +1,4 @@
+import { LoadingBar } from "../components/LoadingBar";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
@@ -173,7 +174,7 @@ export function SkillsPage({
           </div>
         )}
         {listing.isPending ? (
-          <p className="muted">正在读取技能…</p>
+          <LoadingBar label="正在读取技能…" />
         ) : listing.isError ? (
           <p role="alert">{listing.error.message}</p>
         ) : !rows.length ? (

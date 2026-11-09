@@ -13,6 +13,7 @@ export function SecretField({
   const saved = isSecretRef(value);
   return (
     <div className="secret-field">
+      <small className="field-help">保存后加密存储，已有密钥不会回显。</small>
       <div className="inline">
         <input
           aria-label="密钥"
@@ -35,7 +36,6 @@ export function SecretField({
           </button>
         )}
       </div>
-      <small className="muted">保存后加密存储，已有密钥不会回显。</small>
     </div>
   );
 }
