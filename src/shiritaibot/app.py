@@ -68,11 +68,16 @@ class Application:
         if protected != self.config.value:
             await self.config.save(protected)
         self.permissions = Permissions(self.config, self.store)
+        owner = next((a for a in self.config.value.adapters if a.enabled and a.owner_id), None)
+        self.permissions.menu.target = (
+            f"private:{owner.id}:{owner.owner_id}" if owner else "web:owner"
+        )
         self.registry = ToolRegistry(self.permissions, self.store)
         await self.refresh_secret_list()
         self.llm = ProviderManager(self.config, self.vault, self.store)
         self.permissions.llm = self.llm
         self.memory = MemoryManager(self.store, self.config, self.llm)
+        self.permissions.memory = self.memory
         await self.memory.open()
         self.memories["default"] = self.memory
         await self.open_feishu_memory(self.config.value)
@@ -311,6 +316,7 @@ class Application:
         await self.plugins.close()
         await self.mcp.close()
         await self.adapters.close()
+        await self.permissions.menu.close()
         await self.llm.close()
         if (memory := self.memories.get("feishu")) is not None:
             await memory.store.close()

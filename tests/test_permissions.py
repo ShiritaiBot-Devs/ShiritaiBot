@@ -90,6 +90,85 @@ async def test_approval_is_one_shot_and_exact(app, allow):
         await app.permissions.resolve(rows[0]["id"], True)
 
 
+async def chat_reply(app, text):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from shiritaibot.adapters.onebot11 import OneBot
+    from shiritaibot.config import AdapterConfig
+
+    cfg = AdapterConfig(id="qq", owner_id="1", self_id="100")
+    bot = OneBot(cfg, app.vault, app.store, app.adapters.receive)
+    bot.self_id = "100"
+    app.adapters.runtime = SimpleNamespace(submit=AsyncMock())
+    await app.adapters.receive(
+        bot,
+        {
+            "post_type": "message",
+            "message_type": "private",
+            "user_id": 1,
+            "message_id": 42,
+            "message": [{"type": "text", "data": {"text": text}}],
+        },
+    )
+
+
+async def two_pending_approvals(app):
+    effects = []
+
+    def add(name):
+        async def handler(ctx, args):
+            effects.append(name)
+            return {"ok": True}
+
+        app.registry.add(Tool(name, "", schema({}), handler, risk="dangerous"))
+
+    add("danger_one")
+    add("danger_two")
+    ctx = Context("private:qq:1", "owner", "agent", True)
+    first = asyncio.create_task(app.registry.execute(ctx, "danger_one", {}))
+    await eventually(lambda: app.store.list("approval"))
+
+    async def both():
+        rows = await app.store.list("approval")
+        return rows if len(rows) == 2 else None
+
+    second = asyncio.create_task(app.registry.execute(ctx, "danger_two", {}))
+    await eventually(both)
+    return effects, first, second
+
+
+async def test_chat_agree_without_id_resolves_the_newest_pending(app):
+    effects, first, second = await two_pending_approvals(app)
+    try:
+        await chat_reply(app, "同意")
+        assert effects == ["danger_two"]
+        assert json.loads(await asyncio.wait_for(second, 3))["ok"] is True
+        assert "审批已处理" in (await app.store.list("outbox"))[0]["text"]
+        rows = await app.store.list("approval")
+        assert next(r for r in rows if r["tool"] == "danger_one")["status"] == "pending"
+    finally:
+        first.cancel()
+        await asyncio.gather(first, return_exceptions=True)
+
+
+async def test_chat_deny_without_id_rejects_the_newest_pending(app):
+    effects, first, second = await two_pending_approvals(app)
+    try:
+        await chat_reply(app, "拒绝")
+        assert effects == []
+        assert "拒绝" in json.loads(await asyncio.wait_for(second, 3))["error"]
+        assert "审批已处理" in (await app.store.list("outbox"))[0]["text"]
+    finally:
+        first.cancel()
+        await asyncio.gather(first, return_exceptions=True)
+
+
+async def test_chat_agree_without_pending_approval_explains(app):
+    await chat_reply(app, "同意")
+    assert "没有待处理的审批" in (await app.store.list("outbox"))[0]["text"]
+
+
 async def test_cancel_pending_approval_cannot_later_execute(app):
     async def never(ctx, args):
         pytest.fail("approval must prevent handler")
@@ -432,7 +511,58 @@ async def test_credential_file_reads_need_human_approval_even_on_auto(app):
     )
     row = (await eventually(newer))[0]
     assert row["reviewer"] == "human"
-    assert not reviewed
+    # 审批说明会用 light 路由调一次模型，但自动审批（approval 路由）不得被调用。
+    assert not [call for call in reviewed if call[0] == "approval"]
     await app.permissions.resolve(row["id"], False)
     result = json.loads(await task)
     assert "拒绝" in result["error"]
+
+
+async def test_sensitive_shell_stays_manual_even_when_policy_allows(app, monkeypatch):
+    import shiritaibot.auth.menu as menu
+
+    # 窗口拉长，只看审批行是否建立，不让菜单环节参与。
+    monkeypatch.setattr(menu, "WINDOW", 10)
+    app.config.value.policy.owner_default.tools["shell"] = "allow"
+    task = asyncio.create_task(app.registry.execute(OWNER, "shell", {"command": "cat config.toml"}))
+
+    async def human_row():
+        rows = await app.store.list("approval")
+        return [row for row in rows if row["status"] == "pending"] or None
+
+    row = (await eventually(human_row))[0]
+    assert row["reviewer"] == "human"
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_chat_number_menu_reply_routes_to_menu(app, monkeypatch):
+    import shiritaibot.auth.menu as menu
+
+    monkeypatch.setattr(menu, "WINDOW", 0.5)
+    monkeypatch.setattr(menu, "REASON_BUDGET", 0.05)
+    app.permissions.menu.target = "private:qq:1"
+    effects = []
+
+    async def handler(ctx, args):
+        effects.append("ran")
+        return {"ok": True}
+
+    app.registry.add(Tool("danger_one", "", schema({}), handler, risk="dangerous"))
+    task = asyncio.create_task(
+        app.registry.execute(Context("private:qq:1", "owner", "agent", True), "danger_one", {})
+    )
+
+    async def menu_ready():
+        texts = [row["text"] for row in await app.store.list("reply")]
+        texts += [row["text"] for row in await app.store.list("outbox")]
+        return any("1 同意" in text for text in texts)
+
+    await eventually(menu_ready)
+    try:
+        await chat_reply(app, "1")
+        assert effects == ["ran"]
+        assert json.loads(await asyncio.wait_for(task, 3))["ok"] is True
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

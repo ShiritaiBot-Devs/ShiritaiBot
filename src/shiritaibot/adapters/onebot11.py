@@ -87,6 +87,11 @@ def qq_download_url(url: str) -> bool:
     )
 
 
+def approval_reply(text: str) -> re.Match | None:
+    """「同意」/「拒绝」单独发即可；带 10 位 id 时指名道姓地处理某一条。"""
+    return re.fullmatch(r"(同意|拒绝)\s*([a-f0-9]{10})?", text)
+
+
 async def file_ref(store, adapter: str, group_id: str, data: dict, session: str) -> str:
     """A session-bound handle for qq_file_download; platform IDs never leave the store."""
     ref = uid()
@@ -392,10 +397,16 @@ class AdapterHub:
             await self.maybe_interject(bot, session, user, speaker, describe(parts))
             return
         # Explicit controls and approvals must remain reachable while keyword gating is on.
+        menu_reply = (
+            not group
+            and user == cfg.owner_id
+            and self.permissions.menu.accepts(session, text)
+        )
         control = (
             text.startswith("/")
             or text in {"停", "取消"}
-            or re.fullmatch(r"(同意|拒绝)\s+([a-f0-9]{10})", text)
+            or approval_reply(text) is not None
+            or menu_reply
         )
         if (
             not group
@@ -414,7 +425,8 @@ class AdapterHub:
                 if (
                     rest.startswith("/")
                     or rest in {"停", "取消"}
-                    or re.fullmatch(r"(同意|拒绝)\s+([a-f0-9]{10})", rest)
+                    or approval_reply(rest)
+                    or self.permissions.menu.accepts(session, rest)
                 ):
                     text = rest
                 break
@@ -424,16 +436,29 @@ class AdapterHub:
             bot.log.debug("重复消息，已跳过", speaker)
             return
         if not group and user == cfg.owner_id:
-            match = re.fullmatch(r"(同意|拒绝)\s+([a-f0-9]{10})", text)
+            match = approval_reply(text)
             if match:
+                allow = match[1] == "同意"
                 try:
-                    await self.permissions.resolve(match[2], match[1] == "同意")
-                    bot.log.log(f"主人{match[1]}了审批 {match[2]}", where)
-                    await self.enqueue(session, "审批已处理。")
+                    if match[2]:
+                        await self.permissions.resolve(match[2], allow)
+                        key, label = match[2], ""
+                    else:
+                        # 不带 id：作用于最新一条待审批，回复里说明处理的是哪条。
+                        row = await self.permissions.resolve_latest(session, allow)
+                        key, label = row["id"], f"{row.get('tool')} "
+                    bot.log.log(f"主人{match[1]}了审批 {key}", where)
+                    await self.enqueue(session, f"审批已处理：{label}{match[1]} {key}")
                 except PublicError as exc:
-                    bot.log.warning(f"审批 {match[2]} 处理失败：{exc}", where)
+                    bot.log.warning(f"审批处理失败：{exc}", where)
                     await self.enqueue(session, str(exc))
                 return
+        if (
+            not group
+            and user == cfg.owner_id
+            and await self.permissions.menu.reply(session, text)
+        ):
+            return
         if self.hooks is not None and await self.hooks.dispatch(message(True)):
             return
         for part in parts:

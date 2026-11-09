@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 
+from shiritaibot.auth.menu import RISK_LABELS
 from shiritaibot.config import SessionPolicy
 from shiritaibot.core import PublicError, uid
 
@@ -22,6 +24,7 @@ COMMANDS = {
     "memory": "查看长期记忆；/memory 关键词 搜索（仅主人私聊）",
     "approve": "/approve 审批编号，同意一次操作（仅主人私聊）",
     "deny": "/deny 审批编号，拒绝操作（仅主人私聊）",
+    "grants": "查看免问授权；/grants 撤销 工具名 [会话]（仅主人私聊）",
 }
 
 
@@ -34,7 +37,7 @@ async def command(runtime, ctx, text):
     private = ctx.owner and not ctx.group and not ctx.background
     actor = runtime.actors.get(ctx.session)
     try:
-        if name in {"tasks", "memory", "approve", "deny"} and not private:
+        if name in {"tasks", "memory", "approve", "deny", "grants"} and not private:
             raise PublicError("此命令仅限主人私聊或 WebUI 使用。")
         capability = {"memory": "memory_search", "tasks": "subagent_list"}.get(name)
         if capability:
@@ -46,7 +49,7 @@ async def command(runtime, ctx, text):
             answer = f"{cfg.assistant_name} 命令（直接执行，不消耗模型 tokens）\n" + "\n".join(
                 f"/{key} — {value}"
                 for key, value in COMMANDS.items()
-                if private or key not in {"tasks", "memory", "approve", "deny"}
+                if private or key not in {"tasks", "memory", "approve", "deny", "grants"}
             )
             hooks = getattr(runtime, "hooks", None)
             plugin_lines = hooks.help_lines(ctx.owner) if hooks is not None else []
@@ -209,6 +212,28 @@ async def command(runtime, ctx, text):
             answer = "长期记忆：\n" + (
                 "\n".join(row["text"][:500] for row in rows) or "没有匹配的记忆"
             )
+        elif name == "grants":
+            permissions = runtime.registry.permissions
+            if argument.startswith("撤销"):
+                parts = argument.removeprefix("撤销").split()
+                if not parts:
+                    raise PublicError("用法：/grants 撤销 工具名 [会话]")
+                answer = await permissions.revoke_grant(ctx, parts[0], parts[1] if len(parts) > 1 else "")
+            else:
+                rows = await permissions.grant_rows()
+                answer = (
+                    "当前没有免问授权。"
+                    if not rows
+                    else "免问授权：\n"
+                    + "\n".join(
+                        f"{row.get('scope', '')} · {row['tool']} · "
+                        f"{RISK_LABELS.get(row.get('risk'), row.get('risk', ''))} · "
+                        f"{datetime.fromtimestamp(row['created']):%Y-%m-%d} — "
+                        f"{row.get('reason', '')}"
+                        for row in rows
+                    )
+                    + "\n撤销：/grants 撤销 工具名 [会话]"
+                )
         elif name in {"approve", "deny"}:
             if not argument:
                 raise PublicError(f"用法：/{name} 审批编号")

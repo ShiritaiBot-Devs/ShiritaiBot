@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Awaitable, Callable
 from cryptography.fernet import Fernet
 from pydantic import Field, StrictBool
 
+from shiritaibot.auth.menu import QUICK_SECONDS, SENSITIVE_FILE, ApprovalMenu
 from shiritaibot.config import SessionPolicy, ToolPolicy
 from shiritaibot.core import Context, Model, PublicError, Tool, canonical, fingerprint, now, uid
 from shiritaibot.core.logs import brief, describe_session, get_logger
@@ -23,9 +24,6 @@ if TYPE_CHECKING:
 log = get_logger("审批")
 # Environment variable names that hold credentials and get stored in the Vault.
 SECRET_NAME = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH", re.I)
-SENSITIVE_FILE = re.compile(
-    r"config\.toml|master\.key|web\.token|\.credentials|state\.sqlite3|profiles[\\/]", re.I
-)
 
 
 class Review(Model):
@@ -136,6 +134,9 @@ class Permissions:
         self.resolve_lock = asyncio.Lock()
         self.notify: Callable[[str], Awaitable[None]] | None = None
         self.llm: ProviderManager | None = None
+        self.memory = None
+        self.menu = ApprovalMenu(self)
+        self.quick: dict[tuple[str, str], float] = {}
         self.policy_lock = asyncio.Lock()
         # Identical auto-approved calls within a minute reuse the verdict instead of
         # paying for a second full review round-trip.
@@ -357,19 +358,23 @@ class Permissions:
         decision = self.decision(ctx, tool)
         if decision == "deny":
             raise PublicError("工具被权限策略拒绝")
-        if decision == "allow":
-            return
-        # Credential-bearing files are never auto-approved, however the shell policy is set:
-        # an auto reviewer that reads config.toml keeps leaking keys into the conversation.
-        if decision == "auto" and tool.name == "shell" and SENSITIVE_FILE.search(
+        # Credential-bearing files are never auto-approved or exempted, however the shell
+        # policy is set: reading config.toml keeps leaking keys into the conversation.
+        sensitive = tool.name == "shell" and SENSITIVE_FILE.search(
             str(args.get("command", ""))
-        ):
+        )
+        if decision == "allow" and not sensitive:
+            return
+        if decision in {"auto", "allow"} and sensitive:
             log.log("命令涉及含密钥的文件，改为人工审批", describe_session(ctx.session))
             decision = "manual"
         if decision == "auto":
             await self.auto_review(ctx, tool, args)
             if self.decision(ctx, tool) not in {"auto", "allow"}:
                 raise PublicError("审批期间权限已变更，未执行")
+            return
+        if self.quick_granted(ctx, tool, args):
+            log.log(f"五分钟免问生效，直接放行 {tool.name}", describe_session(ctx.session))
             return
         key = uid()[:10]
         future = asyncio.get_running_loop().create_future()
@@ -382,15 +387,15 @@ class Permissions:
             "expires": now().timestamp() + self.config.value.policy.approval_timeout,
             "turn": ctx.turn,
             "reviewer": "human",
+            "risk": tool.risk,
+            "reason": "",
+            "batch": "",
         }
         await self.store.put("approval", key, body, ctx.session)
         where = describe_session(ctx.session)
         log.log(f"等待主人审批 {key}：{tool.name}（{brief(args, 80)}）", where)
         try:
-            if self.notify:
-                await self.notify(
-                    f"需要确认：{tool.name}\n参数：{str(args)[:2000]}\n同意 {key} / 拒绝 {key}（本次调用有效）"
-                )
+            await self.menu.submit(ctx, tool, args, key, body["expires"])
             async with asyncio.timeout(self.config.value.policy.approval_timeout):
                 approved = await future
             if not approved:
@@ -403,6 +408,7 @@ class Permissions:
             log.warning(f"审批 {key} 超时，{tool.name} 未执行", where)
             body["status"] = "expired"
             await self.store.put("approval", key, body, ctx.session)
+            self.menu.settled(key)
             raise PublicError("审批超时，未执行") from None
         except asyncio.CancelledError:
             body["status"] = "cancelled"
@@ -410,6 +416,113 @@ class Permissions:
             raise
         finally:
             self.pending.pop(key, None)
+
+    def quick_granted(self, ctx: Context, tool: Tool, args: dict) -> bool:
+        if ctx.background:
+            return False
+        if tool.name == "shell" and SENSITIVE_FILE.search(str(args.get("command", ""))):
+            return False
+        key = (ctx.session, tool.name)
+        if self.quick.get(key, 0) <= time.monotonic():
+            self.quick.pop(key, None)
+            return False
+        return True
+
+    async def grant_quick(self, session: str, tool: str, args: dict) -> None:
+        self.quick[(session, tool)] = time.monotonic() + QUICK_SECONDS
+        for row in await self.store.list("approval", scope=session):
+            if row.get("status") != "pending" or row.get("tool") != tool:
+                continue
+            command = str((row.get("args") or {}).get("command", ""))
+            if tool == "shell" and SENSITIVE_FILE.search(command):
+                continue
+            try:
+                await self.resolve(row["id"], True)
+            except PublicError:
+                continue
+
+    async def grant_permanent(self, session: str, tool: str, risk: str, reason: str) -> str:
+        ctx = Context(session, "owner", "agent", owner=True)
+        profile = self.session_policy(ctx).model_copy(deep=True)
+        profile.tools[tool] = "allow"
+        await self.set_session(ctx, profile)
+        await self.store.put(
+            "approval_grant",
+            f"{session}|{tool}",
+            {"tool": tool, "risk": risk, "reason": reason, "created": now().timestamp()},
+            session,
+        )
+        saved = await self.remember(
+            session,
+            f"审批授权：{tool} 以后都同意",
+            f"主人在会话 {session} 批准了 {tool} 的长期免问（{now():%Y-%m-%d}）",
+        )
+        for row in await self.store.list("approval", scope=session):
+            if row.get("status") != "pending" or row.get("tool") != tool:
+                continue
+            try:
+                await self.resolve(row["id"], True)
+            except PublicError:
+                continue
+        tail = "，已记入长期记忆" if saved else "（记忆没写成，当前配置仍然生效）"
+        return f"以后 {tool} 都同意{tail}"
+
+    async def grant_rows(self, session: str = "") -> list[dict]:
+        return await self.store.list("approval_grant", scope=session or None)
+
+    async def revoke_grant(self, ctx: Context, tool: str, session: str = "") -> str:
+        target = session or ctx.session
+        if not re.fullmatch(r"[A-Za-z0-9_]+:[^|\s]+", target):
+            raise PublicError("会话标识无效。")
+        row = await self.store.get("approval_grant", f"{target}|{tool}")
+        if row is None:
+            raise PublicError(f"{target} 没有 {tool} 的免问授权。")
+        target_ctx = Context(target, "owner", "agent", owner=True)
+        profile = self.session_policy(target_ctx).model_copy(deep=True)
+        if profile.tools.get(tool) == "allow":
+            profile.tools[tool] = "manual"
+            await self.set_session(target_ctx, profile)
+        await self.store.delete("approval_grant", f"{target}|{tool}")
+        self.quick.pop((target, tool), None)
+        await self.remember(
+            target,
+            f"审批撤销：{tool} 不再免问",
+            f"主人撤销了 {tool} 的长期免问（{now():%Y-%m-%d}）",
+        )
+        return f"已撤销 {target} 的 {tool} 免问授权，之后需要人工确认。"
+
+    async def remember(self, session: str, note: str, content: str) -> bool:
+        """Record a grant as a long-term fact; the note is the verbatim evidence."""
+        if self.memory is None:
+            return False
+        try:
+            turn = uid()
+            await self.store.append(session, turn, {"role": "tool", "content": note})
+            ctx = Context(session, "owner", "agent", owner=True, turn=turn)
+            await self.memory.save_fact(ctx, content, note)
+            return True
+        except Exception:
+            log.warning(f"免问授权的记忆写入失败：{note}", describe_session(session))
+            return False
+
+    async def latest_pending(self, session: str) -> dict | None:
+        """Newest human approval still waiting, preferring the session the reply came from."""
+        rows = [
+            row
+            for row in await self.store.list("approval")
+            if row.get("status") == "pending" and row.get("reviewer") != "model"
+        ]
+        for row in rows:
+            if row.get("scope") == session:
+                return row
+        return rows[0] if rows else None
+
+    async def resolve_latest(self, session: str, allow: bool) -> dict:
+        row = await self.latest_pending(session)
+        if row is None:
+            raise PublicError("没有待处理的审批")
+        await self.resolve(row["id"], allow)
+        return row
 
     async def resolve(self, key: str, allow: bool) -> None:
         async with self.resolve_lock:
@@ -433,3 +546,4 @@ class Permissions:
             await self.store.put("approval", key, row, row["scope"])
             raise PublicError("审批等待已取消")
         future.set_result(allow)
+        self.menu.settled(key)
