@@ -26,7 +26,7 @@ ID = {"type": "integer", "minimum": 1}
 MESSAGE_ID = {"type": "integer", "description": "QQ 消息 ID（可从消息历史、引用或发送回执获得）"}
 TARGET = {"type": "string", "enum": ["private", "group"]}
 CHAT = {"target": TARGET, "id": {**ID, "description": "私聊为 QQ 号，群聊为群号"}}
-AT = {"anyOf": [ID, {"const": "all"}]}
+AT = {"anyOf": [ID, {"type": "string", "enum": ["all"]}]}
 PATH = {
     "type": "string",
     "minLength": 1,
@@ -670,7 +670,14 @@ def qq_tools(app) -> list[Tool]:
         Tool(
             "qq_request_list",
             "查看 Bot 收到的好友申请、入群申请和群邀请（Bot 运行期间收到的）",
-            schema({"status": {"enum": ["pending", "approved", "rejected", "ignored", "all"]}}),
+            schema(
+                {
+                    "status": {
+                        "type": "string",
+                        "enum": ["pending", "approved", "rejected", "ignored", "all"],
+                    }
+                }
+            ),
             request_list,
             risk="safe",
         ),
@@ -680,7 +687,7 @@ def qq_tools(app) -> list[Tool]:
             schema(
                 {
                     "request": {"type": "string", "minLength": 1, "maxLength": 100},
-                    "action": {"enum": ["approve", "reject", "ignore"]},
+                    "action": {"type": "string", "enum": ["approve", "reject", "ignore"]},
                     "remark": {
                         "type": "string",
                         "maxLength": 50,
