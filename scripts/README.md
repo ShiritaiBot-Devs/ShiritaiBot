@@ -59,17 +59,4 @@ macOS / Linux 还会在 `~/.local/bin` 添加 `shiritaibot` 快捷入口。
 
 ```sh
 bash -n scripts/install.sh
-python3 -m unittest discover -s scripts/tests -v
-```
-
-测试在临时目录中模拟下载、运行环境和构建，覆盖带空格与特殊字符的目录、
-重复运行、下载或构建失败、Node 校验、旧版 Node 切换与启动/令牌入口。
-本轮另在 macOS 临时目录完成真实下载、安装、构建、启动与鉴权接口检查。
-Windows 回归测试在 PowerShell 5.1 和 PowerShell 7 下运行真实的 Node/npm，
-覆盖环境复用、缺少 Node、损坏的私有运行时、路径中的空格与非 ASCII 字符。
-下载与 uv 使用隔离测试夹具；不连接模型、不读写现有机器人数据。
-
-```powershell
-./scripts/tests/test_node.ps1
-./scripts/tests/test_windows_install.ps1
 ```

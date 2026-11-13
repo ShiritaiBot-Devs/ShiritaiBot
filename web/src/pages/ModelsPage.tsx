@@ -18,6 +18,7 @@ import type {
 import { Field, FieldForm, jsonObjectError } from "../components/FieldForm";
 import { ModelTestButton } from "../components/ModelTestButton";
 import { EmptyState } from "../components/EmptyState";
+import { ProviderPresetMenu } from "../components/ProviderPresetMenu";
 import {
   EMBEDDING_MODEL_FIELDS,
   MODEL_FIELDS,
@@ -318,30 +319,23 @@ export function ModelsPage({
         <section className="config-sidebar" aria-label="提供商列表">
           <div className="panel-head">
             <h2>提供商</h2>
-            <button
-              type="button"
-              aria-label="新增提供商"
-              onClick={() => {
-                const created = createProvider(config.providers);
+            <ProviderPresetMenu
+              onSelect={(preset) => {
+                const created = createProvider(config.providers, preset);
                 setConfig({
                   ...config,
-                  providers: [
-                    ...config.providers,
-                    category === "decision"
-                      ? {
-                          ...created,
-                          protocol: "systemone",
-                          base_url: "https://api.typesafe.ai/v1",
-                        }
-                      : created,
-                  ],
+                  providers: [...config.providers, created],
                 });
+                if (!current.protocols.includes(preset.protocol))
+                  setCategory(
+                    preset.protocol === "systemone" ? "decision" : "text",
+                  );
                 setSelected(config.providers.length);
                 setTab("provider");
+                setRemote(null);
+                setQuery("");
               }}
-            >
-              <Plus size={16} />
-            </button>
+            />
           </div>
           {visible.map(({ item, position }) => (
             <button

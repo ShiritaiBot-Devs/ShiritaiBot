@@ -242,7 +242,11 @@ def request_payload(
                         "functionCall": {
                             "name": c["function"]["name"],
                             "args": json.loads(c["function"]["arguments"]),
-                        }
+                        },
+                        # Cross-model and legacy history has no Gemini signature.
+                        # Google's documented sentinel permits replaying those calls;
+                        # same-model opaque parts above keep their original signatures.
+                        "thoughtSignature": "skip_thought_signature_validator",
                     }
                     for c in message.get("tool_calls", [])
                 ]

@@ -6,6 +6,7 @@ import type {
   SubagentConfig,
 } from "../api/types";
 import { uniqueId } from "../lib/utils";
+import { PROVIDER_PRESETS, type ProviderPreset } from "./provider-presets";
 
 export type FieldKind =
   | "text"
@@ -1023,12 +1024,15 @@ export function inferFieldSpec(key: string, value: unknown): FieldSpec {
   return { key, label: key, kind: "text" };
 }
 
-export function createProvider(rows: ProviderConfig[]): ProviderConfig {
+export function createProvider(
+  rows: ProviderConfig[],
+  preset: ProviderPreset = PROVIDER_PRESETS[0],
+): ProviderConfig {
   return {
-    id: uniqueId("provider-new", rows),
+    id: uniqueId(preset.id, rows),
     enabled: true,
-    protocol: "chat_completions",
-    base_url: "https://api.openai.com/v1",
+    protocol: preset.protocol,
+    base_url: preset.base_url,
     api_key: "",
     timeout: 120,
     max_retries: 2,
