@@ -105,13 +105,19 @@ class OneLearnPlugin(Plugin):
                 env=env,
                 limit=1000000,
             )
-            if result["exit_code"] or result["truncated"]:
-                raise PublicError("网络学堂适配端失败或输出超限")
             try:
                 return LearnResponse.model_validate_json(result["stdout"]).model_dump(
                     exclude_defaults=True
                 )
             except ValueError:
+                if result["exit_code"]:
+                    detail = result["stderr"].strip()[-500:] or "无 stderr 输出"
+                    raise PublicError(
+                        "网络学堂适配端进程异常退出"
+                        f"（exit code {result['exit_code']}）：{detail}"
+                    ) from None
+                if result["truncated"]:
+                    raise PublicError("网络学堂适配端输出超过 1MB 上限被截断") from None
                 raise PublicError("OneLearn 适配端没有返回有效 JSON") from None
 
     async def query(self, ctx, args):
