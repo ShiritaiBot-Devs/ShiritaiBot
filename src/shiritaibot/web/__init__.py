@@ -21,7 +21,13 @@ from shiritaibot import __version__ as BOT_VERSION
 from shiritaibot.agent.commands import COMMANDS
 from shiritaibot.api.event import MessageEvent
 from shiritaibot.app import Application
-from shiritaibot.config import ModelConfig, ProviderConfig, Settings
+from shiritaibot.config import (
+    ConfigRevisionConflict,
+    ModelConfig,
+    ProviderConfig,
+    Settings,
+    is_feishu_session,
+)
 from shiritaibot.core import Context, ExternalEvent, Model, PublicError, canonical, logs
 from shiritaibot.core.process import run_process
 from shiritaibot.meme.core import MAX_MEME_BYTES
@@ -237,8 +243,12 @@ def create_app(
         web_log.log(f"收到管理后台更新请求：{body.kind} {body.ref}")
         return await updater.apply(body.kind, body.ref)
 
+    def config_etag() -> str:
+        return f'"{instance_id}-{runtime.config.version}"'
+
     @api.get("/api/config", dependencies=protected)
-    async def config():
+    async def config(response: Response):
+        response.headers["ETag"] = config_etag()
         data = runtime.config.value.model_dump()
         for adapter in data["adapters"]:
             configured = bool(adapter.pop("app_secret"))
@@ -247,8 +257,16 @@ def create_app(
         return data
 
     @api.put("/api/config", dependencies=protected)
-    async def save_config(body: Settings):
-        await runtime.reconfigure(body)
+    async def save_config(body: Settings, request: Request):
+        expected_version = None
+        if (revision := request.headers.get("if-match")) is not None:
+            if revision != config_etag():
+                raise HTTPException(412, "配置已更新，请核对最新配置后再保存。")
+            expected_version = runtime.config.version
+        try:
+            await runtime.reconfigure(body, expected_version=expected_version)
+        except ConfigRevisionConflict:
+            raise HTTPException(412, "配置已更新，请核对最新配置后再保存。") from None
         return {
             "ok": True,
             "version": runtime.config.version,
@@ -280,24 +298,40 @@ def create_app(
         return await feishu_qr.apply(session_id, body)
 
     @api.get("/api/tools", dependencies=protected)
-    async def tools(session: str = "web:owner"):
+    async def tools(response: Response, session: str = "web:owner"):
         if not session.startswith(("web:", "private:", "group:")):
             raise HTTPException(422, "仅支持 Main 会话，Proactive Loop 请修改默认权限")
         row = await runtime.store.get("session", session) or {}
-        owner = row.get("owner", session.startswith("web:"))
-        if session.startswith("private:"):
-            owner = owner or any(
-                session == adapter.owner_session()
-                for adapter in runtime.config.value.adapters
-            )
-        ctx = Context(
-            session, row.get("actor", ""), owner=owner, group=session.startswith("group:")
-        )
+        settings = runtime.config.value
+        group = session.startswith("group:")
+        feishu = is_feishu_session(session)
+        actor = row.get("actor", "")
+        memory_profile = "default"
+        active = True
+        if feishu:
+            adapter = settings.active_feishu_session(session)
+            active = adapter is not None
+            owner = active and not group
+            if adapter is not None:
+                if group:
+                    actor = actor or "ou_preview"
+                else:
+                    actor = adapter.owner_id
+                    memory_profile = adapter.memory_profile
+        else:
+            owner = row.get("owner", session.startswith("web:"))
+            if session.startswith("private:"):
+                owner = owner or any(session == a.owner_session() for a in settings.adapters)
+        ctx = Context(session, actor, owner=owner, group=group, memory_profile=memory_profile)
         ctx = runtime.permissions.context(ctx)
+        response.headers["ETag"] = config_etag()
         return {
             "session": session,
+            "platform": "feishu" if feishu else "web" if session.startswith("web:") else "qq",
+            "active": active,
+            "config_version": runtime.config.version,
             "policy": runtime.permissions.session_policy(ctx).model_dump(),
-            "source": "session" if session in runtime.config.value.policy.sessions else "default",
+            "source": "session" if session in settings.policy.sessions else "default",
             "tools": [
                 {
                     "name": tool.name,
@@ -727,6 +761,19 @@ def create_app(
     async def websocket(ws: WebSocket):
         await ws.accept()
         queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+
+        async def send_events():
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=20)
+                except TimeoutError:
+                    event = {"kind": "heartbeat"}
+                await ws.send_json(event)
+
+        async def wait_for_disconnect():
+            while (await ws.receive())["type"] != "websocket.disconnect":
+                continue
+
         try:
             async with asyncio.timeout(5):
                 supplied = await ws.receive_text()
@@ -734,12 +781,15 @@ def create_app(
                 await ws.close(1008)
                 return
             runtime.bus.subscribers.add(queue)
-            while True:
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=20)
-                except TimeoutError:
-                    event = {"kind": "heartbeat"}
-                await ws.send_json(event)
+            tasks = (asyncio.create_task(send_events()), asyncio.create_task(wait_for_disconnect()))
+            try:
+                done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    task.result()
+            finally:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
         except (WebSocketDisconnect, TimeoutError, RuntimeError):
             pass
         finally:

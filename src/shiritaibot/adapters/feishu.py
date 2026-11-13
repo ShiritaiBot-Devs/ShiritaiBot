@@ -4,7 +4,7 @@ import asyncio
 import re
 from collections.abc import Awaitable, Callable
 
-from shiritaibot.adapters.feishu_transport import FeishuInbound, FeishuTransport
+from shiritaibot.adapters.feishu_transport import FeishuInbound, FeishuSendError, FeishuTransport
 from shiritaibot.api.event import MessageEvent
 from shiritaibot.config import AdapterConfig
 from shiritaibot.core import ApprovalPort, Context, PublicError, RuntimePort, now
@@ -23,9 +23,12 @@ class Feishu:
         permissions: ApprovalPort,
         reply: Callable[[str, str], Awaitable[None]],
         hooks=None,
+        *,
+        active_context: Callable[[Context], bool] | None = None,
     ) -> None:
         self.config, self.vault, self.store = config, vault, store
         self.runtime, self.permissions, self.reply, self.hooks = runtime, permissions, reply, hooks
+        self.active_context = active_context
         self.log = get_logger(config.id)
         self.transport: FeishuTransport | None = None
         self.events: asyncio.Queue[FeishuInbound] = asyncio.Queue(maxsize=256)
@@ -133,10 +136,20 @@ class Feishu:
         )
         text = message.text.strip()
         prefix = self.wake_prefix(text) if group else ""
+        ctx = Context(
+            session,
+            message.sender_id,
+            "chat" if group else "agent",
+            not group,
+            group,
+            memory_profile="default" if group else cfg.memory_profile,
+        )
         event_id = f"feishu:{cfg.feishu_binding}:{message.message_id}"
         if not await self.store.execute(
             "INSERT OR IGNORE INTO seen_messages VALUES(?,?)", (event_id, now().timestamp())
         ):
+            return
+        if self.active_context is not None and not self.active_context(ctx):
             return
         if group and cfg.feishu_group_context:
             await self.store.record_group(
@@ -148,10 +161,14 @@ class Feishu:
             text = text[len(prefix) :].lstrip(" ，,：:！!、\t\n") or prefix
         if not group and (match := re.fullmatch(r"(同意|拒绝)\s+([a-f0-9]{10})", text)):
             try:
-                await self.permissions.resolve(match[2], match[1] == "同意")
+                await self.permissions.resolve(match[2], match[1] == "同意", approver=ctx)
                 await self.reply(session, "审批已处理。")
             except PublicError as exc:
                 await self.reply(session, str(exc))
+            return
+        if not group and await self.permissions.menu.reply(session, text, approver=ctx):
+            return
+        if self.active_context is not None and not self.active_context(ctx):
             return
         if self.hooks is not None and await self.hooks.dispatch(
             MessageEvent(
@@ -166,17 +183,7 @@ class Feishu:
             )
         ):
             return
-        await self.runtime.submit(
-            Context(
-                session,
-                message.sender_id,
-                "chat" if group else "agent",
-                not group,
-                group,
-                memory_profile="default" if group else cfg.memory_profile,
-            ),
-            text,
-        )
+        await self.runtime.submit(ctx, text)
 
     def can_deliver(self, kind: str, target: str) -> bool:
         binding, _, recipient = target.partition("/")
@@ -199,3 +206,9 @@ class Feishu:
             open_id=recipient if kind == "private" else "",
             request_id=request_id,
         )
+
+    async def send_owner_file(self, name: str, data: bytes) -> dict:
+        transport = self.transport
+        if transport is None or not self.config.owner_id:
+            raise FeishuSendError("not_connected", uncertain=False)
+        return await transport.send_file(name, data, open_id=self.config.owner_id)

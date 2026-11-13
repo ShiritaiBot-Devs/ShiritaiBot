@@ -12,8 +12,16 @@ export function ChatPage({
   client,
   act,
   assistantName = "ShiritaiBot",
-}: PageProps & { assistantName?: string }) {
-  const [session, setSession] = useState("web:owner");
+  session: selectedSession,
+  onSelectSession,
+}: PageProps & {
+  assistantName?: string;
+  session?: string;
+  onSelectSession?: (id: string) => void;
+}) {
+  const [localSession, setLocalSession] = useState("web:owner");
+  const session = selectedSession ?? localSession;
+  const selectSession = onSelectSession ?? setLocalSession;
   const sessions = useQuery({
     queryKey: ["records", "session"],
     queryFn: () => client.records("session"),
@@ -44,7 +52,7 @@ export function ChatPage({
         <select
           aria-label="会话"
           value={session}
-          onChange={(event) => setSession(event.target.value)}
+          onChange={(event) => selectSession(event.target.value)}
         >
           {options.map((item) => (
             <option key={item} value={item}>
@@ -52,7 +60,10 @@ export function ChatPage({
             </option>
           ))}
         </select>
-        <button type="button" onClick={() => setSession("web:" + Date.now())}>
+        <button
+          type="button"
+          onClick={() => selectSession("web:" + Date.now())}
+        >
           <Plus size={14} />
           新会话
         </button>

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
+from shiritaibot.config import is_feishu_session
 from shiritaibot.core import PublicError, Tool
 from shiritaibot.llm.media import view_marker
 from shiritaibot.meme.core import MEME_ID, download
@@ -14,7 +15,8 @@ def meme_tools(app) -> list[Tool]:
     core = app.memes.core
 
     def available(ctx) -> bool:
-        return app.config.value.meme.enabled
+        cfg = app.config.value
+        return cfg.meme.enabled and not is_feishu_session(ctx.session)
 
     async def meme_search(ctx, args):
         results = await core.search(args["query"], args.get("category", ""), args.get("limit", 5))

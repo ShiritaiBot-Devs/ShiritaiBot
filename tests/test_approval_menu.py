@@ -1,17 +1,23 @@
 import asyncio
 import json
+from unittest.mock import AsyncMock
 
 import pytest
 
+from shiritaibot.adapters.feishu import Feishu
+from shiritaibot.adapters.feishu_transport import FeishuInbound
+from shiritaibot.adapters.onebot11 import OneBot
+from shiritaibot.agent.commands import command
+from shiritaibot.config import AdapterConfig, SessionPolicy
 from shiritaibot.core import Context, PublicError, Reply, Tool
 from shiritaibot.tools import schema
 
 OWNER = Context("private:qq:1", "owner", "agent", True)
 
 
-async def eventually(check, timeout: float = 3):
-    async with asyncio.timeout(timeout):
-        while not (result := await check()):
+async def eventually(check, deadline: float = 3):
+    async with asyncio.timeout(deadline):
+        while not (result := await check()):  # noqa: ASYNC110 - observe persisted asynchronous state
             await asyncio.sleep(0.01)
         return result
 
@@ -60,7 +66,6 @@ def window(app, monkeypatch):
 
     monkeypatch.setattr(menu, "WINDOW", 0.5)
     monkeypatch.setattr(menu, "REASON_BUDGET", 0.05)
-    app.permissions.menu.target = "web:owner"
     return app
 
 
@@ -202,7 +207,7 @@ async def test_expired_request_releases_queued_batch(window):
     row = next(r for r in rows if r["tool"] == "danger_one")
     row["status"] = "expired"
     await window.store.put("approval", row["id"], row, OWNER.session)
-    await window.permissions.menu._refresh()
+    window.permissions.menu.settled(row["id"])
     text = await wait_text(window, "需要确认：danger_two")
     assert "danger_two" in text
     first.cancel()
@@ -291,8 +296,6 @@ async def test_background_approval_only_offers_agree_and_deny(window):
 
 
 async def test_grants_command_lists_and_revokes(window):
-    from shiritaibot.agent.commands import command
-
     task = await pending(window, "danger_one", risk="dangerous")
     await wait_text(window)
     await window.permissions.menu.reply("web:owner", "4")
@@ -363,17 +366,13 @@ async def test_finished_batch_skips_expired_queued_requests(window):
     await window.store.put("approval", row["id"], row, OWNER.session)
     assert await window.permissions.menu.reply("web:owner", "1") is True
     await asyncio.sleep(0.3)
-    assert window.permissions.menu.batch is None
+    assert not window.permissions.menu.accepts("web:owner", "1")
     assert await no_text(window, "有 1 条待确认")
     six.cancel()
     await asyncio.gather(six, return_exceptions=True)
 
 
 async def test_grants_command_sees_other_sessions_in_owner_private(window):
-    from shiritaibot.agent.commands import command
-
-    from shiritaibot.config import SessionPolicy
-
     group_ctx = Context("group:qq:9", "2", "agent")
     # 群默认是 chat 模式，工具会被直接拒绝；这里显式切到 agent 才能走到审批。
     await window.permissions.set_session(group_ctx, SessionPolicy(mode="agent"))
@@ -405,3 +404,150 @@ async def test_reason_comes_from_light_model(window, monkeypatch):
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.fixture
+def feishu_owner(window):
+    config = AdapterConfig(id="work", type="feishu", app_id="cli_example", owner_id="ou_owner")
+    window.config.value.adapters.append(config)
+    context = Context(
+        config.owner_session(), config.owner_id, "agent", owner=True,
+        memory_profile=config.memory_profile,
+    )
+    bot = Feishu(
+        config,
+        window.vault,
+        window.store,
+        window.runtime,
+        window.permissions,
+        window.adapters.enqueue,
+        active_context=lambda ctx: window.config.value.feishu_context_valid(ctx),
+    )
+    return config, context, bot
+
+
+def feishu_dm(text: str, message_id: str) -> FeishuInbound:
+    return FeishuInbound(
+        app_id="cli_example",
+        tenant_key="tenant",
+        message_id=message_id,
+        chat_id="oc_dm",
+        chat_type="p2p",
+        sender_id="ou_owner",
+        sender_type="user",
+        message_type="text",
+        text=text,
+        mentions=(),
+        raw={},
+    )
+
+
+async def test_approval_replies_respect_feishu_scope(window, feishu_owner):
+    _, owner, bot = feishu_owner
+    qq_task = await pending(window, "qq_review")
+    feishu_task = await pending(window, "feishu_review", ctx=owner)
+    qq_row = (await window.store.list("approval", scope=OWNER.session))[0]
+    feishu_row = (await window.store.list("approval", scope=owner.session))[0]
+    try:
+        await bot.receive(feishu_dm(f"同意 {qq_row['id']}", "om_text"))
+        await command(window.runtime, owner, f"/approve {qq_row['id']}")
+        await command(window.runtime, OWNER, f"/deny {feishu_row['id']}")
+        assert (await window.store.get("approval", qq_row["id"]))["status"] == "pending"
+        assert (await window.store.get("approval", feishu_row["id"]))["status"] == "pending"
+
+        # QQ's unnumbered reply may still use its previous latest fallback.
+        latest = await window.permissions.resolve_latest(OWNER, True)
+        assert latest["id"] == qq_row["id"]
+        assert json.loads(await qq_task)["ok"]
+        with pytest.raises(PublicError, match="没有待处理的审批"):
+            await window.permissions.resolve_latest(OWNER, True)
+
+        await bot.receive(feishu_dm(f"同意 {feishu_row['id']}", "om_owned"))
+        assert json.loads(await feishu_task)["ok"]
+    finally:
+        for task in (qq_task, feishu_task):
+            task.cancel()
+        await asyncio.gather(qq_task, feishu_task, return_exceptions=True)
+
+
+async def test_feishu_menu_and_legacy_menu_route_independently(window, feishu_owner, monkeypatch):
+    _, owner, bot = feishu_owner
+    reason = AsyncMock(return_value=Reply(text="要做：核对消息\n为什么：需要确认"))
+    monkeypatch.setattr(window.llm, "complete", reason)
+    for profile, content in (("default", "default history"), ("feishu", "feishu history")):
+        await window.store.append(
+            owner.session, profile, {"role": "user", "content": content}, memory_profile=profile
+        )
+    feishu_task = await pending(window, "feishu_review", ctx=owner)
+    qq_task = await pending(window, "qq_review")
+    try:
+        await wait_text(window, "需要确认：feishu_review")
+        await wait_text(window, "需要确认：qq_review")
+        prompts = await window.store.list("outbox", scope=owner.session)
+        assert [row["scope"] for row in prompts] == [owner.session]
+        assert "feishu_review" in prompts[0]["text"] and "3 五分钟" not in prompts[0]["text"]
+        assert prompts[0]["approval_batch"]
+        requests = [json.loads(call.args[2][0]["content"]) for call in reason.await_args_list]
+        feishu_request = next(request for request in requests if request["tool"] == "feishu_review")
+        assert feishu_request["conversation"] == [{"role": "user", "content": "feishu history"}]
+        assert not await window.permissions.menu.reply(owner.session, "1")
+
+        await bot.receive(feishu_dm("1", "om_number"))
+        assert json.loads(await asyncio.wait_for(feishu_task, 2))["ok"]
+        assert not qq_task.done()
+        assert await window.permissions.menu.reply("web:owner", "2")
+        assert "拒绝" in json.loads(await asyncio.wait_for(qq_task, 2))["error"]
+
+        async def stale_prompt_discarded():
+            return (await window.store.get("outbox", prompts[0]["id"]))["status"] == "failed"
+
+        await eventually(stale_prompt_discarded)
+    finally:
+        for task in (qq_task, feishu_task):
+            task.cancel()
+        await asyncio.gather(qq_task, feishu_task, return_exceptions=True)
+
+
+async def test_reconfigure_rejects_stale_reply_and_drops_feishu_prompt(
+    window, feishu_owner, monkeypatch
+):
+    config, owner, old_bot = feishu_owner
+    pending_task = await pending(window, "feishu_review", ctx=owner)
+    await wait_text(window, "需要确认：feishu_review")
+    row = (await window.store.list("approval", scope=owner.session))[0]
+    queued = (await window.store.list("outbox", scope=owner.session))[0]
+    old_bot.hooks = type("Hooks", (), {"dispatch": AsyncMock()})()
+    send = AsyncMock()
+
+    async def onebot_run(bot):
+        bot.status = "connected"
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(OneBot, "run", onebot_run)
+    monkeypatch.setattr(OneBot, "call", send)
+    replacement = window.config.value.model_copy(deep=True)
+    replacement.adapters = [AdapterConfig(id=config.id, owner_id="1")]
+    try:
+        async with window.permissions.resolve_lock:
+            reply = asyncio.create_task(
+                window.permissions.resolve(row["id"], True, approver=owner)
+            )
+            await window.reconfigure(replacement)
+        with pytest.raises(PublicError, match="审批不存在"):
+            await reply
+        assert not window.permissions.menu.accepts(owner.session, "1")
+        assert (await window.store.get("approval", row["id"]))["status"] == "pending"
+        await old_bot.receive(feishu_dm("旧连接事件", "om_stale"))
+        old_bot.hooks.dispatch.assert_not_awaited()
+
+        async def prompt_failed():
+            return (await window.store.get("outbox", queued["id"]))["status"] == "failed"
+
+        await eventually(prompt_failed)
+        send.assert_not_awaited()
+        # WebUI's authenticated management endpoint still uses the unscoped resolver.
+        await window.permissions.resolve(row["id"], False)
+        assert "拒绝" in json.loads(await asyncio.wait_for(pending_task, 2))["error"]
+    finally:
+        pending_task.cancel()
+        await asyncio.gather(pending_task, return_exceptions=True)

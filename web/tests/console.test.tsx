@@ -11,7 +11,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ApiClient } from "../src/api/client";
+import { ApiError, type ApiClient } from "../src/api/client";
 import type { Action } from "../src/pages/common";
 import type {
   FeishuQrRegistration,
@@ -46,6 +46,7 @@ afterEach(() => {
 
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
   const stub = () => vi.fn().mockResolvedValue(undefined);
+  const config = overrides.config ?? vi.fn().mockResolvedValue(baseConfig());
   return {
     health: vi.fn().mockResolvedValue({
       status: "ok",
@@ -57,7 +58,8 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       actors: 0,
       subagents: 0,
     }),
-    config: vi.fn().mockResolvedValue(baseConfig()),
+    config,
+    configSnapshot: async () => ({ settings: await config() }),
     tools: vi.fn().mockResolvedValue({
       session: "web:owner",
       policy: baseConfig().policy.owner_default,
@@ -1596,6 +1598,8 @@ it("falls back to the overview page for unknown hashes", () => {
 describe("app shell", () => {
   it("loads the console, navigates between pages and keeps the token", async () => {
     const config = baseConfig();
+    const feishu = "private:work:feishu.cli_demo/ou_owner";
+    const feishuToolsPath = "/api/tools?session=" + encodeURIComponent(feishu);
     const responses: Record<string, unknown> = {
       "/api/health": {
         status: "ok",
@@ -1610,10 +1614,16 @@ describe("app shell", () => {
       "/api/config": config,
       "/api/records/approval": [],
       "/api/records/activity": [],
-      "/api/records/session": [],
+      "/api/records/session": [{ id: feishu, mode: "agent", owner: true }],
       "/api/records/reply": [],
       "/api/commands": [],
       "/api/history": [],
+      [feishuToolsPath]: {
+        session: feishu,
+        policy: config.policy.owner_default,
+        source: "default",
+        tools: [],
+      },
       "/api/stats": {
         hours: 24,
         timezone: "Asia/Shanghai",
@@ -1668,6 +1678,15 @@ describe("app shell", () => {
     await user.click(screen.getByRole("button", { name: "模型与服务" }));
     expect(await screen.findByText("模型路由")).toBeTruthy();
     expect(location.hash).toBe("#/models");
+
+    await user.click(screen.getByRole("button", { name: "对话", exact: true }));
+    await screen.findByRole("option", { name: feishu });
+    await user.selectOptions(screen.getByLabelText("会话"), feishu);
+    await user.click(screen.getByRole("button", { name: "工具与权限" }));
+    expect(
+      await screen.findByText("已生效：Agent · 继承默认策略"),
+    ).toBeTruthy();
+    expect(screen.getByLabelText<HTMLSelectElement>("会话").value).toBe(feishu);
 
     await user.click(screen.getByRole("button", { name: "设置" }));
     expect(await screen.findByLabelText("基础人设")).toBeTruthy();
@@ -1775,6 +1794,7 @@ describe("configuration editing", () => {
         return {
           ok: true,
           status: 200,
+          headers: new Headers({ ETag: '"console-test-1"' }),
           json: async () => config,
         } as unknown as Response;
       }
@@ -1819,18 +1839,82 @@ describe("configuration editing", () => {
     expect(screen.getByText("配置有未保存的修改")).toBeTruthy();
     await user.click(screen.getByText("保存并应用"));
     await waitFor(() =>
-      expect(
-        fetchMock.mock.calls.some(
-          ([url, init]) =>
-            String(url) === "/api/config" &&
-            (init as RequestInit | undefined)?.method === "PUT",
-        ),
-      ).toBe(true),
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/config",
+        expect.objectContaining({
+          method: "PUT",
+          headers: expect.objectContaining({ "If-Match": '"console-test-1"' }),
+        }),
+      ),
     );
     await waitFor(() =>
       expect(screen.queryByText("配置有未保存的修改")).toBeNull(),
     );
     vi.unstubAllGlobals();
+  });
+
+  it("retains a conflicting draft and sends its original revision after a refresh", async () => {
+    const initial = baseConfig();
+    const remote = { ...initial, assistant_name: "服务器已更新" };
+    const configSnapshot = vi
+      .fn()
+      .mockResolvedValueOnce({
+        settings: initial,
+        revision: '"console-test-1"',
+      })
+      .mockResolvedValue({ settings: remote, revision: '"console-test-2"' });
+    const saveConfig = vi
+      .fn()
+      .mockRejectedValue(new ApiError("配置已更新", 412));
+    const client = fakeClient({ configSnapshot, saveConfig });
+    const queryClient = new QueryClient();
+    const failed = vi.fn();
+    function Harness() {
+      const draft = useConfigDraft(client);
+      return (
+        draft.config && (
+          <>
+            <span>{draft.config.assistant_name}</span>
+            <button
+              type="button"
+              onClick={() =>
+                draft.update({ ...draft.config!, assistant_name: "本地草稿" })
+              }
+            >
+              编辑
+            </button>
+            <button
+              type="button"
+              onClick={() => void draft.save().catch(failed)}
+            >
+              保存
+            </button>
+            <button type="button" onClick={draft.discard}>
+              放弃
+            </button>
+          </>
+        )
+      );
+    }
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "编辑" }));
+    await reactAct(() =>
+      queryClient.invalidateQueries({ queryKey: ["config"] }),
+    );
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(failed).toHaveBeenCalled());
+    expect(saveConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ assistant_name: "本地草稿" }),
+      '"console-test-1"',
+    );
+    expect(screen.getByText("本地草稿")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "放弃" }));
+    expect(screen.getByText("服务器已更新")).toBeTruthy();
   });
 });
 
@@ -2077,6 +2161,122 @@ describe("discovered plugin management", () => {
 });
 
 describe("session tool permissions", () => {
+  it("loads configured Feishu sessions and keeps runtime decisions separate from drafts", async () => {
+    const { ApprovalsPage } = await import("../src/pages/ApprovalsPage");
+    const owner = "private:work:feishu.cli_demo/ou_owner";
+    const group = "group:work:feishu.cli_demo/oc_team";
+    const initial = baseConfig();
+    initial.adapters = [
+      {
+        ...createAdapter([], "feishu"),
+        id: "work",
+        enabled: true,
+        app_id: "cli_demo",
+        owner_id: "ou_owner",
+        groups: ["oc_team"],
+      },
+    ];
+    initial.policy.group_default.mode = "agent";
+    let saved = initial;
+    let revision = '"console-test-1"';
+    const saveConfig = vi.fn(async (next: Settings) => {
+      saved = next;
+      revision = '"console-test-2"';
+      return { ok: true, version: 2 };
+    });
+    const tools = vi.fn(async (session = "web:owner") => {
+      const policy =
+        saved.policy.sessions[session] ?? saved.policy.owner_default;
+      return {
+        session,
+        revision,
+        platform:
+          session === owner || session === group
+            ? ("feishu" as const)
+            : undefined,
+        policy:
+          session === group ? { ...policy, mode: "chat" as const } : policy,
+        source: saved.policy.sessions[session]
+          ? ("session" as const)
+          : ("default" as const),
+        tools: [
+          {
+            name: "feishu_send_file",
+            description: "发送文件",
+            plugin: "builtin",
+            risk: "normal",
+            safe: false,
+            chat: false,
+            permission: policy.tools.feishu_send_file ?? ("manual" as const),
+            decision:
+              session === owner
+                ? (policy.tools.feishu_send_file ?? "approve")
+                : "deny",
+          },
+        ],
+      };
+    });
+    const client = fakeClient({
+      tools,
+      saveConfig,
+      configSnapshot: async () => ({ settings: saved, revision }),
+    });
+    function Harness() {
+      const draft = useConfigDraft(client);
+      return (
+        draft.config && (
+          <>
+            <ApprovalsPage
+              client={client}
+              act={act}
+              config={draft.config}
+              setConfig={draft.update}
+              saved={draft.saved}
+            />
+            <button type="button" onClick={() => void draft.save()}>
+              保存并应用
+            </button>
+          </>
+        )
+      );
+    }
+    render(withQuery(<Harness />));
+    const user = userEvent.setup();
+    const picker = await screen.findByLabelText("会话");
+    expect(
+      within(picker).getByRole("group", { name: "飞书私聊" }),
+    ).toBeTruthy();
+    expect(
+      within(picker).getByRole("group", { name: "飞书群聊" }),
+    ).toBeTruthy();
+    await user.selectOptions(picker, owner);
+    expect(await screen.findByText("已生效：需要人工审批")).toBeTruthy();
+    expect(tools).toHaveBeenLastCalledWith(owner);
+    await user.selectOptions(
+      screen.getByLabelText("feishu_send_file 权限"),
+      "allow",
+    );
+    expect(screen.getByText("权限修改待保存")).toBeTruthy();
+    expect(screen.getByText("已生效：需要人工审批")).toBeTruthy();
+    await user.selectOptions(picker, group);
+    expect(await screen.findByText("已生效：不可用")).toBeTruthy();
+    expect(screen.queryByText("已生效：需要人工审批")).toBeNull();
+    const mode = screen.getByLabelText<HTMLSelectElement>("会话模式");
+    expect(mode.value).toBe("chat");
+    expect(mode.disabled).toBe(true);
+    expect(tools).toHaveBeenLastCalledWith(group);
+    await user.selectOptions(picker, owner);
+    await user.click(screen.getByRole("button", { name: "保存并应用" }));
+    expect(await screen.findByText("已生效：无需审批")).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.queryByText("权限修改待保存")).toBeNull(),
+    );
+    expect(Object.keys(saved.policy.sessions)).toEqual([owner]);
+    expect(saved.policy.sessions[owner].tools).toEqual({
+      feishu_send_file: "allow",
+    });
+  });
+
   it("edits modes, per-tool overrides and session defaults while isolating Proactive defaults", async () => {
     const { ApprovalsPage } = await import("../src/pages/ApprovalsPage");
     let latest = baseConfig();
@@ -2136,9 +2336,9 @@ describe("session tool permissions", () => {
     expect(latest.policy.sessions["web:owner"].preset).toBe("full_access");
     await user.selectOptions(screen.getByLabelText("会话模式"), "chat");
     expect(latest.policy.sessions["web:owner"].mode).toBe("chat");
-    expect(screen.getByText(/当前为 Chat 模式/)).toBeTruthy();
-    expect(screen.getAllByText("当前不可用")).toHaveLength(1);
-    expect(screen.getByText("权限：无需审批")).toBeTruthy();
+    expect(screen.getByText("已生效：Agent · 继承默认策略")).toBeTruthy();
+    expect(screen.getByText("已生效：需要人工审批")).toBeTruthy();
+    expect(screen.getByText("已生效：无需审批")).toBeTruthy();
     await user.selectOptions(
       screen.getByLabelText("配置范围"),
       "proactive_default",
@@ -2152,6 +2352,7 @@ describe("session tool permissions", () => {
     });
     expect(latest.policy.sessions["web:owner"].mode).toBe("chat");
     await user.selectOptions(screen.getByLabelText("配置范围"), "session");
+    await user.click(screen.getByText("按会话 ID 查找"));
     await user.clear(screen.getByLabelText("Main 会话 ID"));
     await user.type(screen.getByLabelText("Main 会话 ID"), "group:qq:42");
     await user.click(screen.getByText("选择会话"));

@@ -11,9 +11,10 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from shiritaibot.adapters.feishu import Feishu
-from shiritaibot.adapters.onebot11 import describe, file_ref, qq_download_url, segments
+from shiritaibot.adapters.onebot11 import OneBot, describe, file_ref, qq_download_url, segments
+from shiritaibot.config import is_feishu_session
 from shiritaibot.core import Context, PublicError, Tool
+from shiritaibot.core import session_dir as session_dir
 from shiritaibot.tools import TEXT, schema
 
 ADAPTER = {
@@ -54,10 +55,6 @@ SENSITIVE_FILES = frozenset(
 SENSITIVE_DIRS = frozenset({"logs", "memory-profiles"})
 
 
-def session_dir(home: Path, kind: str, session: str) -> Path:
-    return home / kind / hashlib.sha256(session.encode()).hexdigest()[:24]
-
-
 async def qq_file_url(bot, group_id: str, data: dict) -> str:
     """A QQ HTTPS link for the file; protocol-side local paths are never trusted."""
     file_id = data.get("file_id", data.get("id"))
@@ -96,7 +93,7 @@ async def download_qq_file(app, session: str, ref: str) -> dict:
     if not row or row["scope"] != session:
         raise PublicError("文件引用不属于当前会话")
     bot = app.adapters.instances.get(row["adapter"])
-    if not bot or isinstance(bot, Feishu):
+    if not callable(getattr(bot, "call", None)):
         raise PublicError("文件所属 OneBot 实例不可用")
     data = row["data"]
     if not data.get("file_id", data.get("id")) and not data.get("url"):
@@ -153,18 +150,32 @@ def owner_only(ctx: Context) -> None:
 
 
 def qq_tools(app) -> list[Tool]:
+    def qq_context(ctx: Context) -> bool:
+        return not is_feishu_session(ctx.session)
+
+    def connected(ctx: Context) -> bool:
+        return qq_context(ctx) and any(
+            isinstance(bot, OneBot) and bot.status == "connected"
+            for bot in app.adapters.instances.values()
+        )
+
     def bot_for(ctx: Context, args: dict):
         owner_only(ctx)
-        instances = {key: bot for key, bot in app.adapters.instances.items() if not isinstance(bot, Feishu)}
+        instances = {
+            key: bot for key, bot in app.adapters.instances.items() if isinstance(bot, OneBot)
+        }
         adapter = args.get("adapter", "")
         if not adapter:
             parts = ctx.session.split(":")
             if len(parts) == 3 and parts[0] in {"private", "group"} and parts[1] in instances:
                 adapter = parts[1]
-            elif len(instances) == 1:
-                adapter = next(iter(instances))
             else:
-                raise PublicError(f"请用 adapter 指定 OneBot 实例：{', '.join(instances) or '无'}")
+                ready = [key for key, bot in instances.items() if bot.status == "connected"]
+                if not ready:
+                    raise PublicError("当前没有已连接的 QQ OneBot 实例")
+                if len(ready) > 1:
+                    raise PublicError(f"请用 adapter 指定 OneBot 实例：{', '.join(ready)}")
+                adapter = ready[0]
         bot = instances.get(adapter)
         if not bot or bot.status != "connected":
             raise PublicError(f"OneBot 实例 {adapter} 不存在或未连接")
@@ -530,9 +541,12 @@ def qq_tools(app) -> list[Tool]:
         )
         return {"message_id": receipt.get("message_id")}
 
+    async def file_download(ctx, args):
+        return await download_qq_file(app, ctx.session, args["ref"])
+
     group_id = {"group_id": ID}
     member = {"group_id": ID, "user_id": ID}
-    return [
+    tools = [
         Tool(
             "qq_message_send",
             "以 Bot 的 QQ 账号向指定好友私聊或群聊发送消息，可附 @、引用回复和图片。"
@@ -793,3 +807,18 @@ def qq_tools(app) -> list[Tool]:
             risk="sensitive",
         ),
     ]
+    for tool in tools:
+        tool.available = connected
+    tools.append(
+        Tool(
+            "qq_file_download",
+            "下载 QQ 文件引用（当前聊天收到的文件，或 qq_message_get / qq_message_history / "
+            "qq_forward_get 返回的文件和图片 ref），返回本地路径",
+            schema({"ref": TEXT}, ["ref"]),
+            file_download,
+            risk="normal",
+            timeout=180,
+            available=qq_context,
+        )
+    )
+    return tools

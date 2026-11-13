@@ -13,12 +13,31 @@ from zoneinfo import ZoneInfo
 import tomli_w
 from pydantic import Field, JsonValue, field_validator, model_validator
 
-from shiritaibot.core import Model
+from shiritaibot.core import Context, Model
 
 
 class Instance(Model):
     id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")
     enabled: bool = True
+
+
+FEISHU_SESSION = re.compile(
+    r"(private|group):([A-Za-z0-9_-]{1,64}):((?:feishu|lark)\.cli_[A-Za-z0-9]+)/"
+    r"((?:ou|oc)_[A-Za-z0-9]+)"
+)
+
+
+def _parse_feishu_session(session: str) -> re.Match[str] | None:
+    match = FEISHU_SESSION.fullmatch(session)
+    if match is None:
+        return None
+    expected = "ou_" if match[1] == "private" else "oc_"
+    return match if match[4].startswith(expected) else None
+
+
+def is_feishu_session(session: str) -> bool:
+    """Identify a Feishu session even if its application was replaced or removed."""
+    return _parse_feishu_session(session) is not None
 
 
 def check_proxy(value: str) -> str:
@@ -688,11 +707,10 @@ class Settings(Model):
         return prompt
 
     def feishu_session(self, session: str) -> AdapterConfig | None:
-        kind, _, rest = session.partition(":")
-        adapter_id, _, target = rest.partition(":")
-        if kind not in {"private", "group"} or "/" not in target:
+        match = _parse_feishu_session(session)
+        if match is None:
             return None
-        binding = target.partition("/")[0]
+        _, adapter_id, binding, _ = match.groups()
         return next(
             (
                 a
@@ -702,9 +720,35 @@ class Settings(Model):
             None,
         )
 
-    def group_context_enabled(self, session: str) -> bool:
+    def active_feishu_session(self, session: str) -> AdapterConfig | None:
+        """Return the enabled binding only for its current owner or an allowed group."""
         adapter = self.feishu_session(session)
-        return adapter.feishu_group_context if adapter is not None else self.group_context.enabled
+        if adapter is None or not adapter.enabled:
+            return None
+        recipient = session.rpartition("/")[2]
+        if session.startswith("private:"):
+            return adapter if recipient == adapter.owner_id else None
+        return adapter if recipient in adapter.groups else None
+
+    def feishu_context_valid(self, ctx: Context) -> bool:
+        if not is_feishu_session(ctx.session):
+            return True
+        adapter = self.active_feishu_session(ctx.session)
+        if adapter is None or ctx.background:
+            return False
+        if ctx.session.startswith("group:"):
+            return (
+                ctx.group
+                and not ctx.owner
+                and re.fullmatch(r"ou_[A-Za-z0-9]+", ctx.actor) is not None
+            )
+        return not ctx.group and ctx.owner and ctx.actor == adapter.owner_id
+
+    def group_context_enabled(self, session: str) -> bool:
+        if not is_feishu_session(session):
+            return self.group_context.enabled
+        adapter = self.active_feishu_session(session)
+        return adapter is not None and adapter.feishu_group_context
 
     @model_validator(mode="after")
     def references(self) -> Settings:
@@ -806,6 +850,10 @@ class Settings(Model):
         return self
 
 
+class ConfigRevisionConflict(Exception):
+    """The saved configuration changed since the caller read it."""
+
+
 class ConfigService:
     def __init__(self, home: Path):
         self.home = home
@@ -822,8 +870,10 @@ class ConfigService:
         else:
             await self.save(self.value)
 
-    async def save(self, value: Settings) -> None:
+    async def save(self, value: Settings, *, expected_version: int | None = None) -> None:
         async with self.lock:
+            if expected_version is not None and self.version != expected_version:
+                raise ConfigRevisionConflict
 
             def write() -> None:
                 self.home.mkdir(parents=True, exist_ok=True, mode=0o700)

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from functools import partial
 from pathlib import Path
 
 from shiritaibot.adapters.onebot11 import AdapterHub
 from shiritaibot.agent import AgentRuntime
 from shiritaibot.auth import Permissions, Vault
-from shiritaibot.config import AdapterConfig, ConfigService, Settings
+from shiritaibot.config import AdapterConfig, ConfigRevisionConflict, ConfigService, Settings
 from shiritaibot.core import EventBus, PublicError
 from shiritaibot.core.logs import get_logger
 from shiritaibot.emotion import EmotionManager
@@ -68,10 +67,6 @@ class Application:
         if protected != self.config.value:
             await self.config.save(protected)
         self.permissions = Permissions(self.config, self.store)
-        owner = next((a for a in self.config.value.adapters if a.enabled and a.owner_id), None)
-        self.permissions.menu.target = (
-            f"private:{owner.id}:{owner.owner_id}" if owner else "web:owner"
-        )
         self.registry = ToolRegistry(self.permissions, self.store)
         await self.refresh_secret_list()
         self.llm = ProviderManager(self.config, self.vault, self.store)
@@ -125,7 +120,7 @@ class Application:
         )
         self.runtime.hooks = self.plugins.hooks
         self.adapters.runtime, self.adapters.permissions = self.runtime, self.permissions
-        self.permissions.notify = partial(self.adapters.notify_owner, handoff=False)
+        self.permissions.notify = self.notify_approval
         self.proactive.runtime = self.runtime
         self.proactive.channels = self.plugins.notifiers
         self.plugins.get_event = self.proactive.get_event
@@ -197,6 +192,14 @@ class Application:
         else:
             await self.adapters.enqueue(session, text)
 
+    async def notify_approval(
+        self, text: str, *, session: str | None = None, batch_id: str = ""
+    ) -> None:
+        target = session or self.permissions.approval_target()
+        if self.permissions.approval_target_current(target):
+            # Prompts are immediate and skip plugin text decorators.
+            await self.adapters.enqueue(target, text, decorate=False, approval_batch=batch_id)
+
     async def diagnostics(self) -> list[str]:
         """Warnings about configuration that would silently fail at runtime."""
         settings = self.config.value
@@ -257,9 +260,11 @@ class Application:
                 values.append(value)
         self.registry.secrets = tuple(values)
 
-    async def reconfigure(self, settings: Settings) -> None:
+    async def reconfigure(self, settings: Settings, *, expected_version: int | None = None) -> None:
         async with self.configure_lock:
-            await self._reconfigure_locked(settings)
+            if expected_version is not None and self.config.version != expected_version:
+                raise ConfigRevisionConflict
+            await self._reconfigure_locked(settings, expected_version=expected_version)
 
     async def add_feishu_adapter(self, adapter: AdapterConfig) -> int:
         async with self.configure_lock:
@@ -280,7 +285,11 @@ class Application:
             return self.config.version
 
     async def _reconfigure_locked(
-        self, settings: Settings, *, restart_adapters: bool = True
+        self,
+        settings: Settings,
+        *,
+        restart_adapters: bool = True,
+        expected_version: int | None = None,
     ) -> None:
         log.log("配置已更新，正在重载协议端、内置工具与插件")
         previous = self.config.value
@@ -295,7 +304,9 @@ class Application:
                 item.app_secret = saved_feishu.get((item.id, item.app_id, item.domain), "")
         settings = await self.vault.protect_settings(settings, await self.plugins.schemas())
         await self.open_feishu_memory(settings)
-        await self.config.save(settings)
+        await self.config.save(settings, expected_version=expected_version)
+        await self.runtime.cancel_stale_feishu_sessions()
+        await self.permissions.menu.reconfigured()
         await self.refresh_secret_list()
         if restart_adapters and settings.adapters != previous.adapters:
             await self.adapters.close()

@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from shiritaibot.core import PublicError, Tool, now
+from shiritaibot.core import PublicError, Tool, now, session_dir
 from shiritaibot.core.process import run_process
 from shiritaibot.knowledge.tools import knowledge_tools
 from shiritaibot.meme.tools import meme_tools
@@ -14,7 +14,8 @@ from shiritaibot.routine import FINISHED, KEEP_FINISHED, RoutineItem
 from shiritaibot.skill.tools import skill_tools
 from shiritaibot.store import MEMORY_PROFILE_FILTER
 from shiritaibot.tools import TEXT, schema
-from shiritaibot.tools.qq import download_qq_file, qq_tools, session_dir
+from shiritaibot.tools.feishu import feishu_file_tool
+from shiritaibot.tools.qq import qq_tools
 from shiritaibot.tools.web_search import search_token, search_web
 
 
@@ -194,9 +195,6 @@ async def register_builtin(app) -> None:
         offset = args.get("offset", 0)
         return {"text": row["content"][offset : offset + 12000], "total": len(row["content"])}
 
-    async def qq_download(ctx, args):
-        return await download_qq_file(app, ctx.session, args["ref"])
-
     entries = [
         Tool(
             "history_query",
@@ -366,15 +364,7 @@ async def register_builtin(app) -> None:
             risk="safe",
             chat=True,
         ),
-        Tool(
-            "qq_file_download",
-            "下载 QQ 文件引用（当前聊天收到的文件，或 qq_message_get / qq_message_history / "
-            "qq_forward_get 返回的文件和图片 ref），返回本地路径",
-            schema({"ref": TEXT}, ["ref"]),
-            qq_download,
-            risk="normal",
-            timeout=180,
-        ),
+        feishu_file_tool(app),
     ]
     entries += memory_tools(app.memory_for)
     entries += qq_tools(app)

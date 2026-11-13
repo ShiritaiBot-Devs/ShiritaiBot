@@ -18,6 +18,7 @@ from websockets.asyncio.client import connect
 from shiritaibot.adapters.feishu import Feishu
 from shiritaibot.adapters.feishu_transport import FeishuSendError
 from shiritaibot.api.event import MessageEvent
+from shiritaibot.config import is_feishu_session
 from shiritaibot.core import (
     Actor,
     ApprovalPort,
@@ -295,6 +296,7 @@ class AdapterHub:
                     self.permissions,
                     self.enqueue,
                     self.hooks,
+                    active_context=lambda ctx: self.config.value.feishu_context_valid(ctx),
                 )
             else:
                 get_logger(cfg.id).log(f"启动协议端（OneBot 11 → {cfg.url}）")
@@ -436,16 +438,17 @@ class AdapterHub:
             bot.log.debug("重复消息，已跳过", speaker)
             return
         if not group and user == cfg.owner_id:
+            approver = Context(session, user, owner=True)
             match = approval_reply(text)
             if match:
                 allow = match[1] == "同意"
                 try:
                     if match[2]:
-                        await self.permissions.resolve(match[2], allow)
+                        await self.permissions.resolve(match[2], allow, approver=approver)
                         key, label = match[2], ""
                     else:
                         # 不带 id：作用于最新一条待审批，回复里说明处理的是哪条。
-                        row = await self.permissions.resolve_latest(session, allow)
+                        row = await self.permissions.resolve_latest(approver, allow)
                         key, label = row["id"], f"{row.get('tool')} "
                     bot.log.log(f"主人{match[1]}了审批 {key}", where)
                     await self.enqueue(session, f"审批已处理：{label}{match[1]} {key}")
@@ -453,12 +456,8 @@ class AdapterHub:
                     bot.log.warning(f"审批处理失败：{exc}", where)
                     await self.enqueue(session, str(exc))
                 return
-        if (
-            not group
-            and user == cfg.owner_id
-            and await self.permissions.menu.reply(session, text)
-        ):
-            return
+            if await self.permissions.menu.reply(session, text, approver=approver):
+                return
         if self.hooks is not None and await self.hooks.dispatch(message(True)):
             return
         for part in parts:
@@ -582,17 +581,19 @@ class AdapterHub:
                 )
             )
 
-    async def enqueue(self, session: str, text: str, *, decorate: bool = True) -> None:
+    async def enqueue(
+        self, session: str, text: str, *, decorate: bool = True, approval_batch: str = ""
+    ) -> None:
         if decorate and self.hooks is not None:
             decorated = await self.hooks.decorate(session, text)
             if decorated is None:
                 return
             text = decorated
-        await self._enqueue(session, text)
+        await self._enqueue(session, text, approval_batch=approval_batch)
         if self.hooks is not None:
             self.hooks.sent(session, text)
 
-    async def _enqueue(self, session: str, text: str) -> None:
+    async def _enqueue(self, session: str, text: str, *, approval_batch: str = "") -> None:
         injector = self.memes.injector if self.memes is not None else None
         if session.startswith(("web:", "background:")):
             if injector is not None:
@@ -600,12 +601,15 @@ class AdapterHub:
             await self.store.put("reply", uid(), {"text": text, "at": now().isoformat()}, session)
             return
         text = clean_outbound(text)
-        if self.config.value.feishu_session(session) is not None and injector is not None:
+        if is_feishu_session(session) and injector is not None:
             text = injector.plain(text)
             injector = None
         # <meme> markers become their own sticker messages, splitting the text around them.
         pieces = injector.split(text) if injector is not None else [text]
         expires = now().timestamp() + 86400
+        delivery = {"status": "pending", "expires": expires}
+        if approval_batch:
+            delivery["approval_batch"] = approval_batch
         for piece in pieces:
             if not isinstance(piece, str):
                 await self.store.put(
@@ -614,8 +618,7 @@ class AdapterHub:
                     {
                         "text": MemeInjector.label(piece),
                         "meme": piece["id"],
-                        "status": "pending",
-                        "expires": expires,
+                        **delivery,
                     },
                     session,
                 )
@@ -624,7 +627,7 @@ class AdapterHub:
                 await self.store.put(
                     "outbox",
                     uid(),
-                    {"text": piece[index : index + 3500], "status": "pending", "expires": expires},
+                    {"text": piece[index : index + 3500], **delivery},
                     session,
                 )
 
@@ -680,6 +683,11 @@ class AdapterHub:
                     get_logger(adapter_id).warning(
                         f"消息超过 24 小时仍未发出，已放弃：{brief(row['text'], 60)}"
                     )
+                elif is_feishu_session(row["scope"]) and (
+                    not self.current_feishu_delivery(row)
+                    or not isinstance(bot, Feishu) and bot is not None
+                ):
+                    row["status"] = "failed"
                 elif not bot or bot.status != "connected":
                     continue
                 elif isinstance(bot, Feishu):
@@ -723,6 +731,14 @@ class AdapterHub:
                 await self.store.put("outbox", row["id"], row, row["scope"])
             await asyncio.sleep(1)
 
+    def current_feishu_delivery(self, row: dict) -> bool:
+        batch_id = row.get("approval_batch")
+        return self.config.value.active_feishu_session(row["scope"]) is not None and (
+            not batch_id or (
+                self.permissions is not None and self.permissions.menu.batch_active(row["scope"], batch_id)
+            )
+        )
+
     async def flush_feishu(self, bot: Feishu, row: dict, kind: str, target: str) -> None:
         if not bot.can_deliver(kind, target) or row.get("meme"):
             row["status"] = "failed"
@@ -732,6 +748,10 @@ class AdapterHub:
         # receipt rather than repeating the message after Feishu's deduplication window.
         row["status"] = "uncertain"
         await self.store.put("outbox", row["id"], row, row["scope"])
+        if not self.current_feishu_delivery(row):
+            row["status"] = "failed"
+            await self.store.put("outbox", row["id"], row, row["scope"])
+            return
         try:
             receipt = await bot.send_text(kind, target, row["text"], row["id"])
         except FeishuSendError as exc:

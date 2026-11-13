@@ -5,6 +5,7 @@ import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { EmptyState } from "../components/EmptyState";
 import { Field } from "../components/FieldForm";
 import { PluginSettingsForm } from "../components/PluginSettingsForm";
+import { CONFIG_SNAPSHOT_KEY } from "../hooks/useConfigDraft";
 import type { PluginInfo } from "../api/types";
 import type { ConfigPageProps } from "./common";
 
@@ -112,7 +113,9 @@ export function PluginsPage({
       await act(async () => {
         const result = await work();
         queryClient.setQueryData(["plugins"], result);
-        const saved = await client.config();
+        const snapshot = await client.configSnapshot();
+        const saved = snapshot.settings;
+        queryClient.setQueryData(CONFIG_SNAPSHOT_KEY, snapshot);
         queryClient.setQueryData(["config"], saved);
         const draft = latest.current;
         setConfig({

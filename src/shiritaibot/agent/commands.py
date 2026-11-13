@@ -147,43 +147,35 @@ async def command(runtime, ctx, text):
                 args = argument.split()
                 if name == "mode":
                     args = ["mode", *args]
-                data = profile.model_dump()
                 if args == ["reset"]:
-                    async with permissions.policy_lock:
-                        settings = runtime.config.value.model_copy(deep=True)
-                        settings.policy.sessions.pop(ctx.session, None)
-                        await runtime.config.save(settings)
-                    profile = permissions.session_policy(ctx)
+                    profile = await permissions.set_session(ctx, lambda _: None)
                 else:
                     if len(args) != 2:
                         raise PublicError(
                             "用法：/tools 工具名 deny|manual|auto|allow|inherit；/tools mode agent|chat；/tools preset all_manual|safe_manual|safe_auto|full_access；/tools reset"
                         )
                     target, value = args
-                    if target == "mode" and value in {"agent", "chat"}:
-                        data["mode"] = value
-                    elif target == "preset" and value in {
-                        "all_manual",
-                        "safe_manual",
-                        "safe_auto",
-                        "full_access",
-                    }:
-                        data.update(preset=value, tools={})
-                    elif target in runtime.registry.tools and value in {
-                        "deny",
-                        "manual",
-                        "auto",
-                        "allow",
-                        "inherit",
-                    }:
-                        if value == "inherit":
-                            data["tools"].pop(target, None)
+
+                    def update(current: SessionPolicy) -> SessionPolicy:
+                        data = current.model_dump()
+                        if target == "mode" and value in {"agent", "chat"}:
+                            data["mode"] = value
+                        elif target == "preset" and value in {
+                            "all_manual", "safe_manual", "safe_auto", "full_access"
+                        }:
+                            data.update(preset=value, tools={})
+                        elif target in runtime.registry.tools and value in {
+                            "deny", "manual", "auto", "allow", "inherit"
+                        }:
+                            if value == "inherit":
+                                data["tools"].pop(target, None)
+                            else:
+                                data["tools"][target] = value
                         else:
-                            data["tools"][target] = value
-                    else:
-                        raise PublicError("工具、模式、预设或权限值无效。使用 /tools 查看工具。")
-                    profile = SessionPolicy.model_validate(data)
-                    await permissions.set_session(ctx, profile)
+                            raise PublicError("工具、模式、预设或权限值无效。使用 /tools 查看工具。")
+                        return SessionPolicy.model_validate(data)
+
+                    profile = await permissions.set_session(ctx, update)
             labels = {
                 "deny": "禁止使用",
                 "manual": "需要人工审批",
@@ -220,7 +212,7 @@ async def command(runtime, ctx, text):
                     raise PublicError("用法：/grants 撤销 工具名 [会话]")
                 answer = await permissions.revoke_grant(ctx, parts[0], parts[1] if len(parts) > 1 else "")
             else:
-                rows = await permissions.grant_rows()
+                rows = await permissions.grant_rows(ctx)
                 answer = (
                     "当前没有免问授权。"
                     if not rows
@@ -237,7 +229,9 @@ async def command(runtime, ctx, text):
         elif name in {"approve", "deny"}:
             if not argument:
                 raise PublicError(f"用法：/{name} 审批编号")
-            await runtime.registry.permissions.resolve(argument, name == "approve")
+            await runtime.registry.permissions.resolve(
+                argument, name == "approve", approver=ctx
+            )
             answer = "审批已同意。" if name == "approve" else "审批已拒绝。"
         else:
             answer = "未知命令。输入 /help 查看支持的命令。"
