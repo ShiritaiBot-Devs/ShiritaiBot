@@ -4,6 +4,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 data/
+# Locally migrated plugins; maintained independently of the built-in plugins.
+data/plugins/srtb_plugin_chtnemc/
+data/plugins/srtb_plugin_chtnewiki/
 .env
 web/node_modules/
 web/dist/

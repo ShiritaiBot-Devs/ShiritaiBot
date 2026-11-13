@@ -40,6 +40,10 @@ class LoginLinkFormatter(DefaultFormatter):
 def _port_in_use(port: int, host: str = "127.0.0.1") -> bool:
     address = (host, port)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        if os.name == "posix":
+            # Match Uvicorn's listener so connections in TIME_WAIT after a
+            # restart do not look like another server is listening.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind(address)
             return False
