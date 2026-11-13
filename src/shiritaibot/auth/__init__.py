@@ -536,7 +536,11 @@ class Permissions:
             return False
         try:
             turn = uid()
-            await self.store.append(session, turn, {"role": "tool", "content": note})
+            await self.store.append(
+                session,
+                turn,
+                {"role": "user", "content": f"[系统备注] {note}", "_speaker": "system"},
+            )
             ctx = Context(session, "owner", "agent", owner=True, turn=turn)
             await self.memory.save_fact(ctx, content, note)
             return True
