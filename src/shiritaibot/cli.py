@@ -3,6 +3,7 @@ import os
 import socket
 import sys
 from copy import copy, deepcopy
+from errno import EADDRINUSE, ECONNREFUSED
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -37,9 +38,24 @@ class LoginLinkFormatter(DefaultFormatter):
 
 
 def _port_in_use(port: int, host: str = "127.0.0.1") -> bool:
+    address = (host, port)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         try:
-            sock.bind((host, port))
+            sock.bind(address)
+            return False
+        except OSError as exc:
+            if exc.errno != EADDRINUSE or os.name != "posix" or sys.platform == "cygwin":
+                return True
+
+        # Match the server's POSIX bind after shutdown. Check for a live listener
+        # first, since macOS may let a reuse bind overlap a wildcard listener.
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                probe.settimeout(0.2)
+                if probe.connect_ex(address) != ECONNREFUSED:
+                    return True
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(address)
         except OSError:
             return True
     return False

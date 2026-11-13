@@ -69,7 +69,9 @@ def test_feishu_qr_applies_once_and_protects_credentials(registration, tmp_path)
     assert sdk.options["domain"] == "https://accounts.feishu.cn"
     assert sdk.options["addons"] == {
         "preset": False,
-        "scopes": {"tenant": ["im:message.p2p_msg:readonly", "im:message:send_as_bot"]},
+        "scopes": {
+            "tenant": ["im:message.p2p_msg:readonly", "im:message:send_as_bot", "im:resource"]
+        },
         "events": {"items": {"tenant": ["im.message.receive_v1"]}},
     }
     endpoint = f"{QR_API}/{start['id']}"

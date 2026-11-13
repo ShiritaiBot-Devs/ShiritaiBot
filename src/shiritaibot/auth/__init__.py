@@ -14,12 +14,13 @@ from cryptography.fernet import Fernet
 from pydantic import Field, StrictBool
 
 from shiritaibot.auth.menu import QUICK_SECONDS, SENSITIVE_FILE, ApprovalMenu
-from shiritaibot.config import SessionPolicy, ToolPolicy
+from shiritaibot.config import ConfigRevisionConflict, SessionPolicy, ToolPolicy, is_feishu_session
 from shiritaibot.core import Context, Model, PublicError, Tool, canonical, fingerprint, now, uid
 from shiritaibot.core.logs import brief, describe_session, get_logger
 
 if TYPE_CHECKING:
     from shiritaibot.llm import ProviderManager
+    from shiritaibot.memory import MemoryManager
 
 log = get_logger("审批")
 # Environment variable names that hold credentials and get stored in the Vault.
@@ -132,9 +133,9 @@ class Permissions:
         self.config, self.store = config, store
         self.pending: dict[str, asyncio.Future] = {}
         self.resolve_lock = asyncio.Lock()
-        self.notify: Callable[[str], Awaitable[None]] | None = None
+        self.notify: Callable[..., Awaitable[None]] | None = None
         self.llm: ProviderManager | None = None
-        self.memory = None
+        self.memory: MemoryManager | None = None
         self.menu = ApprovalMenu(self)
         self.quick: dict[tuple[str, str], float] = {}
         self.policy_lock = asyncio.Lock()
@@ -151,7 +152,7 @@ class Permissions:
             if ctx.owner or ctx.session.startswith("web:")
             else policy.private_default
         )
-        if ctx.group and self.config.value.feishu_session(ctx.session) is not None:
+        if ctx.session.startswith("group:") and is_feishu_session(ctx.session):
             return result.model_copy(update={"mode": "chat"})
         return result
 
@@ -161,13 +162,31 @@ class Permissions:
             return replace(ctx, mode="agent", tool_policy=snapshot)
         return replace(ctx, mode=self.session_policy(ctx).mode)
 
-    async def set_session(self, ctx: Context, value: SessionPolicy) -> None:
+    async def set_session(
+        self,
+        ctx: Context,
+        value: SessionPolicy | Callable[[SessionPolicy], SessionPolicy | None],
+        *,
+        approver: Context | None = None,
+    ) -> SessionPolicy:
         if ctx.background:
             raise PublicError("Proactive Loop 只能配置新任务的默认权限")
         async with self.policy_lock:
-            settings = self.config.value.model_copy(deep=True)
-            settings.policy.sessions[ctx.session] = value
-            await self.config.save(settings)
+            while True:
+                version = self.config.version
+                settings = self.config.value.model_copy(deep=True)
+                if not settings.feishu_context_valid(approver or ctx):
+                    raise PublicError("飞书会话绑定已变更。")
+                update = value(self.session_policy(ctx)) if callable(value) else value
+                if update is None:
+                    settings.policy.sessions.pop(ctx.session, None)
+                else:
+                    settings.policy.sessions[ctx.session] = update
+                try:
+                    await self.config.save(settings, expected_version=version)
+                except ConfigRevisionConflict:
+                    continue
+                return self.session_policy(ctx)
 
     def tool_policy(self, ctx: Context) -> ToolPolicy:
         if ctx.background:
@@ -189,6 +208,8 @@ class Permissions:
         return "allow" if tool.safe else "auto" if profile.preset == "safe_auto" else "manual"
 
     def decision(self, ctx: Context, tool: Tool) -> str:
+        if not self.config.value.feishu_context_valid(ctx):
+            return "deny"
         policy = self.config.value.policy
         if not ctx.background and self.session_policy(ctx).mode != "agent" and not tool.chat:
             return "deny"
@@ -391,11 +412,11 @@ class Permissions:
             "reason": "",
             "batch": "",
         }
-        await self.store.put("approval", key, body, ctx.session)
         where = describe_session(ctx.session)
-        log.log(f"等待主人审批 {key}：{tool.name}（{brief(args, 80)}）", where)
         try:
-            await self.menu.submit(ctx, tool, args, key, body["expires"])
+            await self.store.put("approval", key, body, ctx.session)
+            log.log(f"等待主人审批 {key}：{tool.name}（{brief(args, 80)}）", where)
+            await self.menu.submit(ctx, tool, args, key)
             async with asyncio.timeout(self.config.value.policy.approval_timeout):
                 approved = await future
             if not approved:
@@ -406,13 +427,10 @@ class Permissions:
                 raise PublicError("审批期间权限已变更，未执行")
         except TimeoutError:
             log.warning(f"审批 {key} 超时，{tool.name} 未执行", where)
-            body["status"] = "expired"
-            await self.store.put("approval", key, body, ctx.session)
-            self.menu.settled(key)
+            await self._end_waiting(key, "expired")
             raise PublicError("审批超时，未执行") from None
         except asyncio.CancelledError:
-            body["status"] = "cancelled"
-            await self.store.put("approval", key, body, ctx.session)
+            await self._end_waiting(key, "cancelled")
             raise
         finally:
             self.pending.pop(key, None)
@@ -428,8 +446,11 @@ class Permissions:
             return False
         return True
 
-    async def grant_quick(self, session: str, tool: str, args: dict) -> None:
-        self.quick[(session, tool)] = time.monotonic() + QUICK_SECONDS
+    async def grant_quick(self, session: str, tool: str, *, menu_target: str) -> None:
+        async with self.config.lock:
+            if not self.approval_target_current(menu_target):
+                raise PublicError("审批菜单已失效。")
+            self.quick[(session, tool)] = time.monotonic() + QUICK_SECONDS
         for row in await self.store.list("approval", scope=session):
             if row.get("status") != "pending" or row.get("tool") != tool:
                 continue
@@ -441,11 +462,19 @@ class Permissions:
             except PublicError:
                 continue
 
-    async def grant_permanent(self, session: str, tool: str, risk: str, reason: str) -> str:
+    async def grant_permanent(
+        self, session: str, tool: str, risk: str, reason: str, *, menu_target: str
+    ) -> str:
         ctx = Context(session, "owner", "agent", owner=True)
-        profile = self.session_policy(ctx).model_copy(deep=True)
-        profile.tools[tool] = "allow"
-        await self.set_session(ctx, profile)
+
+        def grant(profile: SessionPolicy) -> SessionPolicy:
+            if not self.approval_target_current(menu_target):
+                raise PublicError("审批菜单已失效。")
+            updated = profile.model_copy(deep=True)
+            updated.tools[tool] = "allow"
+            return updated
+
+        await self.set_session(ctx, grant)
         await self.store.put(
             "approval_grant",
             f"{session}|{tool}",
@@ -467,21 +496,31 @@ class Permissions:
         tail = "，已记入长期记忆" if saved else "（记忆没写成，当前配置仍然生效）"
         return f"以后 {tool} 都同意{tail}"
 
-    async def grant_rows(self, session: str = "") -> list[dict]:
-        return await self.store.list("approval_grant", scope=session or None)
+    async def grant_rows(self, approver: Context) -> list[dict]:
+        scope = approver.session if is_feishu_session(approver.session) else None
+        return [
+            row
+            for row in await self.store.list("approval_grant", scope=scope)
+            if self.can_review(row["scope"], approver)
+        ]
 
     async def revoke_grant(self, ctx: Context, tool: str, session: str = "") -> str:
         target = session or ctx.session
-        if not re.fullmatch(r"[A-Za-z0-9_]+:[^|\s]+", target):
+        if not re.fullmatch(r"[A-Za-z0-9_]+:[^|\s]+", target) or not self.can_review(target, ctx):
             raise PublicError("会话标识无效。")
         row = await self.store.get("approval_grant", f"{target}|{tool}")
         if row is None:
             raise PublicError(f"{target} 没有 {tool} 的免问授权。")
-        target_ctx = Context(target, "owner", "agent", owner=True)
-        profile = self.session_policy(target_ctx).model_copy(deep=True)
-        if profile.tools.get(tool) == "allow":
-            profile.tools[tool] = "manual"
-            await self.set_session(target_ctx, profile)
+        target_ctx = ctx if target == ctx.session else Context(target, "owner", "agent", owner=True)
+
+        def revoke(profile: SessionPolicy) -> SessionPolicy:
+            updated = profile.model_copy(deep=True)
+            if updated.tools.get(tool) == "allow":
+                updated.tools[tool] = "manual"
+            return updated
+
+        if self.session_policy(target_ctx).tools.get(tool) == "allow":
+            await self.set_session(target_ctx, revoke, approver=ctx)
         await self.store.delete("approval_grant", f"{target}|{tool}")
         self.quick.pop((target, tool), None)
         await self.remember(
@@ -505,40 +544,90 @@ class Permissions:
             log.warning(f"免问授权的记忆写入失败：{note}", describe_session(session))
             return False
 
-    async def latest_pending(self, session: str) -> dict | None:
-        """Newest human approval still waiting, preferring the session the reply came from."""
-        rows = [
+    def approval_target(self, ctx: Context | None = None) -> str:
+        settings = self.config.value
+        if ctx is not None and is_feishu_session(ctx.session):
+            if ctx.owner and not ctx.group and not ctx.background and settings.feishu_context_valid(ctx):
+                return ctx.session
+            return ""  # Feishu approvals without a current owner session stay in WebUI.
+        return next(
+            (
+                adapter.owner_session()
+                for adapter in settings.adapters
+                if adapter.type == "onebot11" and adapter.enabled and adapter.owner_id
+            ),
+            "web:owner",
+        )
+
+    def approval_target_current(self, target: str) -> bool:
+        if is_feishu_session(target):
+            return target.startswith("private:") and (
+                self.config.value.active_feishu_session(target) is not None
+            )
+        return target == self.approval_target()
+
+    def can_review(self, scope: str, approver: Context | None) -> bool:
+        if approver is None:
+            return True  # Authenticated WebUI approval API.
+        if not approver.owner or approver.group or approver.background:
+            return False
+        if is_feishu_session(approver.session):
+            return scope == approver.session and self.config.value.feishu_context_valid(approver)
+        return approver.session.startswith("web:") or not is_feishu_session(scope)
+
+    def is_waiting(self, row: dict | None) -> bool:
+        return bool(
             row
-            for row in await self.store.list("approval")
-            if row.get("status") == "pending" and row.get("reviewer") != "model"
-        ]
-        for row in rows:
-            if row.get("scope") == session:
-                return row
-        return rows[0] if rows else None
+            and row["status"] == "pending"
+            and row.get("reviewer") != "model"
+            and row["expires"] >= now().timestamp()
+            and (future := self.pending.get(row["id"]))
+            and not future.done()
+        )
 
-    async def resolve_latest(self, session: str, allow: bool) -> dict:
-        row = await self.latest_pending(session)
-        if row is None:
-            raise PublicError("没有待处理的审批")
-        await self.resolve(row["id"], allow)
-        return row
-
-    async def resolve(self, key: str, allow: bool) -> None:
+    async def _end_waiting(self, key: str, status: str) -> None:
         async with self.resolve_lock:
-            await self._resolve(key, allow)
+            row = await self.store.get("approval", key)
+            if row and row["status"] in {"pending", "cancelled"}:
+                row["status"] = status
+                await self.store.put("approval", key, row, row["scope"])
+        self.menu.settled(key)
 
-    async def _resolve(self, key: str, allow: bool) -> None:
+    async def resolve_latest(self, approver: Context, allow: bool) -> dict:
+        async with self.resolve_lock, self.config.lock:
+            rows = [
+                row
+                for row in await self.store.list("approval")
+                if self.is_waiting(row) and self.can_review(row["scope"], approver)
+            ]
+            if not rows:
+                raise PublicError("没有待处理的审批")
+            row = next((row for row in rows if row["scope"] == approver.session), rows[0])
+            return await self._resolve(row["id"], allow, approver, None)
+
+    async def resolve(
+        self,
+        key: str,
+        allow: bool,
+        *,
+        approver: Context | None = None,
+        menu_target: str | None = None,
+    ) -> None:
+        # Serialize the identity check and decision with live config saves.
+        async with self.resolve_lock, self.config.lock:
+            await self._resolve(key, allow, approver, menu_target)
+
+    async def _resolve(
+        self, key: str, allow: bool, approver: Context | None, menu_target: str | None
+    ) -> dict:
         row = await self.store.get("approval", key)
-        future = self.pending.get(key)
         if (
-            not row
-            or row["status"] != "pending"
-            or not future
-            or future.done()
-            or row["expires"] < now().timestamp()
+            not self.is_waiting(row)
+            or not self.can_review(row["scope"], approver)
+            or (menu_target is not None and not self.approval_target_current(menu_target))
         ):
             raise PublicError("审批不存在、已处理或已过期")
+        future = self.pending[key]
         row["status"] = "approved" if allow else "denied"
         await self.store.put("approval", key, row, row["scope"])
         if future.done():
@@ -547,3 +636,4 @@ class Permissions:
             raise PublicError("审批等待已取消")
         future.set_result(allow)
         self.menu.settled(key)
+        return row

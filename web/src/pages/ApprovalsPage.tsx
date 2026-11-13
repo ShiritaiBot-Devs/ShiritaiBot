@@ -1,6 +1,6 @@
 import { LoadingBar } from "../components/LoadingBar";
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApprovalCard } from "../components/ApprovalCard";
 import { Pagination, PAGE_SIZE } from "../components/Pagination";
 import { EmptyState } from "../components/EmptyState";
@@ -8,8 +8,10 @@ import { Field } from "../components/FieldForm";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
 import { ScopeToolsField } from "../components/ScopeToolsField";
 import { POLICY_FIELDS } from "../config/schema";
-import { adapterSessionId } from "../lib/sessions";
+import { CONFIG_SNAPSHOT_KEY } from "../hooks/useConfigDraft";
+import { adapterSessionId, sessionGroups, sessionRole } from "../lib/sessions";
 import type {
+  ConfigSnapshot,
   PermissionPreset,
   SessionPolicy,
   ToolInfo,
@@ -30,6 +32,7 @@ const PERMISSIONS: Record<ToolPermission, string> = {
   auto: "模型自动审批",
   allow: "无需审批",
 };
+const MAIN_SESSION = /^(web|private|group):[^\s]{1,200}$/;
 type Target =
   | "session"
   | "owner_default"
@@ -47,25 +50,49 @@ function inherited(policy: ToolPolicy, tool?: ToolInfo): ToolPermission {
       : "manual";
 }
 
+function effectivePermission(tool: ToolInfo) {
+  if (tool.decision === "approve") return PERMISSIONS.manual;
+  if (tool.decision === "deny" && tool.permission !== "deny") return "不可用";
+  return PERMISSIONS[tool.decision as ToolPermission] ?? "未知";
+}
+
 export function ApprovalsPage({
   client,
   config,
   setConfig,
   act,
-}: ConfigPageProps) {
+  saved,
+  initialSession = "web:owner",
+}: ConfigPageProps & { saved?: ConfigSnapshot; initialSession?: string }) {
   const [target, setTarget] = useState<Target>("session");
-  const [session, setSession] = useState("web:owner");
-  const [sessionInput, setSessionInput] = useState("web:owner");
+  const [session, setSession] = useState(
+    MAIN_SESSION.test(initialSession) ? initialSession : "web:owner",
+  );
+  const [sessionInput, setSessionInput] = useState(session);
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [toolPage, setToolPage] = useState(1);
   const [pendingPage, setPendingPage] = useState(1);
   const [reviewPage, setReviewPage] = useState(1);
+  const queryClient = useQueryClient();
+  const catalogSession = target === "session" ? session : "web:owner";
+  const revision = saved?.revision;
   const catalog = useQuery({
-    queryKey: ["tools"],
-    queryFn: () => client.tools(),
+    queryKey: ["tools", catalogSession, revision],
+    queryFn: () => client.tools(catalogSession),
     refetchInterval: 10000,
   });
+  const refreshingConfig = Boolean(
+    revision && catalog.data?.revision && catalog.data.revision !== revision,
+  );
+  useEffect(() => {
+    if (refreshingConfig)
+      void queryClient.invalidateQueries({ queryKey: CONFIG_SNAPSHOT_KEY });
+  }, [catalog.data?.revision, queryClient, refreshingConfig]);
+  const effective =
+    !catalog.isError && !refreshingConfig && catalog.data?.session === session
+      ? catalog.data
+      : undefined;
   const sessions = useQuery({
     queryKey: ["records", "session"],
     queryFn: () => client.records("session"),
@@ -85,13 +112,21 @@ export function ApprovalsPage({
   const pending = approvals.data?.items ?? [];
   const reviews = history.data?.items ?? [];
   const policy = config.policy;
+  const savedConfig = saved?.settings ?? config;
+  const dirtyPolicy =
+    JSON.stringify(policy) !== JSON.stringify(savedConfig.policy);
   const row = sessions.data?.find((row) => row.id === session);
+  const role = sessionRole(session);
   const owner =
-    session.startsWith("web:") ||
-    row?.owner ||
-    config.adapters.some(
-      (a) => session === adapterSessionId(a, "private", a.owner_id),
-    );
+    role === "feishu-private" && effective
+      ? effective.active !== false
+      : session.startsWith("web:") ||
+        row?.owner ||
+        savedConfig.adapters.some(
+          (a) =>
+            a.owner_id &&
+            session === adapterSessionId(a, "private", a.owner_id),
+        );
   const fallback = session.startsWith("group:")
     ? policy.group_default
     : owner
@@ -101,20 +136,34 @@ export function ApprovalsPage({
     target === "session"
       ? (policy.sessions[session] ?? fallback)
       : policy[target];
-  const mode =
-    target === "proactive_default" ? "agent" : (profile as SessionPolicy).mode;
-  const knownSessions = [
-    ...new Set([
-      "web:owner",
-      ...Object.keys(policy.sessions),
-      ...(sessions.data ?? [])
-        .filter(
-          (row) => !row.background && /^(web|private|group):/.test(row.id),
-        )
-        .map((row) => row.id),
-    ]),
-  ].sort();
-  const tools = catalog.data?.tools ?? [];
+  const forcedChat = target === "session" && role === "feishu-group";
+  const mode = forcedChat
+    ? "chat"
+    : target === "proactive_default"
+      ? "agent"
+      : (profile as SessionPolicy).mode;
+  const configuredFeishuSessions = savedConfig.adapters
+    .filter((a) => a.type === "feishu" && a.enabled && a.app_id)
+    .flatMap((a) => [
+      ...(a.owner_id ? [adapterSessionId(a, "private", a.owner_id)] : []),
+      ...a.groups.map((group) => adapterSessionId(a, "group", group)),
+    ]);
+  const knownSessions = sessionGroups(
+    [
+      ...new Set([
+        "web:owner",
+        session,
+        ...Object.keys(savedConfig.policy.sessions),
+        ...Object.keys(policy.sessions),
+        ...configuredFeishuSessions,
+        ...(sessions.data ?? [])
+          .filter((row) => !row.background)
+          .map((row) => row.id),
+      ]),
+    ].filter((id) => MAIN_SESSION.test(id)),
+    {},
+  );
+  const tools = (refreshingConfig ? undefined : catalog.data?.tools) ?? [];
   const toolNames = [
     ...new Set([
       ...tools.map((tool) => tool.name),
@@ -146,11 +195,19 @@ export function ApprovalsPage({
               ...policy,
               sessions: {
                 ...policy.sessions,
-                [session]: next as SessionPolicy,
+                [session]: forcedChat
+                  ? { ...next, mode: "chat" }
+                  : (next as SessionPolicy),
               },
             }
           : { ...policy, [target]: next },
     });
+  }
+
+  function selectSession(id: string) {
+    setSession(id);
+    setSessionInput(id);
+    setToolPage(1);
   }
 
   async function resolve(id: string, allow: boolean) {
@@ -169,10 +226,7 @@ export function ApprovalsPage({
     <>
       <section className="panel">
         <h2>工具可用性</h2>
-        <p className="muted">
-          每个 Main 会话都可选择 Chat 或 Agent。Chat 仅对话；Agent
-          按下方权限调用工具，包括 Shell。配置通过底部保存条保存。
-        </p>
+        <p className="muted">选择会话，查看当前可用的工具和审批方式。</p>
         <div className="field-grid">
           <label className="field">
             配置范围
@@ -191,35 +245,31 @@ export function ApprovalsPage({
             </select>
           </label>
           {target === "session" && (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                setSession(sessionInput.trim());
-              }}
-            >
-              <label className="field">
-                Main 会话 ID
-                <input
-                  list="main-sessions"
-                  value={sessionInput}
-                  pattern="(web|private|group):[^\s]{1,200}"
-                  required
-                  onChange={(event) => setSessionInput(event.target.value)}
-                />
-                <datalist id="main-sessions">
-                  {knownSessions.map((id) => (
-                    <option key={id} value={id} />
-                  ))}
-                </datalist>
-              </label>
-              <button type="submit">选择会话</button>
-            </form>
+            <label className="field">
+              会话
+              <select
+                value={session}
+                onChange={(event) => selectSession(event.target.value)}
+              >
+                {knownSessions.map((group) => (
+                  <optgroup key={group.key} label={group.label}>
+                    {group.items.map(({ id, title }) => (
+                      <option key={id} value={id}>
+                        {title}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
           )}
           {target !== "proactive_default" && (
             <label className="field">
               会话模式
               <select
+                aria-label="会话模式"
                 value={mode}
+                disabled={forcedChat}
                 onChange={(event) =>
                   update({
                     ...profile,
@@ -230,6 +280,7 @@ export function ApprovalsPage({
                 <option value="chat">Chat · 基础对话</option>
                 <option value="agent">Agent · 允许工具调用</option>
               </select>
+              {forcedChat && <small>飞书群聊固定使用 Chat。</small>}
             </label>
           )}
           <label className="field">
@@ -254,30 +305,63 @@ export function ApprovalsPage({
             <small>切换预设会清除当前范围的逐工具覆盖。</small>
           </label>
         </div>
+        {dirtyPolicy && (
+          <p className="muted" role="status">
+            权限修改待保存
+          </p>
+        )}
         {target === "session" && (
-          <div className="actions">
-            <span className="muted">
-              {session} ·{" "}
-              {policy.sessions[session]
-                ? "已单独配置，作为该会话的默认策略"
-                : "继承默认策略"}
-            </span>
-            {policy.sessions[session] && (
-              <button
-                type="button"
-                onClick={() => {
-                  const next = { ...policy.sessions };
-                  delete next[session];
-                  setConfig({
-                    ...config,
-                    policy: { ...policy, sessions: next },
-                  });
+          <>
+            <div className="actions">
+              {effective && (
+                <span className="muted">
+                  {effective.active === false
+                    ? "历史飞书会话 · 当前未启用"
+                    : `已生效：${effective.policy.mode === "agent" ? "Agent" : "Chat"} · ${
+                        effective.source === "session"
+                          ? "会话单独配置"
+                          : "继承默认策略"
+                      }`}
+                </span>
+              )}
+              {policy.sessions[session] && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = { ...policy.sessions };
+                    delete next[session];
+                    setConfig({
+                      ...config,
+                      policy: { ...policy, sessions: next },
+                    });
+                  }}
+                >
+                  恢复继承默认
+                </button>
+              )}
+            </div>
+            <details>
+              <summary>按会话 ID 查找</summary>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const id = sessionInput.trim();
+                  if (MAIN_SESSION.test(id)) selectSession(id);
                 }}
               >
-                恢复继承默认
-              </button>
-            )}
-          </div>
+                <label className="field">
+                  Main 会话 ID
+                  <input
+                    value={sessionInput}
+                    pattern="(web|private|group):[^\s]{1,200}"
+                    required
+                    onChange={(event) => setSessionInput(event.target.value)}
+                  />
+                </label>
+                <button type="submit">选择会话</button>
+              </form>
+            </details>
+          </>
         )}
         {target === "proactive_default" && (
           <p className="muted">
@@ -285,11 +369,9 @@ export function ApprovalsPage({
             使用此默认值，运行中的任务保留创建时的权限快照。人工审批会发送给主人，并等待审批或超时。
           </p>
         )}
-        {mode === "chat" && (
+        {mode === "chat" && !forcedChat && target !== "session" && (
           <p className="muted">
-            当前为 Chat
-            模式，仅基础对话工具（如时间、网页搜索、群聊上下文查询）按下方权限可用；其余扩展工具在切换为
-            Agent 后使用。
+            Chat 模式只开放基础对话工具，例如时间、网页搜索和群聊上下文查询。
           </p>
         )}
         {catalog.error && (
@@ -334,11 +416,19 @@ export function ApprovalsPage({
                     {tool?.description ??
                       "插件未加载，保留的权限配置将在工具重新注册后使用。"}
                   </p>
-                  <small className="muted">
-                    {!tool || (mode === "chat" && !tool.chat)
-                      ? "当前不可用"
-                      : `权限：${PERMISSIONS[permission]}`}
-                  </small>
+                  {target === "session" ? (
+                    effective && (
+                      <small className="muted">
+                        已生效：{tool ? effectivePermission(tool) : "不可用"}
+                      </small>
+                    )
+                  ) : (
+                    <small className="muted">
+                      {!tool || (mode === "chat" && !tool.chat)
+                        ? "此模式下不可用"
+                        : `配置权限：${PERMISSIONS[permission]}`}
+                    </small>
+                  )}
                 </div>
                 <label className="field">
                   {name} 权限
@@ -364,10 +454,13 @@ export function ApprovalsPage({
               </article>
             );
           })}
-          {catalog.isPending && <LoadingBar label="读取工具权限" />}
-          {!catalog.isPending && !toolNames.length && (
-            <EmptyState text="尚无已注册工具。" />
+          {(catalog.isPending || refreshingConfig) && (
+            <LoadingBar label="读取工具权限" />
           )}
+          {!catalog.isPending &&
+            !catalog.isError &&
+            !refreshingConfig &&
+            !toolNames.length && <EmptyState text="尚无已注册工具。" />}
           {!catalog.isPending &&
             toolNames.length > 0 &&
             !filteredTools.length && <EmptyState text="没有匹配的工具。" />}

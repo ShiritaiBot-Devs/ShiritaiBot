@@ -23,7 +23,7 @@ async def configure(app, profile):
             type="feishu",
             app_id="cli_test",
             owner_id="ou_owner",
-            enabled=False,
+            enabled=True,
             memory_profile=profile,
         )
     ]

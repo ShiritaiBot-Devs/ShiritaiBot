@@ -319,6 +319,8 @@ function ConsoleApp() {
             client={api}
             act={act}
             assistantName={draft.config.assistant_name}
+            session={session}
+            onSelectSession={setSession}
           />
         );
       case "events":
@@ -346,7 +348,13 @@ function ConsoleApp() {
       case "mcp":
         return <McpPage {...configProps} />;
       case "approvals":
-        return <ApprovalsPage {...configProps} />;
+        return (
+          <ApprovalsPage
+            {...configProps}
+            saved={draft.saved}
+            initialSession={session}
+          />
+        );
       case "settings":
         return <SettingsPage {...configProps} />;
       default:

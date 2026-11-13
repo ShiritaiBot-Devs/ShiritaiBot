@@ -150,6 +150,66 @@ async def test_transport_schedules_messages_on_app_loop_and_disconnects(monkeypa
     assert transport.status == "disconnected"
 
 
+@pytest.mark.parametrize("outcome", ["sent", "upload_denied", "disconnected", "unconfirmed"])
+async def test_attachment_upload_and_send_use_real_sdk_requests(monkeypatch, outcome):
+    channel = sdk_channel.FeishuChannel(
+        app_id="cli_test",
+        app_secret="fixture-secret",
+        outbound=feishu.OutboundConfig(retry=feishu.RetryConfig(max_attempts=1)),
+    )
+    monkeypatch.setattr(
+        channel, "connection_snapshot", lambda: SimpleNamespace(ready=True, state="connected")
+    )
+    transport = feishu.FeishuTransport("cli_test", "fixture-secret", "feishu", AsyncMock())
+    transport._channel = channel
+    content = "# 交付说明\n".encode()
+    name = "交付说明.md"
+
+    async def upload(request):
+        assert request.uri == "/open-apis/im/v1/files"
+        assert request.body.file_type == "stream"
+        assert request.body.file_name == name
+        assert request.body.file.read() == content
+        if outcome == "upload_denied":
+            return SimpleNamespace(code=99991672, msg="fixture-secret", data=None)
+        if outcome == "disconnected":
+            transport._channel = None
+        return SimpleNamespace(code=0, data={"file_key": "file_v3_attachment"})
+
+    async def send(request):
+        assert upload_request.await_count == 1
+        assert request.uri == "/open-apis/im/v1/messages"
+        assert request.receive_id_type == "open_id"
+        assert request.body.receive_id == "ou_owner"
+        assert request.body.msg_type == "file"
+        assert json.loads(request.body.content) == {"file_key": "file_v3_attachment"}
+        assert request.body.uuid
+        if outcome == "unconfirmed":
+            raise httpx.ReadTimeout("fixture-secret")
+        return SimpleNamespace(code=0, data={"message_id": "om_attachment"})
+
+    upload_request = AsyncMock(side_effect=upload)
+    send_request = AsyncMock(side_effect=send)
+    monkeypatch.setattr(channel.client.im.v1.file, "acreate", upload_request)
+    monkeypatch.setattr(channel.client.im.v1.message, "acreate", send_request)
+
+    if outcome == "sent":
+        assert await transport.send_file(name, content, open_id="ou_owner") == {
+            "message_id": "om_attachment"
+        }
+    else:
+        with pytest.raises(feishu.FeishuSendError) as raised:
+            await transport.send_file(name, content, open_id="ou_owner")
+        assert raised.value.uncertain == (outcome == "unconfirmed")
+        assert "fixture-secret" not in str(raised.value)
+
+    upload_request.assert_awaited_once()
+    if outcome in {"sent", "unconfirmed"}:
+        send_request.assert_awaited_once()
+    else:
+        send_request.assert_not_awaited()
+
+
 async def test_sdk_websocket_closes_on_reload_and_during_startup(monkeypatch):
     app_loop = asyncio.get_running_loop()
     connecting = asyncio.Event()
@@ -216,6 +276,7 @@ async def test_sdk_websocket_closes_on_reload_and_during_startup(monkeypatch):
     monkeypatch.setattr(
         sdk_channel, "fetch_bot_identity", AsyncMock(return_value=BotIdentity("ou_bot"))
     )
+
     def endpoint(client, **kwargs):
         client._reconnect_nonce = 0
         return "wss://example.invalid/ws?device_id=1&service_id=3&ticket=mock"

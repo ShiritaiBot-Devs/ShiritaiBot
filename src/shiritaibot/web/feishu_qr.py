@@ -14,7 +14,7 @@ import httpx
 from fastapi import HTTPException
 from pydantic import Field
 
-from shiritaibot.adapters.feishu_transport import DOMAINS, MESSAGE_EVENT
+from shiritaibot.adapters.feishu_transport import DOMAINS, FILE_SCOPE, MESSAGE_EVENT
 from shiritaibot.app import Application, FeishuAdapterConflict
 from shiritaibot.config import AdapterConfig
 from shiritaibot.core import Model
@@ -197,7 +197,11 @@ class FeishuQrRegistration:
                         addons={
                             "preset": False,
                             "scopes": {
-                                "tenant": ["im:message.p2p_msg:readonly", "im:message:send_as_bot"]
+                                "tenant": [
+                                    "im:message.p2p_msg:readonly",
+                                    "im:message:send_as_bot",
+                                    FILE_SCOPE,
+                                ]
                             },
                             "events": {"items": {"tenant": [MESSAGE_EVENT]}},
                         },

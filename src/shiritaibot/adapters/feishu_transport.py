@@ -17,8 +17,10 @@ import lark_channel
 from lark_channel import (
     ChannelConfig,
     FeishuChannel,
+    FeishuChannelError,
     InboundConfig,
     LogLevel,
+    MediaSource,
     NameCacheConfig,
     OutboundConfig,
     PolicyConfig,
@@ -36,6 +38,7 @@ DOMAINS = {
 }
 MESSAGE_EVENT = "im.message.receive_v1"
 GROUP_SCOPE = "im:message.group_msg"
+FILE_SCOPE = "im:resource"
 TEXT_CHUNK_LIMIT = 3500
 MENTION = re.compile(r"@_user_\d+|@_all")
 TOKEN_FAILURES = {
@@ -314,17 +317,52 @@ class FeishuTransport:
             raise ValueError("飞书发送需要一个目标和非空文本")
         if len(text) > TEXT_CHUNK_LIMIT:
             raise FeishuSendError("text_too_long", uncertain=False)
+        return await self._send(
+            self._connected_channel(),
+            chat_id or open_id,
+            "chat_id" if chat_id else "open_id",
+            {"text": text},
+            request_id,
+        )
+
+    async def send_file(self, name: str, data: bytes, *, open_id: str) -> dict:
+        channel = self._connected_channel()
+        try:
+            file_key = await channel.upload_media(
+                MediaSource(kind="buffer", buffer=data),
+                kind="file",
+                file_name=name,
+                file_type="stream",
+            )
+        except FeishuChannelError as exc:
+            code = exc.context.get("raw_code")
+            raise FeishuSendError(
+                code if type(code) is int and code != 0 else "upload_failed", uncertain=False
+            ) from None
+        if self._connected_channel() is not channel:
+            raise FeishuSendError("not_connected", uncertain=False)
+        file = {"file": {"source": MediaSource(kind="key", key=file_key)}}
+        return await self._send(channel, open_id, "open_id", file)
+
+    def _connected_channel(self) -> FeishuChannel:
         channel = self._channel
         if channel is None or self.status != "connected":
             raise FeishuSendError("not_connected", uncertain=False)
+        return channel
+
+    @staticmethod
+    async def _send(
+        channel: FeishuChannel,
+        recipient: str,
+        receive_id_type: Literal["chat_id", "open_id"],
+        message: dict,
+        request_id: str = "",
+    ) -> dict:
         try:
             result = await channel.send(
-                chat_id or open_id,
-                {"text": text},
-                {
-                    "receive_id_type": "chat_id" if chat_id else "open_id",
-                    "uuid": request_id or uuid4().hex,
-                },
+                recipient,
+                message,
+                {"receive_id_type": receive_id_type, "uuid": request_id or uuid4().hex},
             )
         except Exception:
             raise FeishuSendError("unconfirmed", uncertain=True) from None

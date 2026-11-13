@@ -384,6 +384,9 @@ export interface ToolCatalog {
   policy: SessionPolicy;
   source: "session" | "default";
   tools: ToolInfo[];
+  revision?: string;
+  platform?: "feishu" | "web" | "qq";
+  active?: boolean;
 }
 
 export interface Policy {
@@ -736,6 +739,11 @@ export interface ConfigSaveResult {
   ok: boolean;
   version: number;
   warnings?: string[];
+}
+
+export interface ConfigSnapshot {
+  settings: Settings;
+  revision?: string;
 }
 
 export interface DiagnosticsResult {

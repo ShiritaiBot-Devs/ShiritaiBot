@@ -538,10 +538,11 @@ async def test_sensitive_shell_stays_manual_even_when_policy_allows(app, monkeyp
 
 async def test_chat_number_menu_reply_routes_to_menu(app, monkeypatch):
     import shiritaibot.auth.menu as menu
+    from shiritaibot.config import AdapterConfig
 
     monkeypatch.setattr(menu, "WINDOW", 0.5)
     monkeypatch.setattr(menu, "REASON_BUDGET", 0.05)
-    app.permissions.menu.target = "private:qq:1"
+    app.config.value.adapters = [AdapterConfig(id="qq", owner_id="1")]
     effects = []
 
     async def handler(ctx, args):

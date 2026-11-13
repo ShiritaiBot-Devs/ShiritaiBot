@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from shiritaibot.agent.commands import command
 from shiritaibot.agent.context import ContextManager, context_chars
 from shiritaibot.api.event import AgentResult, LLMRequest, LLMResponse, Turn
+from shiritaibot.config import is_feishu_session
 from shiritaibot.core import Context, PublicError, canonical, fingerprint, now, uid
 from shiritaibot.core.logs import Logger, brief, describe_session, get_logger
 from shiritaibot.meme.inject import meme_prompt
@@ -370,6 +371,8 @@ class AgentRuntime:
             return await self._submit(ctx, text)
 
     async def _submit(self, ctx: Context, text: str) -> str:
+        if not self.config.value.feishu_context_valid(ctx):
+            return "ignored"
         ctx = self.registry.permissions.context(ctx)
         if not ctx.interject:
             # An interject turn observes; it must not rewrite the session's mode/profile.
@@ -386,6 +389,8 @@ class AgentRuntime:
                     "memory_profile": ctx.memory_profile,
                 },
             )
+            if not self.config.value.feishu_context_valid(ctx):
+                return "ignored"
         if text.strip().startswith("/"):
             loop_logger(ctx).log(f"{'主人' if ctx.owner else ctx.actor} 执行指令 {brief(text, 80)}")
             return await command(self, ctx, text)
@@ -407,6 +412,18 @@ class AgentRuntime:
         if actor.current is not None and not actor.current.done():
             return True
         return bool(actor.buffered or not actor.queue.empty())
+
+    async def cancel_stale_feishu_sessions(self) -> None:
+        cfg = self.config.value
+        stale = [
+            actor.task
+            for session, actor in self.actors.items()
+            if is_feishu_session(session) and cfg.active_feishu_session(session) is None
+        ]
+        for task in stale:
+            task.cancel()
+        if stale:
+            await asyncio.gather(*stale, return_exceptions=True)
 
     async def close(self) -> None:
         for actor in self.actors.values():
@@ -534,6 +551,8 @@ class AgentRuntime:
             await self._turn(actor, ctx, text)
 
     async def _turn(self, actor: SessionActor, ctx: Context, text: str) -> None:
+        if not self.config.value.feishu_context_valid(ctx):
+            return
         ctx = replace(self.registry.permissions.context(ctx), turn=uid())
         append = partial(
             self.store.append, ctx.session, ctx.turn, memory_profile=ctx.memory_profile
@@ -547,13 +566,17 @@ class AgentRuntime:
             selected_persona.get("persona", "") if selected_persona else "",
             owner=ctx.owner,
         )
-        if (
-            not ctx.background
-            and ctx.session.startswith(("private:", "group:"))
-            and cfg.feishu_session(ctx.session) is None
-        ):
-            # Only QQ sends stickers; the block is config-only, so it stays cache-stable.
-            system += meme_prompt(cfg)
+        if not ctx.background and ctx.session.startswith(("private:", "group:")):
+            if not is_feishu_session(ctx.session):
+                system += meme_prompt(cfg)
+            else:
+                system += "\n当前会话在飞书。直接输出的文字会回复到本会话。"
+                file_tool = self.registry.tools.get("feishu_file_send")
+                if file_tool and self.registry.permissions.decision(ctx, file_tool) != "deny":
+                    system += (
+                        "用户要求把当前会话的文件发给他时，用 feishu_file_send 发附件。"
+                        "收到成功回执后再确认已发。若飞书未确认送达，先请用户查看附件，避免重复发送。"
+                    )
         if ctx.interject:
             system += (
                 "\n\n<interject>\n"

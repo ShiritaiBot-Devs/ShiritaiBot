@@ -5,12 +5,14 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from test_feishu import Transport, incoming
 from test_permissions import eventually
 from websockets.asyncio.server import serve
 
+from shiritaibot.adapters import feishu
 from shiritaibot.adapters.onebot11 import OneBot, segments
 from shiritaibot.config import AdapterConfig, SubagentConfig
-from shiritaibot.core import Context, Reply
+from shiritaibot.core import Context, Reply, session_dir
 from shiritaibot.core.process import run_process
 from shiritaibot.subagent import command_for
 from shiritaibot.web import create_app
@@ -219,6 +221,12 @@ def test_http_auth_crud_and_validation(tmp_path):
             client.post("/api/routines", json={"kind": "todo", "title": "WS test"})
             assert ws.receive_json()["kind"] == "routine"
 
+            async def unsubscribed():
+                return not client.app.state.runtime.bus.subscribers
+
+            ws.close(1012)
+            client.portal.call(eventually, unsubscribed, 1)
+
 
 async def test_qq_file_reference_cannot_cross_session(app):
     app.config.value.policy.owner_default.tools["qq_file_download"] = "allow"
@@ -277,3 +285,110 @@ def test_tool_catalog_and_session_policy_api(tmp_path):
         assert client.put("/api/config", json=cfg).status_code == 422
         cfg["policy"]["sessions"] = {"background:x": {"mode": "agent"}}
         assert client.put("/api/config", json=cfg).status_code == 422
+
+
+def test_feishu_tool_policy_saved_from_console_applies_to_next_private_message(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(feishu, "FeishuTransport", Transport)
+    api = create_app(tmp_path, token="test-token")
+    session = "private:work:feishu.cli_example/ou_owner"
+    group = "group:work:feishu.cli_example/oc_group"
+    auth = {"Authorization": "Bearer test-token"}
+    with TestClient(api, headers=auth) as client:
+        initial = client.get("/api/config")
+        config = initial.json()
+        config["adapters"] = [
+            {
+                "id": "work",
+                "type": "feishu",
+                "app_id": "cli_example",
+                "app_secret": "fixture-secret",
+                "owner_id": "ou_owner",
+                "groups": ["oc_group"],
+            }
+        ]
+        config["policy"]["sessions"][group] = {
+            "mode": "agent",
+            "preset": "full_access",
+            "tools": {"shell": "allow"},
+        }
+        assert client.put(
+            "/api/config", json=config, headers={"If-Match": initial.headers["etag"]}
+        ).is_success
+        runtime = api.state.runtime
+
+        async def connected():
+            transport = runtime.adapters.instances["work"].transport
+            return transport if transport and transport.status == "connected" else None
+
+        transport = client.portal.call(eventually, connected)
+
+        def catalog(session_id):
+            response = client.get("/api/tools", params={"session": session_id})
+            assert response.is_success
+            data = response.json()
+            return response.headers["etag"], data, {tool["name"]: tool for tool in data["tools"]}
+
+        revision, selected, tools = catalog(session)
+        assert selected["platform"] == "feishu" and selected["active"]
+        assert selected["source"] == "default" and selected["policy"]["mode"] == "agent"
+        assert tools["feishu_file_send"]["decision"] == "approve"
+        _, group_policy, group_tools = catalog(group)
+        assert group_policy["policy"]["mode"] == "chat"
+        assert group_tools["shell"]["decision"] == "deny"
+        assert client.get("/api/records/session").json() == []
+
+        snapshot = client.get("/api/config")
+        assert snapshot.headers["etag"] == revision
+        policy = snapshot.json()
+        policy["policy"]["sessions"][session] = {
+            "mode": "agent",
+            "preset": "safe_manual",
+            "tools": {"feishu_file_send": "allow"},
+        }
+        headers = {"If-Match": revision}
+        assert client.put("/api/config", json=policy, headers=headers).is_success
+        assert client.put("/api/config", json=snapshot.json(), headers=headers).status_code == 412
+        saved_revision, saved, tools = catalog(session)
+        assert saved_revision != revision and saved["source"] == "session"
+        assert tools["feishu_file_send"]["decision"] == "allow"
+        assert tools["shell"]["decision"] == "approve"
+        assert catalog("web:owner")[2]["feishu_file_send"]["decision"] == "deny"
+
+        workspace = session_dir(runtime.home, "workspaces", session)
+        workspace.mkdir(parents=True)
+        (workspace / "file.txt").write_bytes(b"Feishu test")
+
+        async def complete(route, system, messages, tools, **kwargs):
+            if any(message["role"] == "tool" for message in messages):
+                return Reply(text="已发送")
+            assert "feishu_file_send" in {tool["function"]["name"] for tool in tools}
+            return Reply(
+                calls=[
+                    {
+                        "id": "send_file",
+                        "type": "function",
+                        "function": {
+                            "name": "feishu_file_send",
+                            "arguments": '{"path":"file.txt"}',
+                        },
+                    }
+                ]
+            )
+
+        monkeypatch.setattr(runtime.runtime.llm, "complete", complete)
+        client.portal.call(
+            transport.accept,
+            incoming(
+                "om_file_request", "把 file.txt 发给我", chat_type="p2p", sender_id="ou_owner"
+            ),
+        )
+
+        async def files_sent():
+            return transport.files
+
+        assert client.portal.call(eventually, files_sent, 5) == [
+            ("file.txt", b"Feishu test", "ou_owner")
+        ]
+        assert client.get("/api/records/approval").json() == []

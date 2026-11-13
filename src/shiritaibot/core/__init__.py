@@ -6,9 +6,13 @@ import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Awaitable, Callable, Literal, Protocol
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal, Protocol
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+
+if TYPE_CHECKING:
+    from shiritaibot.auth.menu import ApprovalMenu
 
 
 def now() -> datetime:
@@ -25,6 +29,10 @@ def canonical(value: Any) -> str:
 
 def fingerprint(value: Any) -> str:
     return hashlib.sha256(canonical(value).encode()).hexdigest()
+
+
+def session_dir(home: Path, kind: str, session: str) -> Path:
+    return home / kind / hashlib.sha256(session.encode()).hexdigest()[:24]
 
 
 class Model(BaseModel):
@@ -124,7 +132,13 @@ class RuntimePort(Protocol):
 
 
 class ApprovalPort(Protocol):
-    async def resolve(self, key: str, allow: bool) -> None: ...
+    menu: ApprovalMenu
+
+    async def resolve(
+        self, key: str, allow: bool, *, approver: Context | None = None
+    ) -> None: ...
+
+    async def resolve_latest(self, approver: Context, allow: bool) -> dict: ...
 
 
 class EventBus:

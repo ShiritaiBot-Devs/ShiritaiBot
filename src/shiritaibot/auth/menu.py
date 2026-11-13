@@ -5,7 +5,8 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from shiritaibot.core import Context, PublicError, Tool, canonical, now, uid
+from shiritaibot.config import is_feishu_session
+from shiritaibot.core import Context, PublicError, Tool, canonical, uid
 from shiritaibot.core.logs import brief
 
 if TYPE_CHECKING:
@@ -45,20 +46,74 @@ class Batch:
     requests: list[Request]
     stage: str = "list"
     settled: set[str] = field(default_factory=set)
-    shown: tuple[str, ...] = ()
+    shown: tuple[str | tuple[str, int], ...] = ()
 
 
 class ApprovalMenu:
-    """Collects pending human approvals into one numbered menu per chat."""
-
-    target: str = "web:owner"
+    """Routes approvals to separate numbered menus for each owner chat."""
 
     def __init__(self, permissions: Permissions):
         self.permissions = permissions
+        self.chats: dict[str, _ChatMenu] = {}
+
+    async def submit(self, ctx: Context, tool: Tool, args: dict, key: str) -> None:
+        target = self.permissions.approval_target(ctx)
+        if target:
+            chat = self.chats.get(target)
+            if chat is None:
+                chat = self.chats[target] = _ChatMenu(self.permissions, target)
+            chat.submit(ctx, tool, args, key)
+
+    def settled(self, key: str) -> None:
+        for chat in self.chats.values():
+            chat.settled(key)
+
+    def accepts(self, session: str, text: str) -> bool:
+        chat = self.chats.get(session)
+        return chat is not None and chat.accepts(text)
+
+    def batch_active(self, session: str, batch_id: str) -> bool:
+        chat = self.chats.get(session)
+        return bool(
+            chat and chat._current() and chat.batch and chat.batch.id == batch_id
+            and len(chat.batch.settled) < len(chat.batch.requests)
+        )
+
+    async def reply(
+        self, session: str, text: str, *, approver: Context | None = None
+    ) -> bool:
+        chat = self.chats.get(session)
+        if chat is None or (is_feishu_session(session) and (
+            approver is None
+            or approver.session != session
+            or not self.permissions.can_review(session, approver)
+        )):
+            return False
+        return await chat.reply(text, approver)
+
+    async def reconfigured(self) -> None:
+        stale = [target for target in self.chats if not self.permissions.approval_target_current(target)]
+        await self._close(stale)
+
+    async def close(self) -> None:
+        await self._close(list(self.chats))
+
+    async def _close(self, targets: list[str]) -> None:
+        chats = [self.chats.pop(target) for target in targets]
+        for chat in chats:
+            chat.closed = True
+        await asyncio.gather(*(chat.close() for chat in chats))
+
+
+class _ChatMenu:
+
+    def __init__(self, permissions: Permissions, target: str):
+        self.permissions = permissions
+        self.target = target
+        self.closed = False
         self.batch: Batch | None = None
         self.queue: list[Request] = []
         self.window: list[Request] = []
-        self.expires: dict[str, float] = {}
         self.tasks: set[asyncio.Task] = set()
         self.window_task: asyncio.Task | None = None
         self.refresh_lock = asyncio.Lock()
@@ -69,14 +124,14 @@ class ApprovalMenu:
         task.add_done_callback(self.tasks.discard)
         return task
 
-    async def _send(self, text: str) -> None:
-        if self.permissions.notify:
-            await self.permissions.notify(text)
+    async def _send(self, text: str, *, prompt: bool = False) -> None:
+        if self._current() and self.permissions.notify:
+            batch_id = self.batch.id if prompt and self.batch and is_feishu_session(self.target) else ""
+            await self.permissions.notify(text, session=self.target, batch_id=batch_id)
 
-    async def submit(self, ctx: Context, tool: Tool, args: dict, key: str, expires: float) -> None:
+    def submit(self, ctx: Context, tool: Tool, args: dict, key: str) -> None:
         req = Request(key=key, ctx=ctx, tool=tool, args=args)
         req.reason_task = self._spawn(self._describe(req))
-        self.expires[key] = expires
         if self.batch is not None:
             self.queue.append(req)
             return
@@ -118,79 +173,102 @@ class ApprovalMenu:
             return 1 <= number <= 2 * len(groups) + 1
         return 1 <= number <= 3
 
-    def accepts(self, session: str, text: str) -> bool:
-        return session == self.target and self._valid(self._option(text))
+    def _current(self) -> bool:
+        return not self.closed and self.permissions.approval_target_current(self.target)
 
-    async def reply(self, session: str, text: str) -> bool:
+    def accepts(self, text: str) -> bool:
+        return bool(self.batch and self.batch.shown and self._current() and self._valid(self._option(text)))
+
+    async def reply(self, text: str, approver: Context | None) -> bool:
         number = self._option(text)
-        if session != self.target or number is None:
+        batch = self.batch
+        if number is None or batch is None or not batch.shown:
             return False
         async with self.refresh_lock:
-            if self.batch is None or not self._valid(number):
+            if self.batch is not batch or not self._current() or not self._valid(number):
                 return False
             remaining = await self._sync()
+            if not self._current():
+                return False
             if not remaining:
                 await self._finish()
                 return True
-            if self.batch.stage == "single":
-                return await self._reply_single(remaining[0], number)
-            if self.batch.stage == "list":
-                if number in {1, 2}:
-                    await self._settle_all(remaining, number == 1)
+            if batch.stage == "single":
+                if batch.shown != (remaining[0].key,):
+                    await self._show_single(remaining)
                     return True
-                return await self._open_detail(remaining)
+                return await self._reply_single(remaining[0], number, approver)
+            if batch.stage == "list":
+                if number in {1, 2}:
+                    await self._settle_all(remaining, number == 1, approver)
+                    return True
+                return await self._open_detail(batch, remaining)
             # 过期条目会让分组重新编号；旧编号不能落到没展示过的分组上。
-            if self.batch.shown != self._signature(self._groups(remaining)):
+            if batch.shown != self._signature(self._groups(remaining)):
                 await self._show_detail(remaining)
                 return True
-            return await self._reply_detail(remaining, number)
+            return await self._reply_detail(batch, remaining, number, approver)
 
-    async def _reply_single(self, req: Request, number: int) -> bool:
+    async def _reply_single(self, req: Request, number: int, approver: Context | None) -> bool:
         if number in {3, 4} and not self._can_grant(req):
             return False
         if number == 4:
-            text = await self.permissions.grant_permanent(
-                req.ctx.session, req.tool.name, req.tool.risk, req.reason
-            )
+            try:
+                text = await self.permissions.grant_permanent(
+                    req.ctx.session, req.tool.name, req.tool.risk, req.reason, menu_target=self.target
+                )
+            except PublicError:
+                return False
             await self._send(text)
             await self._refresh_locked()
             return True
         if number == 3:
-            await self.permissions.grant_quick(req.ctx.session, req.tool.name, req.args)
+            try:
+                await self.permissions.grant_quick(
+                    req.ctx.session, req.tool.name, menu_target=self.target
+                )
+            except PublicError:
+                return False
             await self._send(f"五分钟内 {req.tool.name} 的审批将自动同意")
             await self._refresh_locked()
             return True
         if number not in {1, 2}:
             return False
-        await self._resolve(req, number == 1)
-        verb = "同意" if number == 1 else "拒绝"
-        await self._send(f"已{verb}：{req.tool.name} {req.key}")
+        if await self._resolve(req, number == 1, approver):
+            verb = "同意" if number == 1 else "拒绝"
+            await self._send(f"已{verb}：{req.tool.name} {req.key}")
         await self._refresh_locked()
         return True
 
-    async def _settle_all(self, requests: list[Request], allow: bool) -> None:
+    async def _settle_all(
+        self, requests: list[Request], allow: bool, approver: Context | None
+    ) -> None:
+        count = 0
         for req in requests:
-            await self._resolve(req, allow)
+            count += await self._resolve(req, allow, approver)
         verb = "同意" if allow else "拒绝"
-        await self._send(f"已全部{verb}：{len(requests)} 条")
+        if count:
+            await self._send(f"已全部{verb}：{count} 条")
         await self._finish()
 
-    async def _open_detail(self, requests: list[Request]) -> bool:
+    async def _open_detail(self, batch: Batch, requests: list[Request]) -> bool:
         groups = self._groups(requests)
         if not groups:
             return False
         await self._send("已打开详情。")
         if len(groups) == 1:
-            self.batch.stage = "single"
+            batch.stage = "single"
             await self._show_single(requests)
         else:
             await self._show_detail(requests)
         return True
 
-    async def _reply_detail(self, remaining: list[Request], number: int) -> bool:
+    async def _reply_detail(
+        self, batch: Batch, remaining: list[Request], number: int, approver: Context | None
+    ) -> bool:
         groups = self._groups(remaining)
         if number == 2 * len(groups) + 1:
-            self.batch.stage = "single"
+            batch.stage = "single"
             await self._show_single(remaining)
             return True
         index = (number - 1) // 2
@@ -198,22 +276,27 @@ class ApprovalMenu:
             return False
         _, name, group = groups[index]
         allow = number % 2 == 1
+        count = 0
         for req in group:
-            await self._resolve(req, allow)
+            count += await self._resolve(req, allow, approver)
         verb = "同意" if allow else "拒绝"
-        await self._send(f"{name}：已全部{verb} {len(group)} 条")
+        if count:
+            await self._send(f"{name}：已全部{verb} {count} 条")
         await self._refresh_locked()
         return True
 
     async def _show_detail(self, requests: list[Request]) -> None:
         groups = self._groups(requests)
-        if not groups:
+        batch = self.batch
+        if not groups or batch is None:
             return
-        self.batch.stage = "detail"
-        self.batch.shown = self._signature(groups)
-        await self._send(self._detail_text(groups))
+        batch.stage = "detail"
+        batch.shown = self._signature(groups)
+        await self._send(self._detail_text(groups), prompt=True)
 
-    def _signature(self, groups: list[tuple[str, str, list[Request]]]) -> tuple:
+    def _signature(
+        self, groups: list[tuple[str, str, list[Request]]]
+    ) -> tuple[tuple[str, int], ...]:
         return tuple((name, len(group)) for _, name, group in groups)
 
     async def close(self) -> None:
@@ -221,9 +304,10 @@ class ApprovalMenu:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
         self.tasks.clear()
-        self.batch = None
-        self.queue.clear()
-        self.window.clear()
+        async with self.refresh_lock:
+            self.batch = None
+            self.queue.clear()
+            self.window.clear()
 
     async def _wait_window(self) -> None:
         try:
@@ -235,51 +319,59 @@ class ApprovalMenu:
         if not live:
             return
         async with self.refresh_lock:
+            if not self._current():
+                return
             if self.batch is None:
-                await self._open(live[:PAGE_SIZE])
-                self.queue.extend(live[PAGE_SIZE:])
+                self.queue.extend(live)
+                await self._finish()
             else:
                 self.queue.extend(live)
 
     async def _open(self, requests: list[Request]) -> None:
-        self.batch = Batch(uid()[:10], requests)
-        for req in requests:
-            row = await self.permissions.store.get("approval", req.key)
-            if row and row.get("status") == "pending":
-                row["batch"] = self.batch.id
-                await self.permissions.store.put("approval", req.key, row, req.ctx.session)
+        batch = Batch(uid()[:10], [])
+        async with self.permissions.resolve_lock:
+            for req in requests:
+                row = await self.permissions.store.get("approval", req.key)
+                if self._current() and self.permissions.is_waiting(row):
+                    row["batch"] = batch.id
+                    await self.permissions.store.put("approval", req.key, row, req.ctx.session)
+                    batch.requests.append(req)
+            if not batch.requests:
+                return
+            self.batch = batch
+        requests = batch.requests
         for req in requests:
             await self._await_reason(req)
+        requests = await self._sync()
+        if not requests:
+            self.batch = None
+            return
         if len(requests) == 1:
-            self.batch.stage = "single"
+            batch.stage = "single"
             await self._show_single(requests)
         else:
-            self.batch.stage = "list"
-            self.batch.shown = tuple(req.key for req in requests)
-            await self._send(self._list_text(requests))
+            batch.stage = "list"
+            batch.shown = tuple(req.key for req in requests)
+            await self._send(self._list_text(requests), prompt=True)
 
     async def _show_single(self, requests: list[Request]) -> None:
         req = requests[0]
         await self._await_reason(req)
         if self.batch:
             self.batch.shown = (req.key,)
-        await self._send(self._single_text(req))
+        await self._send(self._single_text(req), prompt=True)
 
     async def _await_reason(self, req: Request) -> None:
         if req.reason or req.reason_task is None:
             return
         try:
             await asyncio.wait_for(asyncio.shield(req.reason_task), REASON_BUDGET)
-        except (TimeoutError, asyncio.CancelledError):
+        except TimeoutError:
             pass
 
     async def _is_pending(self, req: Request) -> bool:
         row = await self.permissions.store.get("approval", req.key)
-        return bool(
-            row
-            and row.get("status") == "pending"
-            and row.get("expires", 0) >= now().timestamp()
-        )
+        return self.permissions.is_waiting(row)
 
     async def _sync(self) -> list[Request]:
         if self.batch is None:
@@ -310,7 +402,7 @@ class ApprovalMenu:
 
     async def _finish(self) -> None:
         self.batch = None
-        while self.queue:
+        while self.queue and self._current():
             live = []
             while self.queue and len(live) < PAGE_SIZE:
                 req = self.queue.pop(0)
@@ -318,15 +410,21 @@ class ApprovalMenu:
                     live.append(req)
             if live:
                 await self._open(live)
-                return
+                if self.batch:
+                    return
 
-    async def _resolve(self, req: Request, allow: bool) -> None:
+    async def _resolve(self, req: Request, allow: bool, approver: Context | None) -> bool:
+        if not self._current():
+            return False
         try:
-            await self.permissions.resolve(req.key, allow)
+            await self.permissions.resolve(
+                req.key, allow, approver=approver, menu_target=self.target
+            )
         except PublicError:
-            return
+            return False
         if self.batch:
             self.batch.settled.add(req.key)
+        return True
 
     async def _describe(self, req: Request) -> None:
         req.reason = await self._reason(req)
@@ -337,7 +435,7 @@ class ApprovalMenu:
             return self._fallback(req)
         try:
             history = await self.permissions.store.history(
-                req.ctx.session, limit=6, include_commands=False
+                req.ctx.session, limit=6, include_commands=False, memory_profile=req.ctx.memory_profile
             )
             request = canonical(
                 {
@@ -383,7 +481,7 @@ class ApprovalMenu:
         )
 
     def _can_grant(self, req: Request) -> bool:
-        if req.ctx.background:
+        if req.ctx.background or is_feishu_session(req.ctx.session):
             return False
         return not (
             req.tool.name == "shell"
@@ -403,7 +501,7 @@ class ApprovalMenu:
             lines.append(f"3 五分钟内 {req.tool.name} 都同意")
             warning = "（⚠ 高危，慎重）" if req.tool.risk in {"sensitive", "dangerous"} else ""
             lines.append(f"4 以后 {req.tool.name} 都同意，不再问{warning}")
-        else:
+        elif not is_feishu_session(req.ctx.session):
             lines.append("（本次命令涉及密钥文件或来自后台会话，只提供 1/2）")
         return "\n".join(lines)
 

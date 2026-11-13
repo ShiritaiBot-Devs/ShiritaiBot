@@ -1,6 +1,7 @@
 import type {
   CommandInfo,
   ConfigSaveResult,
+  ConfigSnapshot,
   DiagnosticsResult,
   DiscoveredModel,
   FeishuQrAdapter,
@@ -75,8 +76,9 @@ export interface ApiClient {
   ): Promise<UpdateInspect>;
   applyUpdate(kind: "release" | "commit", ref: string): Promise<UpdateStatus>;
   config(): Promise<Settings>;
+  configSnapshot(): Promise<ConfigSnapshot>;
   tools(session?: string): Promise<ToolCatalog>;
-  saveConfig(settings: Settings): Promise<ConfigSaveResult>;
+  saveConfig(settings: Settings, revision?: string): Promise<ConfigSaveResult>;
   startFeishuQr(
     domain: FeishuQrRegistration["domain"],
   ): Promise<FeishuQrRegistration>;
@@ -175,14 +177,16 @@ function messageFor(status: number, detail: unknown): string {
 }
 
 export function createClient(getToken: () => string): ApiClient {
-  async function request<T>(
+  async function requestSnapshot<T>(
     path: string,
     method: HttpMethod = "GET",
     body?: unknown,
-  ): Promise<T> {
+    revision?: string,
+  ): Promise<{ data: T; revision?: string }> {
     const headers: Record<string, string> = {
       Authorization: "Bearer " + getToken(),
     };
+    if (revision !== undefined) headers["If-Match"] = revision;
     const binary = body instanceof Blob;
     if (body !== undefined)
       headers["Content-Type"] = binary
@@ -200,8 +204,12 @@ export function createClient(getToken: () => string): ApiClient {
       throw new ApiError("无法连接后端服务，请确认进程仍在运行。", 0);
     }
     if (response.ok) {
-      if (response.status === 204) return undefined as T;
-      return (await response.json()) as T;
+      return {
+        data: (response.status === 204
+          ? undefined
+          : await response.json()) as T,
+        revision: response.headers?.get("ETag") ?? undefined,
+      };
     }
     const payload = (await response.json().catch(() => null)) as {
       detail?: unknown;
@@ -210,6 +218,15 @@ export function createClient(getToken: () => string): ApiClient {
       messageFor(response.status, payload?.detail),
       response.status,
     );
+  }
+
+  async function request<T>(
+    path: string,
+    method?: HttpMethod,
+    body?: unknown,
+    revision?: string,
+  ): Promise<T> {
+    return (await requestSnapshot<T>(path, method, body, revision)).data;
   }
 
   return {
@@ -235,10 +252,18 @@ export function createClient(getToken: () => string): ApiClient {
     applyUpdate: (kind, ref) =>
       request<UpdateStatus>("/update/apply", "POST", { kind, ref }),
     config: () => request<Settings>("/config"),
-    tools: (session = "web:owner") =>
-      request<ToolCatalog>("/tools?session=" + encodeURIComponent(session)),
-    saveConfig: (settings) =>
-      request<ConfigSaveResult>("/config", "PUT", settings),
+    configSnapshot: async () => {
+      const { data, revision } = await requestSnapshot<Settings>("/config");
+      return { settings: data, revision };
+    },
+    tools: async (session = "web:owner") => {
+      const { data, revision } = await requestSnapshot<ToolCatalog>(
+        "/tools?session=" + encodeURIComponent(session),
+      );
+      return { ...data, revision };
+    },
+    saveConfig: (settings, revision) =>
+      request<ConfigSaveResult>("/config", "PUT", settings, revision),
     startFeishuQr: (domain) =>
       request("/adapters/feishu/qr", "POST", { domain }),
     feishuQrStatus: (id) =>
