@@ -72,6 +72,8 @@
 
 .chart-legend {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 14px;
   font-size: 12px;
   color: var(--muted);
@@ -87,6 +89,58 @@
   width: 8px;
   height: 8px;
   border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.chart-legend .chart-legend-button {
+  gap: 6px;
+  min-height: 28px;
+  padding: 3px 6px;
+  border-color: transparent;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  transition:
+    opacity 160ms,
+    background 160ms,
+    border-color 160ms;
+}
+
+.chart-legend .chart-legend-button.is-selected {
+  border-color: var(--border-strong);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.chart-legend-button.is-dimmed {
+  opacity: 0.5;
+}
+
+.chart-legend .chart-legend-button:hover {
+  opacity: 1;
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.chart-legend-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.chart-series {
+  transition: opacity 160ms;
+}
+
+.chart-series.is-dimmed {
+  opacity: 0.18;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-series,
+  .chart-legend .chart-legend-button {
+    transition: none;
+  }
 }
 
 .hourly-chart {
@@ -100,18 +154,21 @@
   outline: 1px solid var(--accent);
 }
 
+.chart-plot {
+  position: relative;
+}
+
 .chart-scale {
   position: absolute;
-  left: 8px;
-  top: 66px;
-  bottom: 86px;
+  left: -38px;
+  top: 0;
+  bottom: 12.844%;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  max-width: 34px;
-  font-size: 10px;
+  font-size: 9px;
   color: var(--muted);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .chart-detail {
@@ -517,9 +574,15 @@
 
 @media (max-width: 700px) {
   .chart-panel {
-    padding-left: 24px;
+    padding-left: 42px;
+  }
+  .chart-panel > .panel-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
   .chart-legend {
+    justify-content: flex-start;
     gap: 10px;
     font-size: 11px;
   }

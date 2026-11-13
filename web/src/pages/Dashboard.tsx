@@ -158,7 +158,7 @@ const MODEL_COLORS = [
 const OTHER_COLOR = "#9aa3b2";
 
 /**
- * One stacked series per model. Slots follow the configured model order, not
+ * One series per model. Slots follow the configured model order, not
  * token rank, so a model keeps its color as usage shifts.
  */
 function modelSeries(rows: TokenBucket[], configured: string[]): Series[] {
@@ -196,20 +196,56 @@ function field(key: keyof Omit<TokenBucket, "hour" | "models">) {
   return (row: TokenBucket) => row[key];
 }
 
+/** Monotone cubic interpolation keeps curves within each pair of hourly values. */
+function smoothLine(points: { x: number; y: number }[]): string {
+  if (!points.length) return "";
+  const slopes = points.slice(1).map((point, index) => {
+    const previous = points[index];
+    return (point.y - previous.y) / (point.x - previous.x);
+  });
+  const tangents = points.map((_, index) => {
+    if (index === 0) return slopes[0] ?? 0;
+    if (index === points.length - 1) return slopes[index - 1];
+    const left = slopes[index - 1];
+    const right = slopes[index];
+    return left * right <= 0 ? 0 : (2 * left * right) / (left + right);
+  });
+  return points.reduce((path, point, index) => {
+    if (index === 0) return `M ${point.x},${point.y}`;
+    const previous = points[index - 1];
+    const third = (point.x - previous.x) / 3;
+    return `${path} C ${previous.x + third},${previous.y + tangents[index - 1] * third} ${point.x - third},${point.y - tangents[index] * third} ${point.x},${point.y}`;
+  }, "");
+}
+
 function HourlyChart({
   title,
   rows,
   series,
+  type = "bar",
 }: {
   title: string;
   rows: TokenBucket[];
   series: Series[];
+  type?: "bar" | "line";
 }) {
   const [hover, setHover] = useState<number | null>(null);
+  const [focusedSeries, setFocusedSeries] = useState<string | null>(null);
+  const highlighted = series.some((item) => item.key === focusedSeries)
+    ? focusedSeries
+    : null;
+  const lineSeries = [
+    ...series.filter((item) => item.key !== highlighted),
+    ...series.filter((item) => item.key === highlighted),
+  ];
+  const seriesClass = (key: string) =>
+    `chart-series${highlighted !== null && highlighted !== key ? " is-dimmed" : ""}`;
   const maximum = Math.max(
     1,
     ...rows.map((row) =>
-      series.reduce((sum, item) => sum + item.value(row), 0),
+      type === "line"
+        ? Math.max(0, ...series.map((item) => item.value(row)))
+        : series.reduce((sum, item) => sum + item.value(row), 0),
     ),
   );
   const width = 900;
@@ -222,112 +258,179 @@ function HourlyChart({
       <div className="panel-head">
         <h3>{title}</h3>
         <div className="chart-legend">
-          {series.map((item) => (
-            <span key={item.key}>
-              <i style={{ background: item.color }} />
-              {item.label}
-            </span>
-          ))}
+          {series.map((item) =>
+            type === "line" ? (
+              <button
+                type="button"
+                key={item.key}
+                className={`chart-legend-button${highlighted === item.key ? " is-selected" : ""}${highlighted !== null && highlighted !== item.key ? " is-dimmed" : ""}`}
+                aria-pressed={highlighted === item.key}
+                title={
+                  highlighted === item.key
+                    ? "再次点击显示全部曲线"
+                    : `高亮 ${item.label}`
+                }
+                onClick={() =>
+                  setFocusedSeries(highlighted === item.key ? null : item.key)
+                }
+              >
+                <i style={{ background: item.color }} aria-hidden="true" />
+                <span>{item.label}</span>
+              </button>
+            ) : (
+              <span key={item.key}>
+                <i style={{ background: item.color }} aria-hidden="true" />
+                {item.label}
+              </span>
+            ),
+          )}
         </div>
       </div>
-      <div className="chart-scale" aria-hidden="true">
-        <span>{formatNumber(maximum)}</span>
-        <span>0</span>
-      </div>
-      <svg
-        className="hourly-chart"
-        viewBox={`0 0 ${width} ${height + 28}`}
-        role="group"
-        aria-label={title + "逐小时图表"}
-        onMouseLeave={() => setHover(null)}
-      >
-        {[0, 0.5, 1].map((level) => (
-          <line
-            key={level}
-            x1={0}
-            y1={level * height}
-            x2={width}
-            y2={level * height}
-            stroke="currentColor"
-            opacity=".12"
-          />
-        ))}
-        {rows.map((row, index) => {
-          let offset = 0;
-          return (
-            <g
-              key={row.hour}
-              tabIndex={0}
-              role="img"
-              aria-label={`${formatHour(row.hour)} ${series
-                .map((item) => `${item.label} ${item.value(row)}`)
-                .join("，")}`}
-              onMouseEnter={() => setHover(index)}
-              onFocus={() => setHover(index)}
-              onBlur={() => setHover(null)}
-            >
-              <rect
-                x={index * step}
-                y={0}
-                width={step}
-                height={height}
-                fill={index === hover ? "var(--accent-soft)" : "transparent"}
-              />
-              {series.map((item) => {
-                const value = (item.value(row) / maximum) * height;
-                offset += value;
-                return (
-                  <rect
-                    key={item.key}
-                    x={index * step + step * 0.15}
-                    y={height - offset}
-                    width={step * 0.7}
-                    height={value}
-                    rx={1}
-                    fill={item.color}
-                    stroke="var(--panel)"
-                    strokeWidth={1}
-                  />
-                );
-              })}
-              {(index === 0 ||
-                index === rows.length - 1 ||
-                index % Math.ceil(rows.length / 5) === 0) && (
-                <text
-                  x={index * step + step / 2}
-                  y={height + 22}
-                  textAnchor={
-                    index === 0
-                      ? "start"
-                      : index === rows.length - 1
-                        ? "end"
-                        : "middle"
+      <div className="chart-plot">
+        <div className="chart-scale" aria-hidden="true">
+          <span>{formatNumber(maximum)}</span>
+          <span>0</span>
+        </div>
+        <svg
+          className="hourly-chart"
+          viewBox={`0 0 ${width} ${height + 28}`}
+          role="group"
+          aria-label={title + "逐小时图表"}
+          onMouseLeave={() => setHover(null)}
+        >
+          {[0, 0.5, 1].map((level) => (
+            <line
+              key={level}
+              x1={0}
+              y1={level * height}
+              x2={width}
+              y2={level * height}
+              stroke="currentColor"
+              opacity=".12"
+            />
+          ))}
+          {rows.map((row, index) => {
+            let offset = 0;
+            return (
+              <g
+                key={row.hour}
+                tabIndex={0}
+                role="img"
+                aria-label={`${formatHour(row.hour)} ${series
+                  .map((item) => `${item.label} ${item.value(row)}`)
+                  .join("，")}`}
+                onMouseEnter={() => setHover(index)}
+                onFocus={() => setHover(index)}
+                onBlur={() => setHover(null)}
+              >
+                <rect
+                  x={index * step}
+                  y={0}
+                  width={step}
+                  height={height}
+                  fill={index === hover ? "var(--accent-soft)" : "transparent"}
+                />
+                {series.map((item) => {
+                  const value = (item.value(row) / maximum) * height;
+                  if (type === "line") {
+                    return (
+                      <circle
+                        key={item.key}
+                        className={seriesClass(item.key)}
+                        cx={(index + 0.5) * step}
+                        cy={height - value}
+                        r={index === hover ? 4 : rows.length === 1 ? 3 : 0}
+                        fill={item.color}
+                        stroke="var(--panel)"
+                        strokeWidth={1}
+                        pointerEvents="none"
+                      />
+                    );
                   }
-                  fill="currentColor"
-                  fontSize={12}
-                >
-                  {formatHour(row.hour)}
-                </text>
-              )}
-            </g>
-          );
-        })}
-      </svg>
+                  offset += value;
+                  return (
+                    <rect
+                      key={item.key}
+                      x={index * step + step * 0.15}
+                      y={height - offset}
+                      width={step * 0.7}
+                      height={value}
+                      rx={1}
+                      fill={item.color}
+                      stroke="var(--panel)"
+                      strokeWidth={1}
+                    />
+                  );
+                })}
+                {(index === 0 ||
+                  index === rows.length - 1 ||
+                  index % Math.ceil(rows.length / 5) === 0) && (
+                  <text
+                    x={index * step + step / 2}
+                    y={height + 22}
+                    textAnchor={
+                      index === 0
+                        ? "start"
+                        : index === rows.length - 1
+                          ? "end"
+                          : "middle"
+                    }
+                    fill="currentColor"
+                    fontSize={12}
+                  >
+                    {formatHour(row.hour)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+          {type === "line" &&
+            lineSeries.map((item) => (
+              <path
+                key={item.key}
+                className={seriesClass(item.key)}
+                d={smoothLine(
+                  rows.map((row, index) => ({
+                    x: (index + 0.5) * step,
+                    y: height - (item.value(row) / maximum) * height,
+                  })),
+                )}
+                fill="none"
+                stroke={item.color}
+                strokeWidth={
+                  highlighted === null || highlighted === item.key ? 3 : 2
+                }
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+                pointerEvents="none"
+              />
+            ))}
+        </svg>
+      </div>
       <div className="chart-detail" aria-live="polite">
         {selected ? (
           <>
-            <strong>{formatHour(selected.hour)} 时</strong>
+            <strong>{formatHour(selected.hour)}</strong>
             {series
               .filter((item) => item.value(selected) > 0)
               .map((item) => (
-                <span key={item.key}>
+                <span
+                  key={item.key}
+                  className={
+                    type === "line" ? seriesClass(item.key) : undefined
+                  }
+                >
                   <i style={{ background: item.color }} aria-hidden="true" />
                   {item.label} {formatNumber(item.value(selected))}
                 </span>
               ))}
           </>
         ) : (
-          <span className="muted">悬停或用 Tab 选中柱形，查看该小时数据。</span>
+          <span className="muted">
+            {type === "line"
+              ? "默认高亮全部曲线；点击图例突出某条曲线，再次点击恢复全部。悬停或用 Tab 查看每小时数据。"
+              : "悬停或用 Tab 选中柱形，查看该小时数据。"}
+          </span>
         )}
       </div>
     </section>
@@ -493,8 +596,17 @@ export function Dashboard({ client }: { client: ApiClient }) {
           </div>
           <HourlyChart
             title="Token 用量（按模型）"
+            type="line"
             rows={data.buckets}
-            series={modelSeries(data.buckets, configured)}
+            series={[
+              {
+                key: "total",
+                label: "总用量",
+                color: "var(--text)",
+                value: field("total_tokens"),
+              },
+              ...modelSeries(data.buckets, configured),
+            ]}
           />
           <ModelTable
             rows={data.models ?? []}

@@ -1305,7 +1305,7 @@ it("shows per-model tokens, cache hit rate and estimated cost", async () => {
   await waitFor(() =>
     expect(
       [...legend.querySelectorAll("span")].map((el) => el.textContent),
-    ).toEqual(["priced", "free"]),
+    ).toEqual(["总用量", "priced", "free"]),
   );
   expect(screen.getByText("25.0%")).toBeTruthy();
   expect(screen.getByText("$1.31")).toBeTruthy();
@@ -1333,6 +1333,72 @@ it("shows per-model tokens, cache hit rate and estimated cost", async () => {
   expect(await screen.findByText("¥9.14")).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "切换为美元花费" }));
   expect(screen.getByText("$1.31")).toBeTruthy();
+});
+
+it("highlights one token model from the legend and restores all curves", async () => {
+  const client = fakeClient();
+  const stats = await client.stats(24);
+  client.stats = vi.fn().mockResolvedValue({
+    ...stats,
+    buckets: [0, 1200, 400, 0].map((value, index) => ({
+      ...stats.totals,
+      hour: new Date(Date.UTC(2026, 10, 13, 9 + index)).toISOString(),
+      total_tokens: value * 1.5,
+      models: { first: value, second: value / 2 },
+    })),
+  });
+  render(withQuery(<Dashboard client={client} />));
+  const first = await screen.findByRole("button", { name: "first" });
+  const second = screen.getByRole("button", { name: "second" });
+  const total = screen.getByRole("button", { name: "总用量" });
+  const chart = screen.getByRole("group", {
+    name: "Token 用量（按模型）逐小时图表",
+  });
+  const user = userEvent.setup();
+  expect(first.getAttribute("aria-pressed")).toBe("false");
+  expect(total.getAttribute("aria-pressed")).toBe("false");
+  expect(chart.querySelectorAll("path")).toHaveLength(3);
+  expect(chart.querySelectorAll("path.is-dimmed")).toHaveLength(0);
+  for (const path of chart.querySelectorAll("path")) {
+    expect(path.getAttribute("stroke-width")).toBe("3");
+  }
+  expect(chart.querySelector("path")?.getAttribute("d")).toContain(" C ");
+
+  await user.click(first);
+  expect(first.getAttribute("aria-pressed")).toBe("true");
+  expect(second.getAttribute("aria-pressed")).toBe("false");
+  expect(chart.querySelectorAll("path.is-dimmed")).toHaveLength(2);
+
+  await user.click(second);
+  expect(first.getAttribute("aria-pressed")).toBe("false");
+  expect(second.getAttribute("aria-pressed")).toBe("true");
+  expect(chart.querySelectorAll("path.is-dimmed")).toHaveLength(2);
+
+  fireEvent.mouseEnter(within(chart).getAllByRole("img")[1]);
+  expect(screen.getByText("first 1,200")).toBeTruthy();
+  expect(screen.getByText("second 600")).toBeTruthy();
+  expect(screen.getByText("总用量 1,800")).toBeTruthy();
+  const detail = chart.closest("section")!.querySelector(".chart-detail")!;
+  expect(detail.querySelector("strong")!.textContent).toBe("11/13 18时");
+  expect(detail.textContent).not.toMatch(/时\s*时/);
+
+  second.focus();
+  await user.keyboard("{Enter}");
+  expect(second.getAttribute("aria-pressed")).toBe("false");
+  expect(chart.querySelectorAll("path.is-dimmed")).toHaveLength(0);
+  for (const path of chart.querySelectorAll("path")) {
+    expect(path.getAttribute("stroke-width")).toBe("3");
+  }
+
+  await user.keyboard(" ");
+  expect(second.getAttribute("aria-pressed")).toBe("true");
+
+  await user.click(total);
+  expect(total.getAttribute("aria-pressed")).toBe("true");
+  expect(second.getAttribute("aria-pressed")).toBe("false");
+  expect(chart.querySelectorAll("path.is-dimmed")).toHaveLength(2);
+  await user.click(total);
+  expect(chart.querySelectorAll("path.is-dimmed")).toHaveLength(0);
 });
 
 it.each([false, true])(
