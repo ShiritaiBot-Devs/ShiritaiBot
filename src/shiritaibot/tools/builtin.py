@@ -234,6 +234,7 @@ async def register_builtin(app) -> None:
         Tool(
             "shell",
             "在会话工作目录执行 bash，调用受当前工具权限配置约束。"
+            "环境不保证安装 ripgrep 等第三方工具，文本检索请优先用 grep。"
             "不要用它启动 codex / claude / dsh 等外部 Agent，请改用 subagent_instances + subagent_start。",
             schema(
                 {"command": TEXT, "timeout": {"type": "integer", "minimum": 1, "maximum": 120}},
