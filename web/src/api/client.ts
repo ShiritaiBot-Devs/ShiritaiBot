@@ -186,7 +186,11 @@ export function createClient(getToken: () => string): ApiClient {
     const headers: Record<string, string> = {
       Authorization: "Bearer " + getToken(),
     };
-    if (revision !== undefined) headers["If-Match"] = revision;
+    if (revision !== undefined) {
+      headers["X-Config-Revision"] = revision;
+      // Preserve conditional saves when talking to an older backend.
+      headers["If-Match"] = revision;
+    }
     const binary = body instanceof Blob;
     if (body !== undefined)
       headers["Content-Type"] = binary
@@ -208,7 +212,10 @@ export function createClient(getToken: () => string): ApiClient {
         data: (response.status === 204
           ? undefined
           : await response.json()) as T,
-        revision: response.headers?.get("ETag") ?? undefined,
+        revision:
+          response.headers?.get("X-Config-Revision") ??
+          response.headers?.get("ETag") ??
+          undefined,
       };
     }
     const payload = (await response.json().catch(() => null)) as {

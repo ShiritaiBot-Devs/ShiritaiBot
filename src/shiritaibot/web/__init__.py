@@ -249,6 +249,8 @@ def create_app(
 
     @api.get("/api/config", dependencies=protected)
     async def config(response: Response):
+        # Keep the application revision independent of proxy ETag transformations.
+        response.headers["X-Config-Revision"] = config_etag()
         response.headers["ETag"] = config_etag()
         data = runtime.config.value.model_dump()
         for adapter in data["adapters"]:
@@ -260,7 +262,10 @@ def create_app(
     @api.put("/api/config", dependencies=protected)
     async def save_config(body: Settings, request: Request):
         expected_version = None
-        if (revision := request.headers.get("if-match")) is not None:
+        # Cloudflare may weaken ETags when compressing JSON. Prefer the opaque
+        # application revision; retain If-Match for older WebUI clients.
+        revision = request.headers.get("x-config-revision", request.headers.get("if-match"))
+        if revision is not None:
             if revision != config_etag():
                 raise HTTPException(412, "配置已更新，请核对最新配置后再保存。")
             expected_version = runtime.config.version
@@ -325,6 +330,8 @@ def create_app(
                 owner = owner or any(session == a.owner_session() for a in settings.adapters)
         ctx = Context(session, actor, owner=owner, group=group, memory_profile=memory_profile)
         ctx = runtime.permissions.context(ctx)
+        # Keep the application revision independent of proxy ETag transformations.
+        response.headers["X-Config-Revision"] = config_etag()
         response.headers["ETag"] = config_etag()
         return {
             "session": session,
