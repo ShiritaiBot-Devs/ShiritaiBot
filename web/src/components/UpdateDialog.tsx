@@ -84,18 +84,21 @@ export function UpdateDialog({
     queryKey: ["update", "releases", page, showBeta],
     queryFn: () => client.updateReleases(page, PAGE_SIZE, showBeta),
     placeholderData: (previous) => previous,
+    enabled: status.isSuccess && status.data?.mode !== "git",
   });
   const preview = useQuery({
     queryKey: ["update", "preview"],
     queryFn: () => client.updatePreview(),
-    enabled: showCommit,
+    enabled: showCommit || status.data?.mode === "git",
   });
 
   const phase = status.data?.phase ?? "idle";
   const active = starting || ACTIVE.includes(phase);
   const current = status.data?.current;
-  const items = releases.data?.items ?? [];
-  const commit = showCommit ? (preview.data?.commit ?? null) : null;
+  const gitMode = status.data?.mode === "git";
+  const includeCommit = showCommit || gitMode;
+  const items = gitMode ? [] : (releases.data?.items ?? []);
+  const commit = includeCommit ? (preview.data?.commit ?? null) : null;
 
   // Hand the wait for the new process to the console's restart tracker exactly once.
   useEffect(() => {
@@ -119,7 +122,7 @@ export function UpdateDialog({
   useEffect(() => {
     if (
       selected?.kind === "commit" &&
-      showCommit &&
+      includeCommit &&
       (commit || preview.isPending)
     )
       return;
@@ -134,7 +137,7 @@ export function UpdateDialog({
     setConfirming(false);
     setInspection(null);
     setInspectError(null);
-  }, [items, commit, selected, page, showCommit, preview.isPending]);
+  }, [items, commit, selected, page, includeCommit, preview.isPending]);
 
   function close() {
     if (active) return;
@@ -145,6 +148,12 @@ export function UpdateDialog({
   async function refresh() {
     setRefreshing(true);
     try {
+      if (gitMode) {
+        const latest = await client.updatePreview(true);
+        queryClient.setQueryData(["update", "preview"], latest);
+        await status.refetch();
+        return;
+      }
       const [listing] = await Promise.all([
         client.updateReleases(1, PAGE_SIZE, showBeta, true),
         showCommit ? client.updatePreview(true) : Promise.resolve(null),
@@ -322,8 +331,10 @@ export function UpdateDialog({
                 <>
                   <div className="update-notes-title">
                     <GitCommitHorizontal size={16} aria-hidden="true" />
-                    <strong>开发版 {shortSha(commit.sha)}</strong>
-                    <span className="tag beta">未发布</span>
+                    <strong>
+                      {gitMode ? "最新提交" : "开发版"} {shortSha(commit.sha)}
+                    </strong>
+                    {!gitMode && <span className="tag beta">未发布</span>}
                     {commit.url && (
                       <a
                         href={commit.url}
@@ -335,6 +346,12 @@ export function UpdateDialog({
                       </a>
                     )}
                   </div>
+                  {gitMode && (
+                    <p className="muted">
+                      Git 部署：将更新到跟踪分支 {commit.branch} 的最新提交。
+                      有未提交的修改或本地独有提交时会停止更新。
+                    </p>
+                  )}
                   <p className="muted">
                     {commit.base
                       ? `相对 ${commit.base} 新增 ${commit.ahead_by} 个提交`
@@ -377,7 +394,11 @@ export function UpdateDialog({
                     <p className="muted">此版本没有填写更新日志。</p>
                   )}
                 </>
-              ) : releases.isPending || (showCommit && preview.isPending) ? (
+              ) : (
+                  gitMode
+                    ? preview.isPending
+                    : releases.isPending || (showCommit && preview.isPending)
+                ) ? (
                 <LoadingBar label="正在检查 GitHub…" />
               ) : releases.isError ? (
                 <p role="alert">{releases.error.message}</p>
@@ -389,33 +410,36 @@ export function UpdateDialog({
             </section>
 
             <section className="update-picker" aria-label="版本选择">
-              <div className="update-filters">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={showBeta}
-                    onChange={(event) => {
-                      setShowBeta(event.target.checked);
-                      setPage(1);
-                    }}
-                  />
-                  显示测试版
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={showCommit}
-                    onChange={(event) => {
-                      setShowCommit(event.target.checked);
-                      setPage(1);
-                      if (event.target.checked) setSelected({ kind: "commit" });
-                    }}
-                  />
-                  显示未发布的最新提交
-                </label>
-              </div>
+              {!gitMode && (
+                <div className="update-filters">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showBeta}
+                      onChange={(event) => {
+                        setShowBeta(event.target.checked);
+                        setPage(1);
+                      }}
+                    />
+                    显示测试版
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showCommit}
+                      onChange={(event) => {
+                        setShowCommit(event.target.checked);
+                        setPage(1);
+                        if (event.target.checked)
+                          setSelected({ kind: "commit" });
+                      }}
+                    />
+                    显示未发布的最新提交
+                  </label>
+                </div>
+              )}
               <div className="update-versions" role="listbox" aria-label="版本">
-                {showCommit && page === 1 && (
+                {includeCommit && page === 1 && (
                   <>
                     {preview.isPending && (
                       <LoadingBar label="正在读取最新提交…" />
@@ -439,10 +463,13 @@ export function UpdateDialog({
                       >
                         <GitCommitHorizontal size={15} aria-hidden="true" />
                         <span>
-                          <strong>开发版 {shortSha(commit.sha)}</strong>
+                          <strong>
+                            {gitMode ? "最新提交" : "开发版"}{" "}
+                            {shortSha(commit.sha)}
+                          </strong>
                           <small>{commit.message}</small>
                         </span>
-                        <span className="tag beta">未发布</span>
+                        {!gitMode && <span className="tag beta">未发布</span>}
                         <small className="muted">
                           {formatDate(commit.date)}
                         </small>
@@ -491,7 +518,7 @@ export function UpdateDialog({
                   );
                 })}
               </div>
-              {(releases.data?.total ?? 0) > PAGE_SIZE && (
+              {!gitMode && (releases.data?.total ?? 0) > PAGE_SIZE && (
                 <Pagination
                   label="版本"
                   page={page}
@@ -565,7 +592,8 @@ export function UpdateDialog({
                           </div>
                         ) : (
                           <span>
-                            将下载 <code>{target.label}</code>
+                            {gitMode ? "将快进更新到 " : "将下载 "}
+                            <code>{target.label}</code>
                             ，重新构建并重启服务。期间机器人会短暂离线。
                           </span>
                         )}
@@ -578,7 +606,9 @@ export function UpdateDialog({
                           >
                             {inspection && inspection.files.length > 0
                               ? "仍然更新"
-                              : "确认切换"}
+                              : gitMode
+                                ? "确认更新"
+                                : "确认切换"}
                           </button>
                           <button
                             type="button"
@@ -603,7 +633,7 @@ export function UpdateDialog({
                     {selectedIsCurrent
                       ? "已是当前版本"
                       : target
-                        ? `切换到 ${target.label}`
+                        ? `${gitMode ? "更新到" : "切换到"} ${target.label}`
                         : "选择一个版本"}
                   </button>
                 )}
@@ -649,7 +679,7 @@ function Progress({
           <CircleX size={36} aria-hidden="true" />
           <strong>更新失败</strong>
           <span role="alert">{message}</span>
-          <span className="muted">程序文件已恢复为原版本，服务未重启。</span>
+          <span className="muted">服务未重启，请查看上方错误和更新日志。</span>
         </div>
       ) : (
         <ol className="update-steps">

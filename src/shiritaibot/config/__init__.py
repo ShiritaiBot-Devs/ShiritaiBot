@@ -11,9 +11,12 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import tomli_w
-from pydantic import Field, JsonValue, field_validator, model_validator
+from pydantic import Field, JsonValue, ValidationError, field_validator, model_validator
 
-from shiritaibot.core import Context, Model
+from shiritaibot.core import Context, Model, PublicError
+
+# Fields persisted by older releases, whose behavior has since been removed.
+OBSOLETE_POLICY_KEYS = {"debounce_fragment_seconds", "debounce_fragment_max_seconds"}
 
 
 class Instance(Model):
@@ -652,6 +655,18 @@ class Settings(Model):
 
     @model_validator(mode="before")
     @classmethod
+    def drop_obsolete_policy_keys(cls, data):
+        if isinstance(data, dict) and isinstance(data.get("policy"), dict):
+            data = {
+                **data,
+                "policy": {
+                    k: v for k, v in data["policy"].items() if k not in OBSOLETE_POLICY_KEYS
+                },
+            }
+        return data
+
+    @model_validator(mode="before")
+    @classmethod
     def migrate_web_search(cls, data):
         if isinstance(data, dict) and "tavily_key" in data:
             data = dict(data)
@@ -864,9 +879,22 @@ class ConfigService:
 
     async def load(self) -> None:
         if await asyncio.to_thread(self.path.exists):
-            self.value = Settings.model_validate(
-                tomllib.loads(await asyncio.to_thread(self.path.read_text, encoding="utf-8"))
-            )
+            try:
+                self.value = Settings.model_validate(
+                    tomllib.loads(await asyncio.to_thread(self.path.read_text, encoding="utf-8"))
+                )
+            except ValidationError as error:
+                fields = "、".join(
+                    f"{'.'.join(map(str, row['loc']))}（{row['type']}）"
+                    for row in error.errors(include_input=False, include_url=False)
+                )
+                raise PublicError(
+                    f"配置文件 {self.path} 校验失败，请检查以下字段：{fields}"
+                ) from None
+            except tomllib.TOMLDecodeError:
+                raise PublicError(
+                    f"配置文件 {self.path} 的 TOML 格式无效，请检查文件语法"
+                ) from None
         else:
             await self.save(self.value)
 

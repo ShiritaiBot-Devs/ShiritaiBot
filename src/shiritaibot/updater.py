@@ -1,4 +1,4 @@
-"""Self-update from GitHub releases for installer-managed deployments.
+"""Self-update installer deployments from archives and manual deployments through Git.
 
 The installer lays out ``<root>/app`` (source), ``<root>/data`` and ``<root>/runtime``. An
 update downloads the chosen source archive into ``<root>/.update``, builds the WebUI there,
@@ -17,6 +17,8 @@ import os
 import re
 import secrets
 import shutil
+import subprocess
+import sys
 import tarfile
 import time
 from collections import deque
@@ -72,10 +74,14 @@ class Updater:
         app_dir: Path,
         restart: Callable[[], object] | None,
         transport: httpx.AsyncBaseTransport | None = None,
+        home: Path | None = None,
     ):
-        self.app_dir = app_dir
-        self.root = app_dir.parent
+        self.app_dir = app_dir.resolve()
+        self.root = self.app_dir.parent
         self.work = self.root / ".update"
+        if self.mode == "git":
+            self.work = self.root / (".update-" + self.app_dir.name)
+        self.home = (home or self.root / "data").resolve()
         self.restart = restart
         self.transport = transport
         self.cache: dict[str, tuple[float, Any]] = {}
@@ -88,14 +94,43 @@ class Updater:
 
     # ----- availability and current version -------------------------------------------------
 
+    @property
+    def mode(self) -> str:
+        if (self.root / ".shiritaibot-installer").is_file():
+            return "installer"
+        return "git"
+
     def unavailable(self) -> str | None:
         if self.restart is None:
             return "当前启动方式不支持自动更新，请使用 shiritaibot run 启动"
-        if not (self.root / ".shiritaibot-installer").is_file():
-            return "仅支持一键部署脚本安装的实例；源码开发环境请使用 git 更新"
+        if self.mode == "git":
+            if not (self.app_dir / ".git").exists():
+                return "当前目录不是 Git 仓库，请使用 git clone 或一键部署脚本安装"
+            if not shutil.which("git"):
+                return "找不到 git，无法更新源码部署"
         return None
 
     def current(self) -> dict:
+        if self.mode == "git" and (self.app_dir / ".git").exists():
+            try:
+                result = subprocess.run(
+                    ["git", "log", "-1", "--format=%H"],
+                    cwd=self.app_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                )
+                sha = result.stdout.strip() if result.returncode == 0 else ""
+            except (OSError, subprocess.TimeoutExpired):
+                sha = ""
+            return {
+                "version": package_version(),
+                "kind": "commit",
+                "ref": sha or None,
+                "sha": sha or None,
+                "deployed_at": None,
+            }
         try:
             marker = json.loads((self.app_dir / MARKER).read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -116,6 +151,7 @@ class Updater:
             "reason": self.unavailable(),
             "current": self.current(),
             "repository": REPOSITORY,
+            "mode": self.mode,
         }
 
     # ----- GitHub queries --------------------------------------------------------------------
@@ -194,6 +230,9 @@ class Updater:
     async def preview(self, refresh: bool = False) -> dict | None:
         """The head of the default branch when it has commits no release contains yet."""
 
+        if self.mode == "git" and (self.app_dir / ".git").exists():
+            return await self.git_preview()
+
         async def load():
             releases = await self.all_releases(refresh)
             async with self.client() as client:
@@ -248,6 +287,16 @@ class Updater:
             raise PublicError(reason)
         if self.inspecting or (self.task and not self.task.done()):
             raise PublicError("已有更新正在进行")
+        if self.mode == "git":
+            self.check_git_target(kind, ref)
+            self.output.clear()
+            self.state = {
+                "phase": "downloading",
+                "message": "正在检查 Git 更新",
+                "target": {"kind": kind, "ref": ref},
+            }
+            self.task = asyncio.create_task(self.run_git(ref))
+            return self.status()
         archive = await self.archive(kind, ref)
         staged, self.staged = self.staged, None
         if staged and (staged["kind"], staged["ref"]) != (kind, ref):
@@ -268,6 +317,16 @@ class Updater:
             raise PublicError(reason)
         if self.inspecting or (self.task and not self.task.done()):
             raise PublicError("已有更新正在进行")
+        if self.mode == "git":
+            self.check_git_target(kind, ref)
+            self.inspecting = True
+            try:
+                info = await self.git_ready()
+                if info["sha"] != ref:
+                    raise PublicError("远程最新提交已变化，请重新检查更新")
+                return {"files": [], "patch": None, "sha": ref}
+            finally:
+                self.inspecting = False
         archive = await self.archive(kind, ref)
         self.inspecting, self.staged = True, None
         stage = self.work / ("stage-" + secrets.token_hex(4))
@@ -295,6 +354,210 @@ class Updater:
         self.state = {**self.state, "phase": phase, "message": message}
         self.output.append(f"» {message}")
         log.log(message)
+
+    # ----- manual Git deployments -----------------------------------------------------------
+
+    @staticmethod
+    def check_git_target(kind: str, ref: str) -> None:
+        if kind != "commit" or not SHA.fullmatch(ref):
+            raise PublicError("Git 部署仅支持更新到跟踪分支的最新提交，请重新检查更新")
+
+    async def git(self, *args: str) -> str:
+        result = await run_process(
+            ["git", *args],
+            self.app_dir,
+            timeout=120,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"},
+        )
+        if result["exit_code"] != 0 or result["truncated"]:
+            if args[0] == "merge":
+                raise PublicError("Git 无法快进更新，可能有本地文件会被覆盖，请手动检查仓库")
+            raise PublicError(f"git {args[0]} 执行失败，请检查仓库、跟踪分支和网络连接")
+        return result["stdout"].strip()
+
+    async def git_info(self) -> dict:
+        root = await self.git("rev-parse", "--show-toplevel")
+        if await asyncio.to_thread(Path(root).resolve) != self.app_dir.resolve():
+            raise PublicError("程序目录不是 Git 仓库根目录，无法自动更新")
+        branch = await self.git("branch", "--show-current")
+        if not branch:
+            raise PublicError("当前处于 detached HEAD，请先切换到有远程跟踪分支的本地分支")
+        upstream = await self.git(
+            "for-each-ref",
+            "--format=%(upstream:remotename)%09%(upstream:remoteref)",
+            f"refs/heads/{branch}",
+        )
+        parts = upstream.split("\t")
+        if len(parts) != 2 or not parts[0] or parts[0] == "." or not parts[1]:
+            raise PublicError("当前分支没有远程跟踪分支，请先设置 upstream 后重试")
+        head = await self.git("rev-parse", "HEAD")
+        await self.git("fetch", "--no-tags", "--", *parts)
+        sha = await self.git("rev-parse", "FETCH_HEAD")
+        return {"branch": branch, "head": head, "sha": sha}
+
+    async def git_clean(self) -> None:
+        if await self.git(
+            "status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none"
+        ):
+            raise PublicError("工作区存在未提交的修改或未跟踪文件，请先提交或移走后再更新")
+
+    async def git_ready(self) -> dict:
+        await self.git_clean()
+        info = await self.git_info()
+        ahead, _ = (
+            await self.git("rev-list", "--left-right", "--count", f"{info['head']}...{info['sha']}")
+        ).split()
+        if int(ahead):
+            raise PublicError("当前分支有本地独有提交或已与远程分叉，请手动处理后再更新")
+        if info["head"] == info["sha"]:
+            raise PublicError("已是跟踪分支的最新提交")
+        if await self.git("ls-files", "--", "web/dist"):
+            raise PublicError("web/dist 包含 Git 跟踪文件，请手动更新此部署")
+        return info
+
+    async def git_preview(self) -> dict:
+        info = await self.git_info()
+        rows = await self.git(
+            "log",
+            "-100",
+            "--format=%H%x09%s%x09%an%x09%cI",
+            f"{info['head']}..{info['sha']}",
+        )
+        commits = []
+        for row in rows.splitlines():
+            sha, message, author, date = row.split("\t", 3)
+            commits.append({"sha": sha, "message": message, "author": author, "date": date})
+        title = await self.git("log", "-1", "--format=%s", info["sha"])
+        return {
+            "sha": info["sha"],
+            "message": title,
+            "date": None,
+            "url": None,
+            "base": info["head"][:7],
+            "branch": info["branch"],
+            "ahead_by": int(
+                await self.git("rev-list", "--count", f"{info['head']}..{info['sha']}")
+            ),
+            "commits": commits,
+        }
+
+    async def run_git(self, ref: str) -> None:
+        stage = self.work / ("stage-" + secrets.token_hex(4))
+        source = stage / "source"
+        old_dist = stage / "previous-dist"
+        dist = self.app_dir / "web" / "dist"
+        info: dict = {}
+        merged = False
+        dist_replaced = False
+        worktree = False
+        cleanup_stage = True
+        try:
+            self.step("downloading", "正在核实当前提交和远程跟踪分支")
+            info = await self.git_ready()
+            if info["sha"] != ref:
+                raise PublicError("远程最新提交已变化，请重新检查更新")
+            await asyncio.to_thread(stage.mkdir, parents=True)
+            await self.git("worktree", "add", "--detach", str(source), ref)
+            worktree = True
+            self.step("building", "正在安装 WebUI 依赖")
+            await self.command(self.npm("--prefix", "web", "ci", "--no-audit", "--no-fund"), source)
+            self.step("building", "正在构建 WebUI")
+            await self.command(self.npm("--prefix", "web", "run", "build"), source)
+            if not (source / "web/dist/index.html").is_file():
+                raise PublicError("WebUI 构建没有生成页面")
+            # Recheck after the build; a user may have edited or switched branches meanwhile.
+            await self.git_clean()
+            if (
+                await self.git("rev-parse", "HEAD") != info["head"]
+                or await self.git("branch", "--show-current") != info["branch"]
+            ):
+                raise PublicError("构建期间当前分支或提交发生变化，已取消更新")
+            self.step("deploying", "正在快进更新 Git 提交")
+            # Split pull into fetch + merge to deploy exactly the inspected commit.
+            await self.git("merge", "--ff-only", "--no-autostash", "--no-overwrite-ignore", ref)
+            merged = True
+            if dist.exists():
+                await asyncio.to_thread(dist.rename, old_dist)
+            dist_replaced = True
+            await asyncio.to_thread(shutil.copytree, source / "web/dist", dist)
+            self.step("deploying", "正在同步 Python 依赖")
+            await self.sync()
+            self.step("deploying", "正在检查新版配置兼容性")
+            await self.validate_config(self.app_dir)
+            self.step("restarting", "更新完成，正在重启")
+            assert self.restart is not None
+            self.restart()
+        except BaseException as error:
+            cancelled = isinstance(error, asyncio.CancelledError)
+            if merged:
+                try:
+                    # Never move a branch another process has since changed.
+                    if (
+                        await self.git("rev-parse", "HEAD") != ref
+                        or await self.git("branch", "--show-current") != info["branch"]
+                    ):
+                        raise PublicError("分支已被其他操作改变")
+                    await self.git("reset", "--keep", info["head"])
+                    if dist_replaced:
+                        await asyncio.to_thread(shutil.rmtree, dist, True)
+                        if old_dist.exists():
+                            await asyncio.to_thread(old_dist.rename, dist)
+                    await self.sync()
+                except Exception:
+                    cleanup_stage = False
+                    error = PublicError(
+                        f"{error}；自动恢复失败，请手动检查 Git 和依赖状态；备份保留于 {stage}"
+                    )
+            message = str(error) if isinstance(error, PublicError) else f"更新失败：{error!r}"
+            self.state = {**self.state, "phase": "failed", "message": message}
+            self.output.append("✗ " + message)
+            log.log(message)
+            if cancelled:
+                raise
+        finally:
+            if worktree:
+                try:
+                    await self.git("worktree", "remove", "--force", str(source))
+                except Exception:
+                    cleanup_stage = False
+                    log.log(f"临时 Git worktree 清理失败：{source}")
+            if cleanup_stage:
+                await asyncio.to_thread(shutil.rmtree, stage, True)
+
+    async def validate_config(self, source: Path) -> None:
+        """Import the new Settings in a fresh interpreter, without starting the application."""
+        script = (
+            "import asyncio, sys\n"
+            "from pathlib import Path\n"
+            "from pydantic import ValidationError\n"
+            "from tomllib import TOMLDecodeError\n"
+            "sys.path.insert(0, sys.argv[1])\n"
+            "from shiritaibot.config import ConfigService\n"
+            "from shiritaibot.core import PublicError\n"
+            "try:\n"
+            "    asyncio.run(ConfigService(Path(sys.argv[2])).load())\n"
+            "except PublicError as error:\n"
+            "    print(str(error), file=sys.stderr)\n"
+            "    sys.exit(1)\n"
+            "except ValidationError as error:\n"
+            "    print('配置校验失败：' + ', '.join('.'.join(map(str, e['loc'])) "
+            "for e in error.errors(include_input=False)), file=sys.stderr)\n"
+            "    sys.exit(1)\n"
+            "except TOMLDecodeError:\n"
+            "    print('配置文件 TOML 格式无效', file=sys.stderr)\n"
+            "    sys.exit(1)\n"
+        )
+        if not (self.home / "config.toml").exists():
+            return
+        try:
+            await self.command(
+                [sys.executable, "-c", script, str(source / "src"), str(self.home)],
+                source,
+            )
+        except PublicError:
+            raise PublicError(
+                f"新版本无法加载配置文件 {self.home / 'config.toml'}，已取消重启，请查看更新日志"
+            ) from None
 
     async def run(self, kind: str, ref: str, archive: str, staged: dict | None = None) -> None:
         stage = staged["stage"] if staged else self.work / ("stage-" + secrets.token_hex(4))
@@ -325,6 +588,8 @@ class Updater:
             try:
                 self.step("deploying", "正在同步 Python 依赖")
                 await self.sync()
+                self.step("deploying", "正在检查新版配置兼容性")
+                await self.validate_config(self.app_dir)
             except BaseException:
                 self.step("deploying", "部署失败，正在恢复原版本")
                 await asyncio.to_thread(self.restore, backup, stage / "failed")
@@ -439,7 +704,7 @@ class Updater:
             before_path = None if row["kind"] == "removed" else source / rel
             before = "" if before_path is None else self.text(before_path)
             after = self.text(self.app_dir / rel)
-            if after is None or (before_path is not None and before is None):
+            if after is None or before is None:
                 old = "/dev/null" if before_path is None else f"release/{rel}"
                 chunks.append(f"Binary files {old} and local/{rel} differ\n")
                 continue

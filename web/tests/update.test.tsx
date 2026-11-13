@@ -50,14 +50,16 @@ function setup(
     files: { path: string; kind: "modified" | "removed" }[];
     patch: string | null;
   } = { files: [], patch: null },
+  git = false,
+  inspectionError: string | null = null,
 ) {
   let instance = "before";
   let phase = "idle";
   let current = {
     version: "1.1.0",
-    kind: "release",
-    ref: "v1.1.0",
-    sha: null,
+    kind: git ? "commit" : "release",
+    ref: git ? "a".repeat(40) : "v1.1.0",
+    sha: git ? "a".repeat(40) : null,
     deployed_at: null,
   };
   const applied: unknown[] = [];
@@ -74,6 +76,7 @@ function setup(
     if (url === "/api/config") body = { assistant_name: "ShiritaiBot" };
     if (parsed.pathname === "/api/update/status")
       body = {
+        mode: git ? "git" : "installer",
         phase,
         message: phase === "failed" ? "uv 执行失败" : "正在构建 WebUI",
         target: null,
@@ -97,6 +100,7 @@ function setup(
     if (parsed.pathname === "/api/update/preview")
       body = {
         commit: {
+          branch: git ? "main" : undefined,
           sha: "f".repeat(40),
           message: "feat: unreleased thing",
           date: "2026-11-01T00:00:00Z",
@@ -113,7 +117,15 @@ function setup(
           ],
         },
       };
-    if (parsed.pathname === "/api/update/inspect") body = inspection;
+    if (parsed.pathname === "/api/update/inspect") {
+      if (inspectionError)
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({ detail: inspectionError }),
+        };
+      body = inspection;
+    }
     if (parsed.pathname === "/api/update/apply") {
       applied.push(JSON.parse(String(options?.body)));
       phase = "building";
@@ -279,4 +291,44 @@ it("shows a failed update and returns to the version list", async () => {
   await within(dialog).findByRole("listbox", { name: "版本" });
   fireEvent.keyDown(dialog, { key: "Escape" });
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+
+it("updates a manual Git deployment to its tracking branch head", async () => {
+  const backend = setup(undefined, true);
+  fireEvent.click(await screen.findByRole("button", { name: /检查更新/ }));
+  const dialog = await screen.findByRole("dialog", { name: "检查更新" });
+  expect(
+    await within(dialog).findByText(
+      "Git 部署：将更新到跟踪分支 main 的最新提交。",
+      { exact: false },
+    ),
+  ).toBeTruthy();
+  expect(within(dialog).getByText("aaaaaaa")).toBeTruthy();
+  expect(within(dialog).queryByLabelText("显示测试版")).toBeNull();
+  expect(within(dialog).queryByText("v1.2.0")).toBeNull();
+  fireEvent.click(
+    await within(dialog).findByRole("button", { name: "更新到 fffffff" }),
+  );
+  fireEvent.click(
+    await within(dialog).findByRole("button", { name: "确认更新" }),
+  );
+  await waitFor(() =>
+    expect(backend.applied).toEqual([{ kind: "commit", ref: "f".repeat(40) }]),
+  );
+});
+
+it("blocks a Git update when the backend reports uncommitted work", async () => {
+  const backend = setup(undefined, true, "工作区存在未提交的修改");
+  fireEvent.click(await screen.findByRole("button", { name: /检查更新/ }));
+  const dialog = await screen.findByRole("dialog", { name: "检查更新" });
+  fireEvent.click(
+    await within(dialog).findByRole("button", { name: "更新到 fffffff" }),
+  );
+  expect(await within(dialog).findByRole("alert")).toHaveProperty(
+    "textContent",
+    "工作区存在未提交的修改",
+  );
+  expect(within(dialog).queryByRole("button", { name: "仍然更新" })).toBeNull();
+  expect(within(dialog).queryByRole("button", { name: "确认更新" })).toBeNull();
+  expect(backend.applied).toEqual([]);
 });

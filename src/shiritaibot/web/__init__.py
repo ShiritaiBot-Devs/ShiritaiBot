@@ -115,6 +115,7 @@ def create_app(
     updater = updater or Updater(
         Path(__file__).resolve().parents[3],
         restart_once if request_restart is not None else None,
+        home=home,
     )
 
     @asynccontextmanager
@@ -218,7 +219,7 @@ def create_app(
         )
 
     @api.get("/api/update/status", dependencies=protected)
-    async def update_status():
+    def update_status():
         return updater.status()
 
     @api.get("/api/update/releases", dependencies=protected)

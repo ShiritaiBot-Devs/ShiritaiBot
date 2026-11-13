@@ -131,14 +131,19 @@ function ConsoleApp() {
     refetchInterval: restarting ? 1000 : 10000,
     retry: restarting ? false : 3,
   });
-  // Background check for a newer stable release; failures stay silent here.
+  // Background check follows the deployment mode; failures stay silent here.
   const updateCheck = useQuery({
     queryKey: ["update", "check", health.data?.instance_id],
     queryFn: async () => {
-      const [status, latest] = await Promise.all([
-        client!.updateStatus(),
-        client!.updateReleases(1, 1, false),
-      ]);
+      const status = await client!.updateStatus();
+      if (status.mode === "git") {
+        if (!status.available) return false;
+        const { commit } = await client!.updatePreview();
+        return Boolean(
+          commit && status.current.sha && commit.sha !== status.current.sha,
+        );
+      }
+      const latest = await client!.updateReleases(1, 1, false);
       const release = latest?.items?.[0];
       return Boolean(
         release && status?.current && isNewer(release, status.current),

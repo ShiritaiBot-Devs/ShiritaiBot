@@ -767,6 +767,7 @@ export type UpdatePhase =
   "idle" | "downloading" | "building" | "deploying" | "restarting" | "failed";
 
 export interface UpdateStatus {
+  mode?: "installer" | "git";
   phase: UpdatePhase;
   message: string;
   target: { kind: "release" | "commit"; ref: string } | null;
@@ -804,6 +805,7 @@ export interface UpdateInspect {
 }
 
 export interface CommitPreview {
+  branch?: string;
   sha: string;
   message: string;
   date: string | null;

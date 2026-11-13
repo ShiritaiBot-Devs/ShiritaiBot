@@ -46,6 +46,31 @@ async def test_old_config_defaults_and_json_null_roundtrip(tmp_path):
     assert restored.value == service.value
 
 
+async def test_removed_policy_fields_migrate_and_disappear_on_save(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(
+        "[policy]\ndebounce_fragment_seconds = 5.0\ndebounce_fragment_max_seconds = 12.0\n"
+        "debounce_seconds = 3.0\n",
+        encoding="utf-8",
+    )
+    service = ConfigService(tmp_path)
+    await service.load()
+    assert service.value.policy.debounce_seconds == 3.0
+    await service.save(service.value)
+    assert "debounce_fragment" not in path.read_text(encoding="utf-8")
+    await ConfigService(tmp_path).load()
+
+
+async def test_config_load_reports_file_and_field_without_secret_value(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('[policy]\nunknown_key = "secret-value"\n', encoding="utf-8")
+    with pytest.raises(PublicError) as error:
+        await ConfigService(tmp_path).load()
+    assert str(path) in str(error.value)
+    assert "policy.unknown_key" in str(error.value)
+    assert "secret-value" not in str(error.value)
+
+
 @pytest.mark.parametrize(
     "options",
     [
