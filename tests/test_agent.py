@@ -162,6 +162,27 @@ def test_history_repairs_dangling_calls_and_trims_complete_pairs():
     assert repair_history(history, 20) == [{"role": "user", "content": "new"}]
 
 
+def test_history_skips_tool_messages_without_call_id():
+    # 旧版审批备注等损坏记录：role=tool 但缺 tool_call_id，不应让 repair_history 崩溃。
+    broken = {"role": "tool", "content": "审批授权：shell 以后都同意"}
+    history = [{"role": "user", "content": "hi"}, broken, {"role": "user", "content": "next"}]
+    assert repair_history(history, 10000) == [
+        {"role": "user", "content": "hi"},
+        {"role": "user", "content": "next"},
+    ]
+
+    # 坏记录前的未配对 tool_calls 仍会在下一条非 tool 消息处补上伪结果。
+    history = [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "", "tool_calls": [{"id": "1"}]},
+        broken,
+        {"role": "user", "content": "next"},
+    ]
+    repaired = repair_history(history, 10000)
+    assert [m["role"] for m in repaired] == ["user", "assistant", "tool", "user"]
+    assert repaired[2]["tool_call_id"] == "1"
+
+
 async def test_private_memory_does_not_enter_chat_prompt(app):
     owner = Context("web:owner", "owner", "agent", True, turn="t1")
     await app.store.append("web:owner", "t1", {"role": "user", "content": "我的密码提示是银河"})

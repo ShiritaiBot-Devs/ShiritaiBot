@@ -80,9 +80,11 @@ def repair_history(messages: list[dict], max_chars: int | None) -> list[dict]:
             )
             pending.clear()
         if message["role"] == "tool":
-            if message["tool_call_id"] not in pending:
+            # 损坏记录（缺 tool_call_id，如旧版审批备注）直接跳过，避免 KeyError 卡死会话。
+            call_id = message.get("tool_call_id")
+            if call_id is None or call_id not in pending:
                 continue
-            pending.pop(message["tool_call_id"])
+            pending.pop(call_id)
         result.append(message)
         for call in message.get("tool_calls", []):
             pending[call["id"]] = True
