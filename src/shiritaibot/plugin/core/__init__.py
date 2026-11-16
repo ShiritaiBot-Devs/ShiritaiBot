@@ -23,6 +23,7 @@ from shiritaibot.plugin_api import PluginContext
 from .hooks import HOOK_TIMEOUT, Handler, HookBus, collect
 from .manifest import manifest_file, read_manifest
 from .packages import install_archive, remove_directory
+from .requirements import missing_requirements
 
 log = get_logger("插件")
 
@@ -318,7 +319,11 @@ class PluginManager:
             message = (
                 str(exc)
                 if isinstance(exc, PublicError)
-                else f"插件加载失败（{type(exc).__name__}）"
+                else (
+                    f"插件加载失败（ModuleNotFoundError: {exc.name}）"
+                    if isinstance(exc, ModuleNotFoundError) and exc.name
+                    else f"插件加载失败（{type(exc).__name__}）"
+                )
             )
             self.errors[key] = message
             log.error(f"插件 {key} 加载失败：{message}")
@@ -356,6 +361,11 @@ class PluginManager:
                 )
                 raise PublicError("插件配置不符合定义：" + "、".join(fields))
             directory = Path(metadata["path"])
+            missing = missing_requirements(directory)
+            if missing:
+                raise PublicError(
+                    "插件依赖缺失：" + "、".join(missing) + "，请参考插件 requirements.txt 安装"
+                )
             module_name = f"shiritaibot_plugin_{key}_{uid()}"
 
             def load():
