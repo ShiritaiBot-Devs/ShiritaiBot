@@ -1,7 +1,7 @@
 import { LoadingBar } from "../components/LoadingBar";
 import { MetricIcon } from "../components/MetricIcon";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ApiClient } from "../api/client";
 import type {
@@ -232,6 +232,45 @@ function HourlyChart({
   const [hover, setHover] = useState<number | null>(null);
   const [focusedSeries, setFocusedSeries] = useState<string | null>(null);
   const [logScale, setLogScale] = useState(false);
+  const [logMix, setLogMix] = useState(0);
+  const logMixRef = useRef(0);
+
+  useEffect(() => {
+    const target = logScale ? 1 : 0;
+    const from = logMixRef.current;
+    if (from === target) return;
+
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    ) {
+      logMixRef.current = target;
+      setLogMix(target);
+      return;
+    }
+
+    const duration = 320;
+    const start = performance.now();
+    let frameId = 0;
+
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased =
+        progress < 0.5
+          ? 4 * progress * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+      const next = from + (target - from) * eased;
+      logMixRef.current = next;
+      setLogMix(next);
+      if (progress < 1) {
+        frameId = requestAnimationFrame(tick);
+      }
+    };
+
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [logScale]);
+
   const highlighted = series.some((item) => item.key === focusedSeries)
     ? focusedSeries
     : null;
@@ -255,8 +294,11 @@ function HourlyChart({
   const logMax = Math.log10(1 + maximum);
   const scaleY = (v: number) => {
     if (v <= 0) return 0;
-    if (!logScale) return (v / maximum) * height;
-    return (Math.log10(1 + v) / logMax) * height;
+    const linear = (v / maximum) * height;
+    if (logMix === 0) return linear;
+    const log = (Math.log10(1 + v) / logMax) * height;
+    if (logMix === 1) return log;
+    return linear + (log - linear) * logMix;
   };
   const step = width / Math.max(1, rows.length);
   const selected = hover === null ? null : rows[hover];
