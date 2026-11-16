@@ -231,6 +231,7 @@ function HourlyChart({
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const [focusedSeries, setFocusedSeries] = useState<string | null>(null);
+  const [logScale, setLogScale] = useState(false);
   const highlighted = series.some((item) => item.key === focusedSeries)
     ? focusedSeries
     : null;
@@ -249,7 +250,14 @@ function HourlyChart({
     ),
   );
   const width = 900;
-  const height = 190;
+  const height = 280;
+  const labelHeight = 28;
+  const logMax = Math.log10(1 + maximum);
+  const scaleY = (v: number) => {
+    if (v <= 0) return 0;
+    if (!logScale) return (v / maximum) * height;
+    return (Math.log10(1 + v) / logMax) * height;
+  };
   const step = width / Math.max(1, rows.length);
   const selected = hover === null ? null : rows[hover];
 
@@ -257,43 +265,58 @@ function HourlyChart({
     <section className="panel chart-panel">
       <div className="panel-head">
         <h3>{title}</h3>
-        <div className="chart-legend">
-          {series.map((item) =>
-            type === "line" ? (
-              <button
-                type="button"
-                key={item.key}
-                className={`chart-legend-button${highlighted === item.key ? " is-selected" : ""}${highlighted !== null && highlighted !== item.key ? " is-dimmed" : ""}`}
-                aria-pressed={highlighted === item.key}
-                title={
-                  highlighted === item.key
-                    ? "再次点击显示全部曲线"
-                    : `高亮 ${item.label}`
-                }
-                onClick={() =>
-                  setFocusedSeries(highlighted === item.key ? null : item.key)
-                }
-              >
-                <i style={{ background: item.color }} aria-hidden="true" />
-                <span>{item.label}</span>
-              </button>
-            ) : (
-              <span key={item.key}>
-                <i style={{ background: item.color }} aria-hidden="true" />
-                {item.label}
-              </span>
-            ),
-          )}
+        <div className="chart-controls">
+          <div className="chart-legend">
+            {series.map((item) =>
+              type === "line" ? (
+                <button
+                  type="button"
+                  key={item.key}
+                  className={`chart-legend-button${highlighted === item.key ? " is-selected" : ""}${highlighted !== null && highlighted !== item.key ? " is-dimmed" : ""}`}
+                  aria-pressed={highlighted === item.key}
+                  title={
+                    highlighted === item.key
+                      ? "再次点击显示全部曲线"
+                      : `高亮 ${item.label}`
+                  }
+                  onClick={() =>
+                    setFocusedSeries(highlighted === item.key ? null : item.key)
+                  }
+                >
+                  <i style={{ background: item.color }} aria-hidden="true" />
+                  <span>{item.label}</span>
+                </button>
+              ) : (
+                <span key={item.key}>
+                  <i style={{ background: item.color }} aria-hidden="true" />
+                  {item.label}
+                </span>
+              ),
+            )}
+          </div>
+          <button
+            type="button"
+            className={`chart-scale-toggle${logScale ? " is-selected" : ""}`}
+            aria-pressed={logScale}
+            title={logScale ? "切换为线性尺度" : "切换为对数尺度 (log10)"}
+            onClick={() => setLogScale((prev) => !prev)}
+          >
+            对数尺度
+          </button>
         </div>
       </div>
       <div className="chart-plot">
-        <div className="chart-scale" aria-hidden="true">
+        <div
+          className="chart-scale"
+          aria-hidden="true"
+          style={{ bottom: `${(labelHeight / (height + labelHeight)) * 100}%` }}
+        >
           <span>{formatNumber(maximum)}</span>
           <span>0</span>
         </div>
         <svg
           className="hourly-chart"
-          viewBox={`0 0 ${width} ${height + 28}`}
+          viewBox={`0 0 ${width} ${height + labelHeight}`}
           role="group"
           aria-label={title + "逐小时图表"}
           onMouseLeave={() => setHover(null)}
@@ -310,7 +333,7 @@ function HourlyChart({
             />
           ))}
           {rows.map((row, index) => {
-            let offset = 0;
+            let cumulative = 0;
             return (
               <g
                 key={row.hour}
@@ -331,8 +354,9 @@ function HourlyChart({
                   fill={index === hover ? "var(--accent-soft)" : "transparent"}
                 />
                 {series.map((item) => {
-                  const value = (item.value(row) / maximum) * height;
+                  const raw = item.value(row);
                   if (type === "line") {
+                    const value = scaleY(raw);
                     return (
                       <circle
                         key={item.key}
@@ -347,14 +371,17 @@ function HourlyChart({
                       />
                     );
                   }
-                  offset += value;
+                  const prevScaled = scaleY(cumulative);
+                  cumulative += raw;
+                  const nextScaled = scaleY(cumulative);
+                  const barHeight = nextScaled - prevScaled;
                   return (
                     <rect
                       key={item.key}
                       x={index * step + step * 0.15}
-                      y={height - offset}
+                      y={height - nextScaled}
                       width={step * 0.7}
-                      height={value}
+                      height={barHeight}
                       rx={1}
                       fill={item.color}
                       stroke="var(--panel)"
@@ -392,7 +419,7 @@ function HourlyChart({
                 d={smoothLine(
                   rows.map((row, index) => ({
                     x: (index + 0.5) * step,
-                    y: height - (item.value(row) / maximum) * height,
+                    y: height - scaleY(item.value(row)),
                   })),
                 )}
                 fill="none"
