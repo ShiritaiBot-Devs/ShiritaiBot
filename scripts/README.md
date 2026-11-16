@@ -33,6 +33,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1
 `%LOCALAPPDATA%\ShiritaiBot`。目录中 `app/` 保存源码、`data/` 保存聊天和配置、
 `runtime/` 保存运行环境与缓存。再次执行会复用已有源码和数据。
 
+其中 `app/.venv/` 用于启动和开发，Bot 与插件实际使用的总锁文件和 Python 环境位于 `data/runtime/projects/<generation>/`，由 `data/runtime/current.json` 选择。安装脚本会提前准备该环境，包括选择暂不启动时；以后也可在 `app/` 中执行 `uv run shiritaibot sync --home ../data` 单独同步。详见 [插件依赖管理](../docs/PLUGINS.md#插件依赖管理)。
+
 安装输出会给出管理页面、重启命令和获取令牌的命令。Bash 使用安装目录里的
 `start.sh` 启动、`start.sh token` 获取令牌；Windows 使用输出的 PowerShell
 命令启动，附加 `-Token` 获取令牌。尚未启动过时也能直接运行令牌命令，它会当场

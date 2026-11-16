@@ -165,8 +165,7 @@
         Push-Location -LiteralPath $app
         $locationPushed = $true
         Invoke-ShiritaiNative -File $uvExe -Arguments @('sync', '--frozen', '--no-dev')
-        # uv-created venvs ship without pip; add it so `python -m pip` works in the framework shell.
-        Invoke-ShiritaiNative -File $uvExe -Arguments @('pip', 'install', '--python', (Join-Path $app '.venv/Scripts/python.exe'), 'pip')
+        Invoke-ShiritaiNative -File $uvExe -Arguments @('run', '--frozen', '--no-sync', 'python', '-m', 'shiritaibot.cli', 'sync', '--home', (Join-Path $ShiritaiRoot 'data'))
         Invoke-ShiritaiNative -File $nodeExe -Arguments @($npmCli, '--prefix', 'web', 'ci', '--no-audit', '--no-fund')
         Invoke-ShiritaiNative -File $nodeExe -Arguments @($npmCli, '--prefix', 'web', 'run', 'build')
 

@@ -18,6 +18,7 @@ from shiritaibot.api.hook import tool_spec
 from shiritaibot.config import PluginConfig
 from shiritaibot.core import PublicError, uid
 from shiritaibot.core.logs import get_logger
+from shiritaibot.dependencies import RuntimeEnvironment
 from shiritaibot.plugin_api import PluginContext
 
 from .hooks import HOOK_TIMEOUT, Handler, HookBus, collect
@@ -42,6 +43,7 @@ class PluginManager:
         self.errors: dict[str, str] = {}
         self.modules: dict[str, str] = {}
         self.manage_lock = asyncio.Lock()
+        self.dependencies = RuntimeEnvironment(self.home)
         self.source_root = Path(__file__).parent.parent
         # Proactive notification channels per plugin; the engine reads this mapping directly.
         self.notifiers: dict[str, list] = {}
@@ -209,11 +211,16 @@ class PluginManager:
 
     async def listing(self) -> list[dict]:
         configs = {p.id: p for p in self.config.value.plugins}
+        plan = self.dependencies.current()
+        dependency_errors = plan.state["errors"] if plan else {}
+        current = self.dependencies.running_state()
         result = []
         for meta in await self.discover():
             key = meta["id"]
             cfg = configs.get(key, PluginConfig(id=key))
-            error = meta.get("error") or self.errors.get(key, "")
+            error = meta.get("error") or self.errors.get(key, "") or dependency_errors.get(key, "")
+            if not error and plan and not plan.supports(key, current):
+                error = "插件依赖已准备完成，请重启 ShiritaiBot 后启用"
             status = "loaded" if key in self.loaded else "disabled"
             if error:
                 status = "error"
@@ -239,6 +246,7 @@ class PluginManager:
     async def reload_all(self) -> list[dict]:
         async with self.manage_lock:
             await self.sync_config()
+            await self.dependencies.prepare()
             configured = {p.id for p in self.config.value.plugins}
             discovered = {p["id"] for p in await self.discover()}
             for key in list(self.loaded):
@@ -265,9 +273,15 @@ class PluginManager:
             log.log(f"已安装插件 {key}")
             await self.sync_config()
             try:
+                plan = await self.dependencies.prepare(required=key)
+                if not plan.supports(key, self.dependencies.running_state()):
+                    raise PublicError("插件依赖已准备完成，请重启 ShiritaiBot 后启用")
                 await self.reload(key)
-            except Exception:
-                pass  # Keep installed code and show its load error so settings can be corrected.
+            except Exception as exc:
+                # Keep code so a declaration can be fixed or a prepared environment activated.
+                if isinstance(exc, PublicError):
+                    self.errors[key] = str(exc)
+                log.error(f"插件 {key} 安装后未加载：{self.errors.get(key, '插件加载失败')}")
             return await self.listing()
 
     async def remove(self, key: str) -> list[dict]:
@@ -294,6 +308,12 @@ class PluginManager:
                 log.log(f"已移除插件 {key}")
                 await self.store.activity("plugin.removed", key)
             await self.sync_config()
+            # Keep installed packages until restart; removal never mutates a live venv.
+            try:
+                await self.dependencies.prepare()
+                log.log("插件依赖清单已更新，环境清理将在重启后生效")
+            except PublicError as exc:
+                log.error(f"插件已移除，依赖清理将在下次启动重试：{exc}")
             return await self.listing()
 
     def _forget_modules(self, key: str, keep: str = "") -> None:
@@ -318,6 +338,10 @@ class PluginManager:
             message = (
                 str(exc)
                 if isinstance(exc, PublicError)
+                else f"缺少 Python 模块 {exc.name}，请检查插件依赖声明并重载"
+                if isinstance(exc, ModuleNotFoundError)
+                and exc.name
+                and re.fullmatch(r"[A-Za-z_][\w.]{0,199}", exc.name)
                 else f"插件加载失败（{type(exc).__name__}）"
             )
             self.errors[key] = message
@@ -346,6 +370,9 @@ class PluginManager:
                 return
             if metadata["error"]:
                 raise PublicError(metadata["error"])
+            plan = await self.dependencies.prepare(required=key)
+            if not plan.supports(key, self.dependencies.running_state()):
+                raise PublicError("插件依赖已准备完成，请重启 ShiritaiBot 后启用")
             plugin_settings = deepcopy({**metadata["defaults"], **cfg.settings})
             invalid = list(
                 Draft202012Validator(metadata["settings_schema"]).iter_errors(plugin_settings)

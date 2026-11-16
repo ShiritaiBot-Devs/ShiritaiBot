@@ -3,7 +3,7 @@
 The installer lays out ``<root>/app`` (source), ``<root>/data`` and ``<root>/runtime``. An
 update downloads the chosen source archive into ``<root>/.update``, builds the WebUI there,
 then swaps the top-level entries of ``app`` (keeping ``.venv`` and concrete plugins),
-syncs Python dependencies in place and finally asks ``shiritaibot run`` to re-execute.
+prepares a combined runtime environment and asks ``shiritaibot run`` to re-execute.
 Any failure before the restart moves the previous source back.
 """
 
@@ -33,6 +33,7 @@ import httpx
 from shiritaibot.core import PublicError
 from shiritaibot.core.logs import get_logger
 from shiritaibot.core.process import run_process
+from shiritaibot.dependencies import RuntimeEnvironment
 
 REPOSITORY = "ShiritaiBot-Devs/ShiritaiBot"
 BRANCH = "main"
@@ -91,6 +92,7 @@ class Updater:
         self.inspecting = False
         self.output: deque[str] = deque(maxlen=60)
         self.state: dict = {"phase": "idle", "message": "", "target": None}
+        self.dependency_python: Path | None = None
 
     # ----- availability and current version -------------------------------------------------
 
@@ -551,7 +553,13 @@ class Updater:
             return
         try:
             await self.command(
-                [sys.executable, "-c", script, str(source / "src"), str(self.home)],
+                [
+                    str(self.dependency_python or sys.executable),
+                    "-c",
+                    script,
+                    str(source / "src"),
+                    str(self.home),
+                ],
                 source,
             )
         except PublicError:
@@ -772,19 +780,11 @@ class Updater:
         return ["npm", *args]
 
     async def sync(self, quiet: bool = False) -> None:
-        uv = os.environ.get("UV") or shutil.which("uv")
-        if not uv:
-            raise PublicError("找不到 uv，无法安装 Python 依赖")
-        # --inexact keeps pip and packages that plugins installed into the environment.
-        # --no-install-project skips rewriting the project and its console script: on Windows
-        # the running shiritaibot.exe is locked, so reinstalling it fails (WinError 32) and can
-        # uninstall the package mid-update. The existing editable install already points at
-        # this source tree, so new code loads on restart.
         try:
-            await self.command(
-                [uv, "sync", "--frozen", "--no-dev", "--inexact", "--no-install-project"],
-                self.app_dir,
-            )
+            plan = await RuntimeEnvironment(self.home, core=self.app_dir).prepare(repair=True)
+            self.dependency_python = plan.python
+            for message in plan.state["errors"].values():
+                self.output.append(message)
         except Exception:
             if not quiet:
                 raise

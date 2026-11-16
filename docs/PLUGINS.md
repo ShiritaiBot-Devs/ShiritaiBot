@@ -26,7 +26,44 @@
 
 WebUI 的“安装插件”支持上传 ZIP 或填写公开 GitHub 仓库地址（下载默认分支的 ZIP）。插件安装到 `<home>/plugins/<id>/`；ZIP 可以直接包含清单（`metadata.yaml` 或 `plugin.toml`）与 `main.py`，或套一层仓库目录；安装前按与加载相同的规则校验清单和配置定义。同名安装会被拒绝。“移除”会先弹出确认，确认后停止插件、撤销工具和通知通道、删除代码目录与配置并更新列表；同名的两个搜索路径都会清理，插件数据目录与历史记录保留。“重载插件”会重新扫描全部目录、补齐配置并重载；也可单独重载当前插件。重载使用已保存的配置。
 
-插件在同一进程运行，属于可信本地代码，不是安全沙箱。工具执行由权限层控制，但插件代码自身具有宿主账号权限。只安装可信代码。宿主不会自动安装 requirements。
+插件在同一进程运行，属于可信本地代码，不是安全沙箱。工具执行由权限层控制，但插件代码自身具有宿主账号权限。只安装可信代码。宿主自动解析并安装插件声明的 Python 依赖。
+
+## 插件依赖管理
+
+仓库根目录的 `pyproject.toml` / `uv.lock` 保留为 Core 的开发与发布基线。`shiritaibot run` 在启动应用前扫描全部已安装插件（包括停用插件），把 Core 与插件依赖汇总到用户数据目录下的独立项目：
+
+```text
+<home>/runtime/
+  current.json                     # 当前选定的环境代次
+  projects/<generation>/
+    pyproject.toml                 # 框架生成的总依赖声明
+    uv.lock                        # uv 解析的总锁文件
+    state.json                     # 输入指纹、已接受的插件依赖与失败原因
+    .venv/                         # 对应的实际运行环境
+```
+
+框架通过 `uv lock --project <generation>` 解析，再用 `uv sync --project <generation> --locked --no-dev` 安装。安装成功后才更新 `current.json`；失败不替换原环境。CLI 使用选定环境的 Python 重新启动应用，并设置 `VIRTUAL_ENV` 与 `PATH`，框架 shell 中的 `python` / `pip` 也使用该环境。仓库里的 `.venv` 只用于开发与启动，因此在仓库执行普通 `uv sync` 不会影响实际运行环境。
+
+需要只准备依赖、不启动服务时，执行 `uv run shiritaibot sync --home data`；可同样追加 `--extra learn`。一键部署脚本也会执行这个步骤。
+
+插件可以使用以下任一格式：
+
+```toml
+# pyproject.toml（新插件推荐）
+[project]
+name = "srtb-plugin-example"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = ["aiohttp>=3.9,<4"]
+```
+
+或在 `requirements.txt` 中写 `aiohttp>=3.9,<4`。存在 `[project]` 时以其静态 `dependencies` 为准；只有工具配置的 `pyproject.toml` 不遮蔽 `requirements.txt`。支持 PEP 508 版本范围、extras、环境标记、`name @ URL`、相对本地目录/归档，以及 requirements 的 `-r` / `-c` 嵌套引用；相对路径以声明文件所在目录为基准。暂不支持动态依赖、插件 `tool.uv.sources`、`-e`、`--hash` 和 requirements 中的安装源选项，这些情况明确报错。安装源和认证通过 uv 的配置或环境变量设置，依赖地址不内嵌密码或查询参数。插件自己的锁文件不参与合并；也不通过扫描 Python import 来猜依赖。
+
+Core 运行所需的直接与间接依赖从 Core 锁文件导出为精确约束，并保留环境标记。插件可以增加包，但不能改变 Core 锁定版本；插件之间也共同求解。已有插件优先，新发现的不兼容插件会单独记录错误，其他插件继续加载。修复声明或安装源后重载可重试；不强行覆盖冲突约束。
+
+启动、安装/重载插件、卸载插件和 WebUI 更新 Core 时都会检查声明。输入未变化时复用锁文件；启动时同步锁定环境以恢复被卸载的包。依赖组合变化时创建新环境，避免在运行中替换已导入的包；插件页会提示重启后启用，旧环境中的插件可继续运行。禁用只停止插件，不卸载其依赖；卸载插件会重新解析剩余集合，共享依赖仍保留在新环境中。旧环境保留，供仍在运行的进程使用。
+
+Core 可选依赖通过运行命令的 `--extra` 启用，例如 `uv run shiritaibot run --extra learn`，而不是只在仓库环境执行 `uv sync --extra learn`。运行环境自带 pip，但手动用 pip 安装的未声明包会在下次精确同步时清理；持久依赖应写进插件声明。直接调用 `create_app` 的自定义宿主需自行使用选定的运行环境，自动切换解释器由 `shiritaibot run` 完成。
 
 ## 工具安全声明与会话权限
 
@@ -113,8 +150,8 @@ config_dir = "/home/your-user/.lark-cli/orgs/shiritaibot"
 本地目录：`src/shiritaibot/plugin/thu_learn/`。插件 ID：`thu_learn`。
 
 ```powershell
-uv sync --extra learn
-uv run --extra learn shiritaibot run
+uv sync
+uv run shiritaibot run --extra learn
 ```
 
 在 WebUI 的插件配置中直接填写学号和密码并保存，密码会自动加密。保存后的配置形式如下（`secret:...` 由程序生成，无需手工创建）：

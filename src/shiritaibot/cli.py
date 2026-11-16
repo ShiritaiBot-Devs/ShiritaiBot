@@ -1,6 +1,7 @@
 import logging
 import os
 import socket
+import subprocess
 import sys
 from copy import copy, deepcopy
 from errno import EADDRINUSE, ECONNREFUSED
@@ -11,8 +12,6 @@ import typer
 import uvicorn
 from uvicorn.config import LOGGING_CONFIG
 from uvicorn.logging import DefaultFormatter
-
-from shiritaibot.web import create_app, ensure_token
 
 cli = typer.Typer(help="ShiritaiBot · Personal agent runtime")
 
@@ -76,12 +75,10 @@ def run(
         None,
         help="本次运行的 Bot 日志级别：debug / info / warning / error；不填则使用 WebUI 中保存的级别",
     ),
+    extra: list[str] = typer.Option([], help="启用 Core 可选依赖，例如 --extra learn；可重复"),
 ):
     """Run the local control plane and configured adapters."""
     home = home.resolve()
-    admin_token = ensure_token(home)
-    log_config = deepcopy(LOGGING_CONFIG)
-    log_config["formatters"]["default"].update({"()": LoginLinkFormatter, "token": admin_token})
     restart_requested = False
 
     def request_restart() -> None:
@@ -99,6 +96,78 @@ def run(
         )
         raise typer.Exit(1)
 
+    # Resolve and repair before importing the application or executing any plugin.
+    # A fresh interpreter also ensures no modules from the bootstrap venv survive.
+    import asyncio
+
+    from shiritaibot.core import PublicError
+    from shiritaibot.dependencies import RuntimeEnvironment
+
+    try:
+        environment = RuntimeEnvironment(home, extras=extra)
+        typer.echo("正在检查 Core 与插件依赖，首次准备运行环境可能需要几分钟……")
+        plan = asyncio.run(environment.prepare(repair=True))
+    except PublicError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(1) from None
+
+    def arguments(python: Path) -> list[str]:
+        args = [
+            str(python),
+            "-m",
+            "shiritaibot.cli",
+            "run",
+            "--home",
+            str(home),
+            "--port",
+            str(port),
+        ]
+        for host in allowed_host:
+            args.extend(["--allowed-host", host])
+        for name in extra:
+            args.extend(["--extra", name])
+        if log_level:
+            args.extend(["--log-level", log_level])
+        return args
+
+    os.environ["VIRTUAL_ENV"] = str(plan.python.parent.parent)
+    os.environ["PATH"] = str(plan.python.parent) + os.pathsep + os.environ.get("PATH", "")
+    if os.name == "nt":
+        # CRT execv does not preserve foreground waiting or argv quoting on
+        # Windows. One supervisor owns the terminal across all service restarts.
+        if os.environ.get("SHIRITAI_RUNTIME_CHILD") != str(home):
+            child_env = {**os.environ, "SHIRITAI_RUNTIME_CHILD": str(home)}
+            while True:
+                child = subprocess.Popen(
+                    arguments(plan.python),
+                    env=child_env,
+                    creationflags=0
+                    if sys.stdin and sys.stdin.isatty()
+                    else subprocess.CREATE_NO_WINDOW,
+                )
+                try:
+                    code = child.wait()
+                except KeyboardInterrupt:
+                    try:
+                        child.wait(timeout=15)
+                    except subprocess.TimeoutExpired:
+                        child.terminate()
+                        child.wait()
+                    raise typer.Exit(130) from None
+                if code != 75:
+                    raise typer.Exit(code)
+                plan = environment.current() or plan
+        elif Path(sys.prefix).resolve() != plan.python.parent.parent.resolve():
+            raise typer.Exit(75)
+    elif Path(sys.prefix).resolve() != plan.python.parent.parent.resolve():
+        os.execv(str(plan.python), arguments(plan.python))
+        return
+
+    from shiritaibot.web import create_app, ensure_token
+
+    admin_token = ensure_token(home)
+    log_config = deepcopy(LOGGING_CONFIG)
+    log_config["formatters"]["default"].update({"()": LoginLinkFormatter, "token": admin_token})
     config = uvicorn.Config(
         create_app(
             home,
@@ -127,7 +196,32 @@ def run(
     if restart_requested:
         # Re-enter Python only after Uvicorn has closed connections and the
         # application lifespan has flushed data and stopped its workers.
-        os.execv(sys.executable, [sys.executable, *sys.orig_argv[1:]])
+        if os.name == "nt":
+            raise typer.Exit(75)
+        next_plan = environment.current()
+        python = next_plan.python if next_plan else Path(sys.executable)
+        os.execv(str(python), arguments(python))
+
+
+@cli.command()
+def sync(
+    home: Path = Path("data"),
+    extra: list[str] = typer.Option([], help="启用 Core 可选依赖，例如 --extra learn；可重复"),
+):
+    """Prepare the combined runtime without starting the Bot."""
+    import asyncio
+
+    from shiritaibot.core import PublicError
+    from shiritaibot.dependencies import RuntimeEnvironment
+
+    try:
+        plan = asyncio.run(RuntimeEnvironment(home, extras=extra).prepare(repair=True, retry=True))
+    except PublicError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(1) from None
+    typer.echo(f"运行环境已准备：{plan.directory}")
+    for message in plan.state["errors"].values():
+        typer.echo(message, err=True)
 
 
 @cli.command()
@@ -136,6 +230,8 @@ def token(
     create: bool = typer.Option(False, help="目录尚未启动过时生成新令牌"),
 ):
     """Display the local admin token for signing into WebUI."""
+    from shiritaibot.web import ensure_token
+
     home = home.resolve()
     if create:
         typer.echo(ensure_token(home))

@@ -70,11 +70,12 @@ ShiritaiBot践行“一切皆工具(和Skill，未来方向)”的理念，希�
 git clone https://github.com/XCM42-Orion/ShiritaiBot.git
 cd ShiritaiBot
 uv sync
-uv pip install pip   # .venv 默认不带 pip，补上后框架 shell 里的 python -m pip 可直接使用
 npm --prefix web ci
 npm --prefix web run build
 uv run shiritaibot run
 ```
+
+首次启动会根据 Core 锁文件和已安装插件的依赖声明，自动准备 `<home>/runtime/` 下的独立运行环境。仓库的 `.venv` 用于启动和开发，后续在仓库执行 `uv sync` 不会清掉运行环境中的插件依赖。依赖组合变化后按提示重启生效；声明格式、冲突处理和可选依赖见 [插件依赖管理](docs/PLUGINS.md#插件依赖管理)。
 
 启动后，点击终端里 `Uvicorn running on` 后面的完整链接即可自动登录。如果直接访问 <http://127.0.0.1:8765>，需要先在新终端获取令牌：
 
