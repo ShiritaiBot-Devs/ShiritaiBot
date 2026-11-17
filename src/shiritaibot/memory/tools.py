@@ -7,6 +7,10 @@ from shiritaibot.tools import TEXT, schema
 
 SHORT = {"type": "string", "minLength": 1, "maxLength": 200}
 NAMES = {"type": "array", "items": SHORT, "maxItems": 20}
+PARTICIPANTS = {
+    **NAMES,
+    "description": "须为记忆里已建立的实体（名字、别名或 e 编号）；事件中首次出现的人物先用 kind=entity 建立",
+}
 DATE = {
     "type": "string",
     "maxLength": 40,
@@ -120,6 +124,8 @@ def memory_tools(memory_for) -> list[Tool]:
             "kind=fact 记录关于某个实体的事实（会过时的状态也可以，例如年级、职位）；"
             "kind=event 记录发生过或计划中的事，time 必须是绝对时间，按对话中的日期换算“昨天”等说法，"
             "实在不确定时用 time_text 保留原话。content 用第三人称、不含相对时间词。"
+            "participants 须为记忆里已建立的实体（名字、别名或 e 编号），"
+            "事件中首次出现的人物先用 kind=entity 建立再引用，否则写入会被拒绝。"
             "evidence 必须原样摘自本轮主人消息或工具结果，摘自主人消息时视为主人确认；"
             "只记录主人或当事人明确说过的事，不要写入自己的推断。replaces 用于更正已有条目。",
             schema(
@@ -137,7 +143,7 @@ def memory_tools(memory_for) -> list[Tool]:
                     "time": DATE,
                     "time_text": {"type": "string", "maxLength": 200},
                     "phase": {"type": "string", "enum": ["happened", "planned", "cancelled"]},
-                    "participants": NAMES,
+                    "participants": PARTICIPANTS,
                     "evidence": {"type": "string", "minLength": 1, "maxLength": 2000},
                     "replaces": {"type": "string", "pattern": "^[fv][0-9]+$"},
                 },
