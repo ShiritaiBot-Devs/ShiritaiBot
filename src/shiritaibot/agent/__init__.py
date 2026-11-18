@@ -835,6 +835,19 @@ class AgentRuntime:
             body["status"] = "cancelled"
             log.log(f"本轮已取消（{body['steps']} 步，用时 {time.monotonic() - started:.1f}s）")
             raise
+        except TimeoutError:
+            # asyncio.timeout(max_turn_seconds) 到期；工具自身超时已在 tools 层消化，
+            # 走到这里的基本都是整轮时间超限。给出与步数超限一致的指引而非裸类型名。
+            body["status"] = "failed"
+            error = (
+                f"本轮执行时间已达上限（{cfg.policy.max_turn_seconds} 秒，{body['steps']} 步）："
+                "已完成前面的步骤，但任务还需要更多时间。可以让我接着做、把任务拆小后重试，"
+                "或在设置 → 策略里提高 max_turn_seconds。"
+            )
+            log.error(f"本轮失败：{error}")
+            await append({"role": "assistant", "content": error})
+            final = error
+            await self.deliver(ctx.session, error)
         except Exception as exc:
             body["status"] = "failed"
             error = (
