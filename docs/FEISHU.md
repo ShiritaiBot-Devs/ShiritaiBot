@@ -34,7 +34,7 @@
 
 ## 群唤醒
 
-为应用申请并发布 `im:message.group_msg`，把机器人加入测试群，在管理台填写群的 `oc_…` ID。唤醒词默认是 `小知`。在该群发 `小知，帮我整理一下`，机器人应直接回复。再发一条不以唤醒词开头的消息，确认没有回复。可用飞书开放平台的 [群组 API](https://open.feishu.cn/document/server-docs/im-v1/chat/list) 查询应用所在群的 `chat_id`。
+为应用申请并发布 `im:message.group_msg`，把机器人加入测试群，在管理台填写群的 `oc_…` ID。普通对话使用适配器里的句首唤醒词，默认是 `小知`，例如 `小知，帮我整理一下`。已注册的插件指令默认可直接发送。在「通用设定 → 称呼与唤起」开启「群聊插件指令需要唤醒」后，可以用 `@机器人 /指令` 或 `小知，/指令` 调用。可用飞书开放平台的 [群组 API](https://open.feishu.cn/document/server-docs/im-v1/chat/list) 查询应用所在群的 `chat_id`。
 
 当诊断显示群消息权限缺失或尚未确认时，检查权限审批、应用发布和事件订阅，再用不带 `@` 的消息实测。仅开通群 `@` 事件时，飞书不会推送普通群消息。[飞书消息 FAQ](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/guide/faq)
 

@@ -296,6 +296,7 @@ class AdapterHub:
                     self.permissions,
                     self.enqueue,
                     self.hooks,
+                    settings=self.config,
                     active_context=lambda ctx: self.config.value.feishu_context_valid(ctx),
                 )
             else:
@@ -354,10 +355,7 @@ class AdapterHub:
             s.get("type") == "at" and str(s.get("data", {}).get("qq")) == bot.self_id for s in parts
         )
         settings = self.config.value
-        if settings.wake_keyword_mode == "prefix":
-            keyword = any(text.startswith(word) for word in settings.wake_keywords)
-        else:
-            keyword = any(word in text for word in settings.wake_keywords)
+        keyword = settings.matches_wake_keyword(text)
         message_id = f"{cfg.id}:{event.get('message_id')}"
         where = f"群 {target}" if group else "私聊"
         # Untriggered group chatter is only context, so it stays at debug level.
@@ -392,51 +390,41 @@ class AdapterHub:
                 raw=event,
             )
 
-        if group and not (mentioned or keyword):
-            if self.hooks is not None:
-                # Plugin listeners also see group chatter that does not wake the bot.
-                await self.hooks.dispatch(message(False))
-            await self.maybe_interject(bot, session, user, speaker, describe(parts))
-            return
-        # Explicit controls and approvals must remain reachable while keyword gating is on.
-        menu_reply = (
-            not group
-            and user == cfg.owner_id
-            and self.permissions.menu.accepts(session, text)
+        if not group and settings.private_require_keyword and not keyword:
+            owner_reply = user == cfg.owner_id and (
+                approval_reply(text) or self.permissions.menu.accepts(session, text)
+            )
+            if not (text.startswith("/") or text in {"停", "取消"} or owner_reply):
+                bot.log.debug("私聊未包含唤醒词，不处理", speaker)
+                return
+        passive_group = group and not (mentioned or keyword)
+        direct_command = (
+            passive_group
+            and not settings.group_command_require_wake
+            and self.hooks is not None
+            and text.startswith("/")
         )
-        control = (
-            text.startswith("/")
-            or text in {"停", "取消"}
-            or approval_reply(text) is not None
-            or menu_reply
-        )
-        if (
-            not group
-            and user == cfg.owner_id
-            and settings.private_require_keyword
-            and not keyword
-            and not control
-        ):
-            bot.log.debug("私聊未包含唤醒词，不处理", speaker)
-            return
-        # The model sees the keyword as typed; it is only peeled off so that
-        # "小知，/stop" and the like still reach the command handlers.
-        for word in sorted(settings.wake_keywords, key=len, reverse=True):
-            if text.startswith(word):
-                rest = text[len(word) :].lstrip(" ，,：:！!、")
-                if (
-                    rest.startswith("/")
-                    or rest in {"停", "取消"}
-                    or approval_reply(rest)
-                    or self.permissions.menu.accepts(session, rest)
-                ):
-                    text = rest
-                break
-        if not await self.store.execute(
+        if (not passive_group or direct_command) and not await self.store.execute(
             "INSERT OR IGNORE INTO seen_messages VALUES(?,?)", (message_id, now().timestamp())
         ):
             bot.log.debug("重复消息，已跳过", speaker)
             return
+        if passive_group:
+            if direct_command and await self.hooks.dispatch_command(message(True)):
+                return
+            if self.hooks is not None and await self.hooks.dispatch(message(False)):
+                return
+            await self.maybe_interject(bot, session, user, speaker, describe(parts))
+            return
+        # Keep the original text for the model, but allow "小知，/stop" and approval replies.
+        rest = settings.strip_wake_prefix(text)
+        if rest != text and (
+            rest.startswith("/")
+            or rest in {"停", "取消"}
+            or approval_reply(rest)
+            or self.permissions.menu.accepts(session, rest)
+        ):
+            text = rest
         if not group and user == cfg.owner_id:
             approver = Context(session, user, owner=True)
             match = approval_reply(text)

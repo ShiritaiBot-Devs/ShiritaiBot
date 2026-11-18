@@ -6,9 +6,11 @@ from collections.abc import Awaitable, Callable
 
 from shiritaibot.adapters.feishu_transport import FeishuInbound, FeishuSendError, FeishuTransport
 from shiritaibot.api.event import MessageEvent
-from shiritaibot.config import AdapterConfig
+from shiritaibot.config import AdapterConfig, ConfigService
 from shiritaibot.core import ApprovalPort, Context, PublicError, RuntimePort, now
 from shiritaibot.core.logs import get_logger
+
+APPROVAL_REPLY = re.compile(r"(同意|拒绝)\s+([a-f0-9]{10})")
 
 
 class Feishu:
@@ -24,10 +26,12 @@ class Feishu:
         reply: Callable[[str, str], Awaitable[None]],
         hooks=None,
         *,
+        settings: ConfigService,
         active_context: Callable[[Context], bool] | None = None,
     ) -> None:
         self.config, self.vault, self.store = config, vault, store
         self.runtime, self.permissions, self.reply, self.hooks = runtime, permissions, reply, hooks
+        self.settings = settings
         self.active_context = active_context
         self.log = get_logger(config.id)
         self.transport: FeishuTransport | None = None
@@ -99,7 +103,11 @@ class Feishu:
         elif message.chat_type == "group":
             if message.chat_id not in self.config.groups:
                 return
-            if not self.config.feishu_group_context and not self.wake_prefix(message.text):
+            if not (
+                self.config.feishu_group_context
+                or self.wake_prefix(message.text)
+                or self.group_command_allowed(message)
+            ):
                 return
         else:
             return
@@ -107,6 +115,16 @@ class Feishu:
             self.events.put_nowait(message)
         except asyncio.QueueFull:
             self.log.warning("飞书事件队列已满，未处理一条消息。")
+
+    def group_command_allowed(self, message: FeishuInbound) -> bool:
+        return (
+            self.hooks is not None
+            and message.text.lstrip().startswith("/")
+            and (
+                not self.settings.value.group_command_require_wake
+                or self.self_id in message.mentions
+            )
+        )
 
     def wake_prefix(self, text: str) -> str:
         return next(
@@ -155,11 +173,19 @@ class Feishu:
             await self.store.record_group(
                 session, event_id, message.sender_id, "", text, bool(prefix)
             )
-        if group and not prefix:
-            return
         if prefix:
             text = text[len(prefix) :].lstrip(" ，,：:！!、\t\n") or prefix
-        if not group and (match := re.fullmatch(r"(同意|拒绝)\s+([a-f0-9]{10})", text)):
+        settings = self.settings.value
+        if not group:
+            rest = settings.strip_wake_prefix(text)
+            if rest != text and (
+                rest.startswith("/")
+                or rest in {"停", "取消"}
+                or APPROVAL_REPLY.fullmatch(rest)
+                or self.permissions.menu.accepts(session, rest)
+            ):
+                text = rest
+        if not group and (match := APPROVAL_REPLY.fullmatch(text)):
             try:
                 await self.permissions.resolve(match[2], match[1] == "同意", approver=ctx)
                 await self.reply(session, "审批已处理。")
@@ -168,20 +194,31 @@ class Feishu:
             return
         if not group and await self.permissions.menu.reply(session, text, approver=ctx):
             return
+        if (
+            not group
+            and settings.private_require_keyword
+            and not settings.matches_wake_keyword(text)
+            and not text.startswith("/")
+            and text not in {"停", "取消"}
+        ):
+            return
         if self.active_context is not None and not self.active_context(ctx):
             return
-        if self.hooks is not None and await self.hooks.dispatch(
-            MessageEvent(
-                session,
-                text,
-                message.sender_id,
-                platform="feishu",
-                adapter=cfg.id,
-                group_id=message.chat_id if group else "",
-                message_id=message.message_id,
-                is_owner=not group,
-            )
-        ):
+        event = MessageEvent(
+            session,
+            text,
+            message.sender_id,
+            platform="feishu",
+            adapter=cfg.id,
+            group_id=message.chat_id if group else "",
+            message_id=message.message_id,
+            is_owner=not group,
+        )
+        if group and not prefix:
+            if self.group_command_allowed(message):
+                await self.hooks.dispatch_command(event)
+            return
+        if self.hooks is not None and await self.hooks.dispatch(event):
             return
         await self.runtime.submit(ctx, text)
 

@@ -363,11 +363,9 @@ class HookBus:
 
         event._sender = sender
 
-    async def dispatch(self, event: MessageEvent) -> bool:
-        """Run plugin commands and listeners; True when the message must not reach the model."""
-        if builtin_control(event.text):
-            return False
-        if event.is_wake and event.text.startswith("/"):
+    async def dispatch_command(self, event: MessageEvent) -> bool:
+        """Handle a registered command or command group without invoking listeners."""
+        if event.text.startswith("/") and not builtin_control(event.text):
             found = self.match_command(event.text)
             if found and self.matches(found[0], event):
                 handler, rest = found
@@ -397,6 +395,14 @@ class HookBus:
                 await event.send(help_text)
                 event.stop_event()
                 return True
+        return False
+
+    async def dispatch(self, event: MessageEvent) -> bool:
+        """Run plugin commands and listeners; True when the message must not reach the model."""
+        if builtin_control(event.text):
+            return False
+        if event.is_wake and await self.dispatch_command(event):
+            return True
         self.bind_sender(event)
         for handler in self.of("message"):
             if not self.matches(handler, event):

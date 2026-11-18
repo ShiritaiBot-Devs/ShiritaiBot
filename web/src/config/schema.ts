@@ -643,7 +643,7 @@ export const IDENTITY_FIELDS: FieldSpec[] = [
     key: "wake_keywords",
     label: "唤起关键词",
     kind: "list",
-    help: "每行一个，按下方匹配方式唤起。群聊也可通过 @ 唤起，白名单仍有效。",
+    help: "每行一个，用于 QQ 消息和飞书私聊。飞书群的句首唤醒词在适配器中设置。",
   },
   {
     key: "wake_keyword_mode",
@@ -657,10 +657,16 @@ export const IDENTITY_FIELDS: FieldSpec[] = [
     help: "句首匹配时，关键词须出现在消息文本开头。消息原文（含关键词）会交给模型。",
   },
   {
-    key: "private_require_keyword",
-    label: "主人私聊 Agent 需要关键词",
+    key: "group_command_require_wake",
+    label: "群聊插件指令需要唤醒",
     kind: "boolean",
-    help: "默认关闭；开启时至少配置一个关键词。斜杠命令、停止和审批指令始终可用。WebUI 不受影响。",
+    help: "默认可直接发送 /指令。开启后，在 QQ 群或飞书群使用插件指令时，需要 @ 机器人或使用群聊唤醒词。",
+  },
+  {
+    key: "private_require_keyword",
+    label: "私聊需要唤醒词",
+    kind: "boolean",
+    help: "默认可直接私聊。开启后，QQ 和飞书的普通私聊消息需要命中上方唤醒词。斜杠指令、停止和审批回复始终可直接发送。",
   },
 ];
 

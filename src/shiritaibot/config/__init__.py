@@ -644,6 +644,7 @@ class Settings(Model):
     wake_keywords: list[str] = Field(default_factory=list)
     # contains: 消息中任意位置出现关键词即唤起；prefix: 仅句首出现时唤起。
     wake_keyword_mode: Literal["contains", "prefix"] = "contains"
+    group_command_require_wake: bool = False
     private_require_keyword: bool = False
     context: ContextConfig = Field(default_factory=ContextConfig)
     group_context: GroupContextConfig = Field(default_factory=GroupContextConfig)
@@ -706,6 +707,17 @@ class Settings(Model):
         if not value.strip():
             raise ValueError("name must not be blank")
         return value.strip()
+
+    def matches_wake_keyword(self, text: str) -> bool:
+        if self.wake_keyword_mode == "prefix":
+            return any(text.startswith(word) for word in self.wake_keywords)
+        return any(word in text for word in self.wake_keywords)
+
+    def strip_wake_prefix(self, text: str) -> str:
+        for word in sorted(self.wake_keywords, key=len, reverse=True):
+            if text.startswith(word):
+                return text[len(word) :].lstrip(" ，,：:！!、\t\n")
+        return text
 
     def selected_persona(self, selected: str = "") -> PersonaConfig | None:
         return next(

@@ -458,6 +458,7 @@ export interface Settings {
   owner_name: string;
   wake_keywords: string[];
   wake_keyword_mode: "contains" | "prefix";
+  group_command_require_wake: boolean;
   private_require_keyword: boolean;
   context: ContextConfig;
   group_context: GroupContextConfig;
