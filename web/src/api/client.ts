@@ -16,6 +16,7 @@ import type {
   MemeListing,
   MemeRecord,
   MemoryDetail,
+  MemoryProfile,
   MemoryRecord,
   MemoryStatus,
   ModelConfig,
@@ -106,15 +107,21 @@ export interface ApiClient {
   setLogLevel(level: string): Promise<{ level: string }>;
   sendMessage(text: string, session: string): Promise<unknown>;
   resolveApproval(id: string, allow: boolean): Promise<unknown>;
-  memories(kind?: string, query?: string): Promise<MemoryRecord[]>;
+  memoryProfiles(): Promise<MemoryProfile[]>;
+  memories(
+    kind?: string,
+    query?: string,
+    profile?: string,
+  ): Promise<MemoryRecord[]>;
   memoriesPage(
     kind: string,
     query: string,
     page: number,
     pageSize: number,
+    profile?: string,
   ): Promise<Paginated<MemoryRecord>>;
-  memory(id: string): Promise<MemoryDetail>;
-  memoryStatus(): Promise<MemoryStatus>;
+  memory(id: string, profile?: string): Promise<MemoryDetail>;
+  memoryStatus(profile?: string): Promise<MemoryStatus>;
   memes(
     category: string,
     query: string,
@@ -330,22 +337,34 @@ export function createClient(getToken: () => string): ApiClient {
       request("/messages", "POST", { text, session }),
     resolveApproval: (id, allow) =>
       request("/approvals/" + encodeURIComponent(id), "POST", { allow }),
-    memories: (kind = "", query = "") =>
+    memoryProfiles: () => request<MemoryProfile[]>("/memory/profiles"),
+    memories: (kind = "", query = "", profile = "default") =>
       request<MemoryRecord[]>(
-        "/memory?" + new URLSearchParams({ kind, q: query }).toString(),
+        "/memory?" +
+          new URLSearchParams({ kind, q: query, profile }).toString(),
       ),
-    memoriesPage: (kind, query, page, pageSize) =>
+    memoriesPage: (kind, query, page, pageSize, profile = "default") =>
       request<Paginated<MemoryRecord>>(
         "/memory?" +
           new URLSearchParams({
             kind,
+            profile,
             q: query,
             page: String(page),
             page_size: String(pageSize),
           }),
       ),
-    memory: (id) => request<MemoryDetail>("/memory/" + encodeURIComponent(id)),
-    memoryStatus: () => request<MemoryStatus>("/memory/status"),
+    memory: (id, profile = "default") =>
+      request<MemoryDetail>(
+        "/memory/" +
+          encodeURIComponent(id) +
+          "?" +
+          new URLSearchParams({ profile }),
+      ),
+    memoryStatus: (profile = "default") =>
+      request<MemoryStatus>(
+        "/memory/status?" + new URLSearchParams({ profile }),
+      ),
     memes: (category, query, page, pageSize) =>
       request<MemeListing>(
         "/memes?" +

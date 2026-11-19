@@ -82,7 +82,15 @@ class MemoryRecall:
             add([ref("v", row["id"]) for row in rows])
         return scores, pinned
 
-    async def render(self, ctx: Context, text: str, budget: int, hint: float | None = None) -> str:
+    async def render(
+        self,
+        ctx: Context,
+        text: str,
+        budget: int,
+        hint: float | None = None,
+        *,
+        shared: bool = False,
+    ) -> str:
         """The <memory> block for this turn, or an empty string."""
         memory = self.memory
         scores, pinned = await self.candidates(text, hint)
@@ -148,7 +156,7 @@ class MemoryRecall:
                 conflicts.add(entity["ref"])  # A new name may be someone already known.
         if not lines:
             return ""
-        asks = await self.conflict_lines(conflicts)
+        asks = {} if shared else await self.conflict_lines(conflicts)
         body = [
             lines[slot] for section in SECTIONS[:-1] for slot in lines if slots[slot][0] == section
         ] + list(asks.values())

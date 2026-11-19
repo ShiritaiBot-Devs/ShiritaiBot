@@ -168,8 +168,17 @@ class Store:
         await self.delete("context_state", key)
 
     async def record_group(
-        self, session: str, message_id: str, sender: str, name: str, text: str, triggered: bool
+        self,
+        session: str,
+        message_id: str,
+        sender: str,
+        name: str,
+        text: str,
+        triggered: bool,
+        *,
+        memory_profile: str = "default",
     ) -> None:
+        session = memory_context_key(session, memory_profile)
         await self.execute(
             "INSERT OR IGNORE INTO group_messages"
             "(session,message_id,sender,name,text,triggered,created) VALUES(?,?,?,?,?,?,?)",
@@ -182,11 +191,13 @@ class Store:
             (session, session, GROUP_MESSAGES_KEPT),
         )
 
-    async def group_sender_name(self, session: str, sender: str) -> str:
+    async def group_sender_name(
+        self, session: str, sender: str, *, memory_profile: str = "default"
+    ) -> str:
         rows = await self.query(
             "SELECT name FROM group_messages WHERE session=? AND sender=? "
             "ORDER BY seq DESC LIMIT 1",
-            (session, sender),
+            (memory_context_key(session, memory_profile), sender),
         )
         return rows[0]["name"] if rows else ""
 
@@ -198,12 +209,20 @@ class Store:
         before_seq: int = 0,
         query: str = "",
         exclude: str = "",
+        memory_profile: str = "default",
     ) -> list[dict]:
         rows = await self.query(
             "SELECT seq,sender,name,text,triggered,created FROM group_messages WHERE session=? "
             "AND (?=0 OR seq<?) AND message_id!=? AND instr(lower(text),lower(?))>0 "
             "ORDER BY seq DESC LIMIT ?",
-            (session, before_seq, before_seq, exclude, query, limit),
+            (
+                memory_context_key(session, memory_profile),
+                before_seq,
+                before_seq,
+                exclude,
+                query,
+                limit,
+            ),
         )
         return rows[::-1]
 

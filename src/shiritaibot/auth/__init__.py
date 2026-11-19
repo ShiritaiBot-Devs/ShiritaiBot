@@ -135,7 +135,7 @@ class Permissions:
         self.resolve_lock = asyncio.Lock()
         self.notify: Callable[..., Awaitable[None]] | None = None
         self.llm: ProviderManager | None = None
-        self.memory: MemoryManager | None = None
+        self.memory_for: Callable[[str], MemoryManager] | None = None
         self.menu = ApprovalMenu(self)
         self.quick: dict[tuple[str, str], float] = {}
         self.policy_lock = asyncio.Lock()
@@ -532,17 +532,20 @@ class Permissions:
 
     async def remember(self, session: str, note: str, content: str) -> bool:
         """Record a grant as a long-term fact; the note is the verbatim evidence."""
-        if self.memory is None:
+        settings = self.config.value
+        if self.memory_for is None or not settings.personal_memory_session(session):
             return False
         try:
             turn = uid()
+            profile = settings.session_memory(session)
             await self.store.append(
                 session,
                 turn,
                 {"role": "user", "content": f"[系统备注] {note}", "_speaker": "system"},
+                memory_profile=profile,
             )
-            ctx = Context(session, "owner", "agent", owner=True, turn=turn)
-            await self.memory.save_fact(ctx, content, note)
+            ctx = Context(session, "owner", "agent", owner=True, turn=turn, memory_profile=profile)
+            await self.memory_for(profile).save_fact(ctx, content, note)
             return True
         except Exception:
             log.warning(f"免问授权的记忆写入失败：{note}", describe_session(session))

@@ -105,6 +105,7 @@ async def register_builtin(app) -> None:
             limit + 1,
             before_seq=args.get("before_seq", 0),
             query=args.get("query", ""),
+            memory_profile=ctx.memory_profile,
         )
         page = rows[-limit:]
         return {

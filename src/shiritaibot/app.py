@@ -6,7 +6,13 @@ from pathlib import Path
 from shiritaibot.adapters.onebot11 import AdapterHub
 from shiritaibot.agent import AgentRuntime
 from shiritaibot.auth import Permissions, Vault
-from shiritaibot.config import AdapterConfig, ConfigRevisionConflict, ConfigService, Settings
+from shiritaibot.config import (
+    BUILTIN_MEMORY_PROFILES,
+    AdapterConfig,
+    ConfigRevisionConflict,
+    ConfigService,
+    Settings,
+)
 from shiritaibot.core import EventBus, PublicError
 from shiritaibot.core.logs import get_logger
 from shiritaibot.emotion import EmotionManager
@@ -55,7 +61,6 @@ class Application:
         self.tasks: list[asyncio.Task] = []
         self.configure_lock = asyncio.Lock()
         self.memories: dict[str, MemoryManager] = {}
-        self.feishu_extractor: MemoryExtractor | None = None
 
     async def start(self) -> None:
         log.log(f"正在启动，数据目录 {self.home}")
@@ -72,10 +77,10 @@ class Application:
         self.llm = ProviderManager(self.config, self.vault, self.store)
         self.permissions.llm = self.llm
         self.memory = MemoryManager(self.store, self.config, self.llm)
-        self.permissions.memory = self.memory
+        self.permissions.memory_for = self.memory_for
         await self.memory.open()
         self.memories["default"] = self.memory
-        await self.open_feishu_memory(self.config.value)
+        await self.open_memory_profiles(self.config.value)
         self.short_term = ShortTermMemory(self.store, self.llm, config=self.config)
         await self.short_term.recover()
         self.memes = MemeManager(self.store, self.config, self.llm)
@@ -151,37 +156,56 @@ class Application:
             raise PublicError("记忆库不存在或未配置")
         return memory
 
-    async def open_feishu_memory(self, settings: Settings) -> None:
-        if "feishu" in self.memories:
-            return
-        folder = self.home / "memory-profiles" / "feishu"
-        configured = any(
-            adapter.type == "feishu" and adapter.memory_profile == "feishu"
-            for adapter in settings.adapters
-        )
-        if not configured and not await asyncio.to_thread((folder / "state.sqlite3").is_file):
-            return
-        await asyncio.to_thread(folder.mkdir, mode=0o700, parents=True, exist_ok=True)
-        store = Store(folder, self.bus)
-        await store.open()
-        memory = MemoryManager(store, self.config, self.llm, history_store=self.store)
-        try:
-            await memory.open()
-        except BaseException:
-            await store.close()
-            raise
-        self.memories["feishu"] = memory
-        self.feishu_extractor = MemoryExtractor(
-            memory, self.store, self.config, self.llm, profile="feishu"
-        )
-        maintenance = MemoryMaintenance(memory, store, None)
-        self.tasks.extend(
-            [
-                asyncio.create_task(memory.run()),
-                asyncio.create_task(self.feishu_extractor.run()),
-                asyncio.create_task(maintenance.run()),
-            ]
-        )
+    async def open_memory_profiles(self, settings: Settings) -> None:
+        profiles = dict(settings.memory.profiles)
+        feishu = self.home / "memory-profiles" / "feishu" / "state.sqlite3"
+        if (
+            any(a.type == "feishu" and a.memory_profile == "feishu" for a in settings.adapters)
+            or "feishu" in settings.memory.sessions.values()
+            or await asyncio.to_thread(feishu.is_file)
+        ):
+            profiles["feishu"] = BUILTIN_MEMORY_PROFILES["feishu"]
+        for profile_id, profile in profiles.items():
+            memory = self.memories.get(profile_id)
+            if memory is not None:
+                store = memory.store
+            else:
+                folder = self.home / "memory-profiles" / profile_id
+                await asyncio.to_thread(folder.mkdir, mode=0o700, parents=True, exist_ok=True)
+                store = Store(folder, self.bus)
+            try:
+                if memory is None:
+                    await store.open()
+                saved = await store.get("memory_profile", "settings")
+                if saved and saved["audience"] != profile.audience:
+                    raise PublicError(f"记忆库「{profile_id}」已创建，不能改变访问范围。")
+                if memory is not None:
+                    continue
+                if not saved:
+                    await store.put("memory_profile", "settings", {"audience": profile.audience})
+                memory = MemoryManager(store, self.config, self.llm, history_store=self.store)
+                await memory.open()
+            except BaseException:
+                if profile_id not in self.memories and hasattr(store, "db"):
+                    await store.close()
+                raise
+            self.memories[profile_id] = memory
+            extractor = MemoryExtractor(
+                memory,
+                self.store,
+                self.config,
+                self.llm,
+                profile=profile_id,
+                shared=profile.audience == "shared",
+            )
+            maintenance = MemoryMaintenance(memory, store, None)
+            self.tasks.extend(
+                [
+                    asyncio.create_task(memory.run()),
+                    asyncio.create_task(extractor.run()),
+                    asyncio.create_task(maintenance.run()),
+                ]
+            )
 
     async def deliver(self, session: str, text: str) -> None:
         if session.startswith(PREPARE_SESSION):
@@ -303,9 +327,9 @@ class Application:
             if item.type == "feishu" and not item.app_secret:
                 item.app_secret = saved_feishu.get((item.id, item.app_id, item.domain), "")
         settings = await self.vault.protect_settings(settings, await self.plugins.schemas())
-        await self.open_feishu_memory(settings)
+        await self.open_memory_profiles(settings)
         await self.config.save(settings, expected_version=expected_version)
-        await self.runtime.cancel_stale_feishu_sessions()
+        await self.runtime.cancel_reconfigured_sessions(previous)
         await self.permissions.menu.reconfigured()
         await self.refresh_secret_list()
         if restart_adapters and settings.adapters != previous.adapters:
@@ -329,7 +353,8 @@ class Application:
         await self.adapters.close()
         await self.permissions.menu.close()
         await self.llm.close()
-        if (memory := self.memories.get("feishu")) is not None:
-            await memory.store.close()
+        for profile_id, memory in self.memories.items():
+            if profile_id != "default":
+                await memory.store.close()
         await self.store.close()
         log.log("已关闭")

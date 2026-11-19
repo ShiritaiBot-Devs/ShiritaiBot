@@ -333,7 +333,13 @@ function ConsoleApp() {
       case "routine":
         return <RoutinePage client={api} act={act} />;
       case "memory":
-        return <MemoryPage client={api} act={act} />;
+        return (
+          <MemoryPage
+            {...configProps}
+            currentSession={session}
+            draftSessions={drafts}
+          />
+        );
       case "memes":
         return <MemesPage {...configProps} />;
       case "knowledge":

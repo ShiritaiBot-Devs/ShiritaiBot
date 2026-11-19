@@ -49,7 +49,14 @@ export function useConfigDraft(client: ApiClient | null) {
     }
     // Refresh the server copy before dropping the draft so the form never
     // flashes the previous values for one frame.
-    const keys = [["config"], ["tools"], ["diagnostics"]];
+    const keys = [
+      ["config"],
+      ["tools"],
+      ["diagnostics"],
+      ["memory-profiles"],
+      ["history"],
+      ["memory-detail"],
+    ];
     await Promise.all(
       keys.map((queryKey) => queryClient.cancelQueries({ queryKey })),
     );

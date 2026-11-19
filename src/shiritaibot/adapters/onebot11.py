@@ -390,6 +390,7 @@ class AdapterHub:
                 str(sender.get("card") or sender.get("nickname") or user),
                 describe(parts),
                 mentioned or keyword,
+                memory_profile=settings.session_memory(session),
             )
 
         def message(wake: bool) -> MessageEvent:
@@ -428,7 +429,11 @@ class AdapterHub:
             bot.log.debug("重复消息，已跳过", speaker)
             return
         if passive_group:
-            if direct_command and await self.hooks.dispatch_command(message(True)):
+            if (
+                direct_command
+                and self.hooks is not None
+                and await self.hooks.dispatch_command(message(True))
+            ):
                 return
             if self.hooks is not None and await self.hooks.dispatch(message(False)):
                 return
@@ -613,7 +618,11 @@ class AdapterHub:
         # <meme> markers become their own sticker messages, splitting the text around them.
         pieces = injector.split(text) if injector is not None else [text]
         expires = now().timestamp() + 86400
-        delivery = {"status": "pending", "expires": expires}
+        delivery = {
+            "status": "pending",
+            "expires": expires,
+            "memory_profile": self.config.value.session_memory(session),
+        }
         if approval_batch:
             delivery["approval_batch"] = approval_batch
         for piece in pieces:
@@ -674,7 +683,10 @@ class AdapterHub:
         else:
             await self.enqueue(session, text)
             await self.store.append(
-                session, "handoff", {"role": "assistant", "content": text, "_proactive": True}
+                session,
+                "handoff",
+                {"role": "assistant", "content": text, "_proactive": True},
+                memory_profile=self.config.value.session_memory(session),
             )
 
     async def flush(self) -> None:
@@ -689,9 +701,14 @@ class AdapterHub:
                     get_logger(adapter_id).warning(
                         f"消息超过 24 小时仍未发出，已放弃：{brief(row['text'], 60)}"
                     )
+                elif kind == "group" and row.get(
+                    "memory_profile", "default"
+                ) != self.config.value.session_memory(row["scope"]):
+                    row["status"] = "failed"
                 elif is_feishu_session(row["scope"]) and (
                     not self.current_feishu_delivery(row)
-                    or not isinstance(bot, Feishu) and bot is not None
+                    or not isinstance(bot, Feishu)
+                    and bot is not None
                 ):
                     row["status"] = "failed"
                 elif not bot or bot.status != "connected":
@@ -708,7 +725,9 @@ class AdapterHub:
                 await self.store.put("outbox", row["id"], row, row["scope"])
             await asyncio.sleep(1)
 
-    async def flush_onebot(self, bot: OneBot, row: dict, kind: str, target: str, message: list[dict]) -> None:
+    async def flush_onebot(
+        self, bot: OneBot, row: dict, kind: str, target: str, message: list[dict]
+    ) -> None:
         group = kind == "group"
         where = f"→ {'群' if group else '私聊'} {target}"
         if not target.isascii() or not target.isdecimal():
@@ -736,18 +755,36 @@ class AdapterHub:
             row.update(status="sent", receipt=receipt)
             await self.store.put("outbox", row["id"], row, row["scope"])
             bot.log.debug(f"已发送：{brief(row['text'], 80)}", where)
-            if group and self.config.value.group_context.enabled:
-                await self.store.record_group(
-                    row["scope"], f"outbox:self:{row['id']}", bot.self_id,
-                    self.config.value.assistant_name, row["text"], False,
-                )
+            await self.record_sent_group(
+                bot.self_id, row, kind, enabled=self.config.value.group_context.enabled
+            )
         await asyncio.sleep(0.7)
+
+    async def record_sent_group(self, sender: str, row: dict, kind: str, *, enabled: bool) -> None:
+        if kind != "group" or not enabled:
+            return
+        try:
+            await self.store.record_group(
+                row["scope"],
+                f"outbox:self:{row['id']}",
+                sender,
+                self.config.value.assistant_name,
+                row["text"],
+                False,
+                memory_profile=row.get("memory_profile", "default"),
+            )
+        except Exception as exc:
+            get_logger(row["scope"].split(":", 2)[1]).warning(
+                f"消息已发送，记录群聊上下文失败（{type(exc).__name__}）"
+            )
 
     def current_feishu_delivery(self, row: dict) -> bool:
         batch_id = row.get("approval_batch")
         return self.config.value.active_feishu_session(row["scope"]) is not None and (
-            not batch_id or (
-                self.permissions is not None and self.permissions.menu.batch_active(row["scope"], batch_id)
+            not batch_id
+            or (
+                self.permissions is not None
+                and self.permissions.menu.batch_active(row["scope"], batch_id)
             )
         )
 
@@ -776,13 +813,7 @@ class AdapterHub:
         else:
             row.update(status="sent", receipt=receipt)
             await self.store.put("outbox", row["id"], row, row["scope"])
-            if kind == "group" and bot.config.feishu_group_context:
-                await self.store.record_group(
-                    row["scope"],
-                    f"feishu:self:{row['id']}",
-                    bot.self_id,
-                    self.config.value.assistant_name,
-                    row["text"],
-                    False,
-                )
+            await self.record_sent_group(
+                bot.self_id, row, kind, enabled=bot.config.feishu_group_context
+            )
         await asyncio.sleep(0.7)

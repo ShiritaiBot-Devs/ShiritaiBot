@@ -265,7 +265,7 @@ class SessionActor:
 
     @staticmethod
     def _merge_batch(batch: list[tuple[Context, str]]) -> tuple[Context, str]:
-        return batch[-1][0], "\n".join(text for _, text in batch)
+        return batch[0][0], "\n".join(text for _, text in batch)
 
     def _discard_buffered(self, ctx: Context) -> None:
         if ctx.owner:
@@ -365,7 +365,10 @@ class AgentRuntime:
         async with self.context_locks.setdefault(session, asyncio.Lock()):
             await send(session, text)
             await self.store.append(
-                session, "handoff", {"role": "assistant", "content": text, "_proactive": True}
+                session,
+                "handoff",
+                {"role": "assistant", "content": text, "_proactive": True},
+                memory_profile=self.config.value.session_memory(session),
             )
 
     async def submit(self, ctx: Context, text: str) -> str:
@@ -375,6 +378,9 @@ class AgentRuntime:
     async def _submit(self, ctx: Context, text: str) -> str:
         if not self.config.value.feishu_context_valid(ctx):
             return "ignored"
+
+        if not ctx.background:
+            ctx = replace(ctx, memory_profile=self.config.value.session_memory(ctx.session))
         ctx = self.registry.permissions.context(ctx)
         if not ctx.interject:
             # An interject turn observes; it must not rewrite the session's mode/profile.
@@ -415,17 +421,17 @@ class AgentRuntime:
             return True
         return bool(actor.buffered or not actor.queue.empty())
 
-    async def cancel_stale_feishu_sessions(self) -> None:
+    async def cancel_reconfigured_sessions(self, previous) -> None:
         cfg = self.config.value
-        stale = [
-            actor.task
-            for session, actor in self.actors.items()
-            if is_feishu_session(session) and cfg.active_feishu_session(session) is None
-        ]
-        for task in stale:
-            task.cancel()
-        if stale:
-            await asyncio.gather(*stale, return_exceptions=True)
+        for session, actor in list(self.actors.items()):
+            ctx = actor.context
+            if (ctx is not None and not cfg.feishu_context_valid(ctx)) or (
+                not session.startswith(("background:", PREPARE_SESSION))
+                and cfg.session_memory(session) != previous.session_memory(session)
+            ):
+                self.actors.pop(session, None)
+                actor.task.cancel()
+                await asyncio.gather(actor.task, return_exceptions=True)
 
     async def close(self) -> None:
         for actor in self.actors.values():
@@ -444,7 +450,9 @@ class AgentRuntime:
             return ""
         rows = []
         if settings.inject_messages:
-            rows = await self.store.group_messages(ctx.session, settings.inject_messages + 1)
+            rows = await self.store.group_messages(
+                ctx.session, settings.inject_messages + 1, memory_profile=ctx.memory_profile
+            )
             # The triggering message is the user turn itself.
             for index in range(len(rows) - 1, -1, -1):
                 if rows[index]["sender"] == ctx.actor and rows[index]["triggered"]:
@@ -553,7 +561,10 @@ class AgentRuntime:
             await self._turn(actor, ctx, text)
 
     async def _turn(self, actor: SessionActor, ctx: Context, text: str) -> None:
-        if not self.config.value.feishu_context_valid(ctx):
+        settings = self.config.value
+        if not settings.feishu_context_valid(ctx) or (
+            not ctx.background and ctx.memory_profile != settings.session_memory(ctx.session)
+        ):
             return
         ctx = replace(self.registry.permissions.context(ctx), turn=uid())
         append = partial(
@@ -609,7 +620,9 @@ class AgentRuntime:
             if ctx.owner:
                 name = cfg.owner_name
             else:
-                name = await self.store.group_sender_name(ctx.session, ctx.actor)
+                name = await self.store.group_sender_name(
+                    ctx.session, ctx.actor, memory_profile=ctx.memory_profile
+                )
             prefix = f"[发言人 {name or ctx.actor}({ctx.actor})] "
             text = prefix + text
         body = {
@@ -620,6 +633,8 @@ class AgentRuntime:
             "memory_profile": ctx.memory_profile,
             "memory_scope": owner_memory_scope(ctx.memory_profile)
             if ctx.owner and ctx.mode == "agent" and not ctx.group
+            else f"shared:{ctx.memory_profile}"
+            if cfg.shared_memory(ctx.memory_profile)
             else ctx.session,
             "loop": "proactive" if ctx.background else "main",
             "route": route,
@@ -647,23 +662,24 @@ class AgentRuntime:
             async with asyncio.timeout(cfg.policy.max_turn_seconds):
                 zone = ZoneInfo(cfg.proactive.timezone)
                 blocks = [emotion_block] if emotion_block else []
-                # Chat never calls the private memory interface, even for the owner in a group.
-                if ctx.owner and ctx.mode == "agent" and not ctx.group:
-                    if cfg.memory.inject:
-                        recall = MemoryRecall(self.memory_for(ctx.memory_profile))
-                        blocks.append(
-                            await recall.render(
-                                ctx,
-                                text,
-                                cfg.memory.inject_chars,
-                                self.recall_hints.pop(ctx.turn, None),
-                            )
+                private_memory = ctx.owner and ctx.mode == "agent" and not ctx.group
+                shared_memory = cfg.shared_memory(ctx.memory_profile)
+                if cfg.memory.inject and (private_memory or shared_memory):
+                    recall = MemoryRecall(self.memory_for(ctx.memory_profile))
+                    blocks.append(
+                        await recall.render(
+                            ctx,
+                            text,
+                            cfg.memory.inject_chars,
+                            self.recall_hints.pop(ctx.turn, None),
+                            shared=shared_memory,
                         )
-                    if self.short_term:
-                        summaries = await self.short_term.recent(
-                            limit=5, memory_profile=ctx.memory_profile
-                        )
-                        blocks.append(recent_lines(summaries, zone))
+                    )
+                if private_memory and self.short_term:
+                    summaries = await self.short_term.recent(
+                        limit=5, memory_profile=ctx.memory_profile
+                    )
+                    blocks.append(recent_lines(summaries, zone))
                 user = {
                     "role": "user",
                     "_speaker": cfg.owner_name if ctx.owner else name or ctx.actor,

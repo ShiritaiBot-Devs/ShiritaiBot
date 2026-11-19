@@ -6,7 +6,7 @@ import os
 import re
 import tomllib
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
@@ -41,6 +41,9 @@ def _parse_feishu_session(session: str) -> re.Match[str] | None:
 def is_feishu_session(session: str) -> bool:
     """Identify a Feishu session even if its application was replaced or removed."""
     return _parse_feishu_session(session) is not None
+
+
+ProfileId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")]
 
 
 def check_proxy(value: str) -> str:
@@ -152,7 +155,7 @@ class AdapterConfig(Instance):
     domain: Literal["feishu", "lark"] = "feishu"
     wake_keywords: list[str] = Field(default_factory=lambda: ["小知"])
     feishu_group_context: bool = False
-    memory_profile: Literal["default", "feishu"] = "feishu"
+    memory_profile: ProfileId = "feishu"
 
     @model_validator(mode="before")
     @classmethod
@@ -181,11 +184,15 @@ class AdapterConfig(Instance):
     def feishu_binding(self) -> str:
         return f"{self.domain}.{self.app_id}"
 
+    def session(self, user_or_group: str, *, group: bool = False) -> str:
+        target = user_or_group
+        if self.type == "feishu":
+            target = f"{self.feishu_binding}/{target}"
+        kind = "group" if group else "private"
+        return f"{kind}:{self.id}:{target}"
+
     def owner_session(self) -> str:
-        target = (
-            f"{self.feishu_binding}/{self.owner_id}" if self.type == "feishu" else self.owner_id
-        )
-        return f"private:{self.id}:{target}"
+        return self.session(self.owner_id)
 
     @field_validator("auto_start")
     @classmethod
@@ -363,7 +370,24 @@ class ContextConfig(Model):
         return self
 
 
+class MemoryProfile(Model):
+    name: str = Field(min_length=1, max_length=80)
+    audience: Literal["personal", "shared"] = "personal"
+
+
+BUILTIN_MEMORY_PROFILES = {
+    "default": MemoryProfile(name="默认记忆库"),
+    "feishu": MemoryProfile(name="飞书记忆库"),
+}
+
+
 class MemoryConfig(Model):
+    profiles: dict[ProfileId, MemoryProfile] = Field(default_factory=dict)
+    sessions: dict[str, ProfileId] = Field(default_factory=dict)
+
+    def profile(self, profile_id: str) -> MemoryProfile | None:
+        return self.profiles.get(profile_id) or BUILTIN_MEMORY_PROFILES.get(profile_id)
+
     # Long-term memory recall for owner Agent sessions and Proactive loops.
     inject: bool = True
     inject_chars: int = Field(default=1500, ge=200, le=20000)
@@ -733,6 +757,28 @@ class Settings(Model):
             prompt += f"\n当前用户是主人，请称呼对方为 {self.owner_name}。"
         return prompt
 
+    def session_memory(self, session: str) -> str:
+        assigned = self.memory.sessions.get(session)
+        if assigned:
+            profile = self.memory.profile(assigned)
+            if profile and (profile.audience == "personal") == self.personal_memory_session(
+                session
+            ):
+                return assigned
+        adapter = self.feishu_session(session)
+        if adapter and not session.startswith("group:"):
+            return adapter.memory_profile
+        return "default"
+
+    def personal_memory_session(self, session: str) -> bool:
+        return session.startswith("web:") or any(
+            adapter.owner_id and session == adapter.owner_session() for adapter in self.adapters
+        )
+
+    def shared_memory(self, profile_id: str) -> bool:
+        profile = self.memory.profile(profile_id)
+        return profile is not None and profile.audience == "shared"
+
     def feishu_session(self, session: str) -> AdapterConfig | None:
         match = _parse_feishu_session(session)
         if match is None:
@@ -852,6 +898,28 @@ class Settings(Model):
             raise ValueError("private keyword activation requires at least one wake keyword")
         if sum(a.enabled and a.type == "feishu" for a in self.adapters) > 1:
             raise ValueError("当前每个 ShiritaiBot 实例支持启用一个飞书长连接")
+        if self.memory.profiles.keys() & BUILTIN_MEMORY_PROFILES.keys():
+            raise ValueError("default 和 feishu 是保留的记忆库标识")
+        for session, profile_id in self.memory.sessions.items():
+            if not re.fullmatch(
+                r"(?:web:[^:\s]{1,128}|(?:private|group):[A-Za-z0-9_-]{1,64}:[^:\s]{1,256})",
+                session,
+            ):
+                raise ValueError(f"无效的记忆绑定会话：{session}")
+            profile = self.memory.profile(profile_id)
+            if profile is None:
+                raise ValueError(f"会话 {session} 引用了未知记忆库 {profile_id}")
+            # Existing bindings may be retained after an adapter is removed. A personal
+            # assignment is only effective while the session is still the current owner.
+            if (session.startswith("group:") or session.startswith("web:")) and (
+                (profile.audience == "personal") != session.startswith("web:")
+            ):
+                raise ValueError("群聊需绑定会话记忆库，WebUI 对话需绑定个人记忆库")
+        for adapter in self.adapters:
+            if adapter.type == "feishu":
+                profile = self.memory.profile(adapter.memory_profile)
+                if profile is None or profile.audience != "personal":
+                    raise ValueError("飞书私聊默认记忆库必须是已配置的个人记忆库")
         for a in self.adapters:
             if a.type == "onebot11" and (
                 not a.url.startswith(("ws://", "wss://")) or "@" in a.url or "?" in a.url

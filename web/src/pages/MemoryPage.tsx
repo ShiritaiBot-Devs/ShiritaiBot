@@ -1,12 +1,13 @@
 import { LoadingBar } from "../components/LoadingBar";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { EmptyState } from "../components/EmptyState";
 import { Pagination, PAGE_SIZE } from "../components/Pagination";
-import type { MemoryKind } from "../api/types";
-import type { PageProps } from "./common";
+import type { MemoryKind, MemoryProfileConfig } from "../api/types";
+import { adapterSessionId, sessionTitle } from "../lib/sessions";
+import type { ConfigPageProps } from "./common";
 
 const KINDS: { key: MemoryKind | ""; label: string }[] = [
   { key: "", label: "全部" },
@@ -26,29 +27,286 @@ const STATUS: Record<string, string> = {
   resolved: "已处理",
 };
 
-// Read-only by design: the Agent maintains memory through tools (DESIGN.md §1.1).
-export function MemoryPage({ client }: PageProps) {
+type MemoryPageProps = ConfigPageProps & {
+  currentSession: string;
+  draftSessions: string[];
+};
+
+const BUILTIN_PROFILES: Record<string, MemoryProfileConfig> = {
+  default: { name: "默认记忆库", audience: "personal" },
+  feishu: { name: "飞书记忆库", audience: "personal" },
+};
+
+function MemorySettings({
+  client,
+  config,
+  setConfig,
+  currentSession,
+  draftSessions,
+}: MemoryPageProps) {
+  const [id, setId] = useState("");
+  const [name, setName] = useState("");
+  const [audience, setAudience] =
+    useState<MemoryProfileConfig["audience"]>("personal");
+  const [session, setSession] = useState(
+    currentSession.startsWith("background:") ? "web:owner" : currentSession,
+  );
+  const suggestions = useId();
+  const observed = useQuery({
+    queryKey: ["records", "session"],
+    queryFn: () => client.records("session"),
+  });
+  const memory = config.memory;
+  const custom = memory.profiles ?? {};
+  const bindings = memory.sessions ?? {};
+  const profiles = { ...BUILTIN_PROFILES, ...custom };
+  const ownerSessions = config.adapters.flatMap((adapter) =>
+    adapter.owner_id
+      ? [adapterSessionId(adapter, "private", adapter.owner_id)]
+      : [],
+  );
+  const configured = config.adapters.flatMap((adapter) => [
+    ...adapter.groups.map((target) =>
+      adapterSessionId(adapter, "group", target),
+    ),
+    ...adapter.friends.map((target) =>
+      adapterSessionId(adapter, "private", target),
+    ),
+  ]);
+  const availableSessions = [
+    ...new Set([
+      "web:owner",
+      ...draftSessions,
+      ...ownerSessions,
+      ...configured,
+      ...Object.keys(bindings),
+      ...(observed.data ?? []).map((row) => row.id),
+    ]),
+  ]
+    .filter((value) => /^(web|private|group):/.test(value))
+    .sort();
+  const validSession =
+    /^(?:web:[^:\s]{1,128}|(?:group|private):[A-Za-z0-9_-]{1,64}:[^:\s]{1,256})$/.test(
+      session,
+    );
+  const personal =
+    session.startsWith("web:") || ownerSessions.includes(session);
+  const eligible = Object.entries(profiles).filter(
+    ([, profile]) => profile.audience === (personal ? "personal" : "shared"),
+  );
+
+  function bind(value: string) {
+    const sessions = { ...bindings };
+    if (value) sessions[session] = value;
+    else delete sessions[session];
+    setConfig({ ...config, memory: { ...memory, sessions } });
+  }
+
+  return (
+    <section className="panel">
+      <h2>记忆库设置</h2>
+      <p className="muted">
+        个人库供主人会话使用。多个群聊或访客私聊可以显式共用同一个会话库。
+      </p>
+      <form
+        className="inline"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!name.trim() || Object.hasOwn(profiles, id)) return;
+          setConfig({
+            ...config,
+            memory: {
+              ...memory,
+              profiles: { ...custom, [id]: { name: name.trim(), audience } },
+            },
+          });
+          setId("");
+          setName("");
+        }}
+      >
+        <input
+          aria-label="记忆库标识"
+          placeholder="标识，例如 project"
+          pattern="[a-z][a-z0-9_\-]{0,63}"
+          value={id}
+          onChange={(event) => setId(event.target.value)}
+          required
+        />
+        <input
+          aria-label="记忆库名称"
+          placeholder="显示名称"
+          maxLength={80}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          required
+        />
+        <select
+          aria-label="访问范围"
+          value={audience}
+          onChange={(event) =>
+            setAudience(event.target.value === "shared" ? "shared" : "personal")
+          }
+        >
+          <option value="personal">个人库</option>
+          <option value="shared">会话库</option>
+        </select>
+        <button
+          type="submit"
+          disabled={!id || !name.trim() || Object.hasOwn(profiles, id)}
+        >
+          添加记忆库
+        </button>
+      </form>
+      {Object.entries(custom).map(([key, profile]) => {
+        const count = Object.values(bindings).filter(
+          (value) => value === key,
+        ).length;
+        const usedByAdapter = config.adapters.some(
+          (adapter) =>
+            adapter.type === "feishu" && adapter.memory_profile === key,
+        );
+        return (
+          <div className="inline" key={key}>
+            <code>{key}</code>
+            <input
+              aria-label={`${key} 的显示名称`}
+              value={profile.name}
+              maxLength={80}
+              onChange={(event) =>
+                setConfig({
+                  ...config,
+                  memory: {
+                    ...memory,
+                    profiles: {
+                      ...custom,
+                      [key]: { ...profile, name: event.target.value },
+                    },
+                  },
+                })
+              }
+            />
+            <span className="muted">
+              {profile.audience === "shared" ? "会话库" : "个人库"} · {count}{" "}
+              个会话
+            </span>
+            <button
+              type="button"
+              disabled={count > 0 || usedByAdapter}
+              title="移出配置会保留磁盘数据，重新添加同标识可恢复"
+              onClick={() => {
+                const next = { ...custom };
+                delete next[key];
+                setConfig({ ...config, memory: { ...memory, profiles: next } });
+              }}
+            >
+              移出配置
+            </button>
+          </div>
+        );
+      })}
+      <h3>会话绑定</h3>
+      <div className="field-grid">
+        <label className="field">
+          <span className="field-name">会话</span>
+          <input
+            list={suggestions}
+            placeholder="选择或输入完整会话 ID"
+            value={session}
+            onChange={(event) => setSession(event.target.value.trim())}
+          />
+          <datalist id={suggestions}>
+            {availableSessions.map((value) => (
+              <option key={value} value={value}>
+                {sessionTitle(value)}
+              </option>
+            ))}
+          </datalist>
+        </label>
+        <label className="field">
+          <span className="field-name">使用的记忆库</span>
+          <select
+            disabled={!validSession}
+            value={bindings[session] ?? ""}
+            onChange={(event) => bind(event.target.value)}
+          >
+            <option value="">
+              {personal ? "使用会话默认库" : "未绑定长期记忆库"}
+            </option>
+            {bindings[session] &&
+              !eligible.some(([key]) => key === bindings[session]) && (
+                <option value={bindings[session]} disabled>
+                  已失效 · {bindings[session]}
+                </option>
+              )}
+            {eligible.map(([key, profile]) => (
+              <option key={key} value={key}>
+                {profile.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {Object.entries(bindings).map(([key, value]) => (
+        <div className="inline" key={key}>
+          <button type="button" onClick={() => setSession(key)}>
+            {sessionTitle(key)}
+          </button>
+          <span className="muted">{profiles[value]?.name ?? value}</span>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+export function MemoryPage(props: MemoryPageProps) {
+  const { client } = props;
+  const [selectedProfile, setProfile] = useState("default");
+  const profiles = useQuery({
+    queryKey: ["memory-profiles"],
+    queryFn: () => client.memoryProfiles(),
+  });
+  const profile = profiles.data?.some((row) => row.id === selectedProfile)
+    ? selectedProfile
+    : "default";
   const [kind, setKind] = useState<MemoryKind | "">("");
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState("");
   const [page, setPage] = useState(1);
   const memories = useQuery({
-    queryKey: ["memory", kind, query, page],
-    queryFn: () => client.memoriesPage(kind, query, page, PAGE_SIZE),
+    queryKey: ["memory", profile, kind, query, page],
+    queryFn: () => client.memoriesPage(kind, query, page, PAGE_SIZE, profile),
     refetchInterval: 10000,
   });
   const detail = useQuery({
-    queryKey: ["memory-detail", open],
-    queryFn: () => client.memory(open),
+    queryKey: ["memory-detail", profile, open],
+    queryFn: () => client.memory(open, profile),
     enabled: Boolean(open),
   });
 
   return (
     <>
+      <MemorySettings {...props} />
       <section className="panel">
         <div className="panel-head">
-          <h2>记忆库</h2>
+          <h2>浏览记忆</h2>
+          <select
+            aria-label="浏览的记忆库"
+            value={profile}
+            onChange={(event) => {
+              setProfile(event.target.value);
+              setPage(1);
+              setOpen("");
+            }}
+          >
+            {(profiles.data ?? [{ id: "default", name: "默认记忆库" }]).map(
+              (row) => (
+                <option key={row.id} value={row.id}>
+                  {row.name}
+                </option>
+              ),
+            )}
+          </select>
           <div className="range-tabs" role="group" aria-label="记忆类型">
             {KINDS.map(({ key, label }) => (
               <button
@@ -68,8 +326,10 @@ export function MemoryPage({ client }: PageProps) {
           </div>
         </div>
         <p className="muted">
-          记忆由 Agent 维护：在对话里说“记住……”“忘掉……”或直接更正，有冲突时
-          Agent 会问你。这里用于浏览和查看证据。
+          {profiles.data?.find((row) => row.id === profile)?.audience ===
+          "shared"
+            ? "会话库从绑定会话中提取记忆。"
+            : "可以在主人对话里让 Agent 记住、忘掉或更正一条记忆。"}
         </p>
         <form
           className="inline"
@@ -170,11 +430,7 @@ export function MemoryPage({ client }: PageProps) {
           !memories.error &&
           !memories.isPending && (
             <EmptyState
-              text={
-                query
-                  ? "没有匹配的记忆。"
-                  : "还没有记忆。在私聊里告诉 Agent 需要记住的人和事，它会记录在这里。"
-              }
+              text={query ? "没有匹配的记忆。" : "这个库还没有记忆。"}
             />
           )}
         {memories.isPending && <LoadingBar label="正在读取记忆…" />}

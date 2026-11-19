@@ -160,7 +160,9 @@ class Feishu:
             "chat" if group else "agent",
             not group,
             group,
-            memory_profile="default" if group else cfg.memory_profile,
+            memory_profile=self.settings.value.session_memory(session)
+            if self.settings
+            else ("default" if group else cfg.memory_profile),
         )
         event_id = f"feishu:{cfg.feishu_binding}:{message.message_id}"
         if not await self.store.execute(
@@ -171,7 +173,13 @@ class Feishu:
             return
         if group and cfg.feishu_group_context:
             await self.store.record_group(
-                session, event_id, message.sender_id, "", text, bool(prefix)
+                session,
+                event_id,
+                message.sender_id,
+                "",
+                text,
+                bool(prefix),
+                memory_profile=ctx.memory_profile,
             )
         if prefix:
             text = text[len(prefix) :].lstrip(" ，,：:！!、\t\n") or prefix
@@ -215,7 +223,7 @@ class Feishu:
             is_owner=not group,
         )
         if group and not prefix:
-            if self.group_command_allowed(message):
+            if self.hooks is not None and self.group_command_allowed(message):
                 await self.hooks.dispatch_command(event)
             return
         if self.hooks is not None and await self.hooks.dispatch(event):

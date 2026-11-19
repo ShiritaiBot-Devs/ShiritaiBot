@@ -71,7 +71,7 @@ export interface AdapterConfig extends Instance {
   domain?: "feishu" | "lark";
   wake_keywords?: string[];
   feishu_group_context?: boolean;
-  memory_profile?: "feishu" | "default";
+  memory_profile?: string;
 }
 
 export interface FeishuQrRegistration {
@@ -235,7 +235,18 @@ export interface ContextConfig {
   keep_recent_turns: number;
 }
 
+export interface MemoryProfileConfig {
+  name: string;
+  audience: "personal" | "shared";
+}
+
+export interface MemoryProfile extends MemoryProfileConfig {
+  id: string;
+}
+
 export interface MemoryConfig {
+  profiles: Record<string, MemoryProfileConfig>;
+  sessions: Record<string, string>;
   inject: boolean;
   inject_chars: number;
   extract: boolean;

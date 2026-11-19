@@ -117,7 +117,7 @@ class EventOut(Loose):
 
 @dataclass
 class Line:
-    role: Literal["owner", "assistant", "tool", "event"]
+    role: Literal["owner", "participant", "assistant", "tool", "event"]
     text: str
     at: float
     source: str
@@ -164,9 +164,20 @@ def open_questions(questions: dict, facts: list, events: list) -> dict:
 
 
 class MemoryExtractor:
-    def __init__(self, memory: MemoryManager, store, config, llm, *, profile: str = "default"):
+    def __init__(
+        self,
+        memory: MemoryManager,
+        store,
+        config,
+        llm,
+        *,
+        profile: str = "default",
+        shared: bool = False,
+    ):
         self.memory, self.store, self.config, self.llm = memory, store, config, llm
         self.profile = profile
+        self.shared = shared
+        self.scope = f"shared:{profile}" if shared else owner_memory_scope(profile)
         self.wake = asyncio.Event()
         self.lock = asyncio.Lock()
         self.backoff: dict[str, tuple[float, float]] = {}
@@ -178,7 +189,7 @@ class MemoryExtractor:
             rows = await self.store.query(
                 "SELECT DISTINCT scope AS id FROM records WHERE kind='turn' "
                 "AND json_extract(data,'$.memory_scope')=? AND json_extract(data,'$.loop')='main'",
-                (owner_memory_scope(self.profile),),
+                (self.scope,),
             )
             return [row["id"] for row in rows]
         rows = await self.store.query(
@@ -218,7 +229,11 @@ class MemoryExtractor:
 
     def ready(self) -> bool:
         cfg = self.config.value
-        return cfg.memory.extract and bool(cfg.routes.get("memory") or cfg.routes.get("light"))
+        return (
+            cfg.memory.profile(self.profile) is not None
+            and cfg.memory.extract
+            and bool(cfg.routes.get("memory") or cfg.routes.get("light"))
+        )
 
     async def tick(self) -> None:
         if not self.ready():
@@ -264,7 +279,7 @@ class MemoryExtractor:
                     delay = min(3600, delay * 2)
                     self.backoff[session] = (stamp + delay, delay)
                     log.warning(
-                        f"私聊记忆抽取失败（{type(exc).__name__}），{delay:.0f} 秒后重试",
+                        f"会话记忆抽取失败（{type(exc).__name__}），{delay:.0f} 秒后重试",
                         describe_session(session),
                     )
 
@@ -296,7 +311,7 @@ class MemoryExtractor:
                 " AND turn IN (SELECT id FROM records WHERE kind='turn' AND scope=? "
                 "AND json_extract(data,'$.memory_scope')=? AND json_extract(data,'$.loop')='main')"
             )
-            args += (session, owner_memory_scope(self.profile))
+            args += (session, self.scope)
         rows = await self.store.query(
             "SELECT seq,turn,data,created FROM messages WHERE session=? AND seq>? "
             f"AND {MEMORY_PROFILE_FILTER}{eligibility} ORDER BY seq LIMIT 400",
@@ -343,7 +358,7 @@ class MemoryExtractor:
                 segment.append(line)
                 chars += len(line.text)
             end = seq
-        if any(line.role == "owner" for line in segment):
+        if any(line.role in {"owner", "participant"} for line in segment):
             await self.process(await self.window(segment, [], describe_session(session)))
         await self.memory.store.execute(
             "INSERT INTO mem_cursor VALUES(?,?,?) ON CONFLICT(session) DO UPDATE "
@@ -362,10 +377,22 @@ class MemoryExtractor:
         source = f"{session}:{row['seq']}"
         if role == "user":
             # Handoffs and Proactive results are the assistant's own words.
+            if self.shared:
+                speaker = message.get("_speaker") or "??"
+                return Line(
+                    "participant",
+                    f"{speaker}：{text}"[:LINE_CHARS],
+                    row["created"],
+                    "msg:" + source,
+                )
             return Line("owner", text[:LINE_CHARS], row["created"], "msg:" + source)
         if role == "assistant":
             return Line("assistant", text[:LINE_CHARS], row["created"], "")
-        if role == "tool" and names.get(message.get("tool_call_id", "")) not in EXCLUDED_TOOLS:
+        if (
+            not self.shared
+            and role == "tool"
+            and names.get(message.get("tool_call_id", "")) not in EXCLUDED_TOOLS
+        ):
             return Line("tool", text[:LINE_CHARS], row["created"], "tool:" + source)
         return None
 
@@ -461,7 +488,13 @@ class MemoryExtractor:
                     f"[{key}] {entry.name}"
                     + (f"（别名：{'、'.join(entry.aliases)}）" if entry.aliases else "")
                 )
-        speakers = {"owner": "主人", "assistant": "助手", "tool": "工具", "event": "外部事件"}
+        speakers = {
+            "participant": "会话成员",
+            "owner": "主人",
+            "assistant": "助手",
+            "tool": "工具",
+            "event": "外部事件",
+        }
         body = []
         for number, line in enumerate(window.lines, 1):
             local = datetime.fromtimestamp(line.at, zone)
@@ -502,7 +535,14 @@ class MemoryExtractor:
         if hint is not None and hint < GATE_SKIP:
             log.debug(f"判断模型认为没有值得记住的内容（{hint:.2f}），跳过抽取", window.label)
             return {"facts": 0, "events": 0, "dropped": 0, "skipped": True}
-        data = await self.ask(EXTRACT_PROMPT, self.render(window))
+        prompt = EXTRACT_PROMPT
+        if self.shared:
+            prompt = (
+                prompt.replace("主人的记忆库", "会话记忆库")
+                .replace("主人或当事人", "会话成员或当事人")
+                .replace("“主人”“工具”“外部事件”行", "“会话成员”行")
+            )
+        data = await self.ask(prompt, self.render(window))
         entities = {e.ref: e for e in items(data, "entities", EntityOut)}
         stats = {"facts": 0, "events": 0, "dropped": 0}
         facts, events = [], []
@@ -798,6 +838,8 @@ class MemoryExtractor:
         if not 1 <= number <= len(window.lines):
             return self.drop(window, item, "证据行号不存在")
         line = window.lines[number - 1]
+        if self.shared and line.role != "participant":
+            return self.drop(window, item, "证据不是会话成员的发言")
         if line.role == "assistant":
             return self.drop(window, item, "证据是助手自己说的话")
         quote = normalize(item.evidence_quote)

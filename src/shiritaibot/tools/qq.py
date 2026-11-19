@@ -244,13 +244,15 @@ def qq_tools(app) -> list[Tool]:
 
     async def record_sent(bot, kind: str, target: int, receipt: dict, text: str) -> None:
         if kind == "group" and app.config.value.group_context.enabled and text:
+            session = bot.config.session(str(target), group=True)
             await app.store.record_group(
-                f"group:{bot.config.id}:{target}",
+                session,
                 f"{bot.config.id}:{receipt.get('message_id')}",
                 bot.self_id,
                 app.config.value.assistant_name,
                 text,
                 False,
+                memory_profile=app.config.value.session_memory(session),
             )
 
     # --- chat ---
