@@ -102,6 +102,24 @@ async def file_ref(store, adapter: str, group_id: str, data: dict, session: str)
     return ref
 
 
+class OneBotNotConnected(PublicError):
+    pass
+
+
+class OneBotActionError(PublicError):
+    def __init__(self, action: str, result: dict):
+        retcode = result.get("retcode")
+        detail = f"OneBot {action} 失败（retcode={retcode if type(retcode) is int else '未知'}）"
+        reason = " ".join(str(result[key]) for key in ("wording", "message") if result.get(key))
+        if "onMsgInfoListUpdate" in reason:
+            detail += "：协议端等待 QQ 发送回执超时"
+        elif "timeout" in reason.lower() or "超时" in reason:
+            detail += "：协议端操作超时"
+        elif reason:
+            detail += "：协议端返回错误"
+        super().__init__(detail)
+
+
 class OneBot:
     def __init__(self, config, vault, store, sink):
         self.config, self.vault, self.store, self.sink = config, vault, store, sink
@@ -119,7 +137,7 @@ class OneBot:
 
     async def call(self, action: str, params: dict) -> Any:
         if not self.ws:
-            raise PublicError("OneBot 未连接")
+            raise OneBotNotConnected("OneBot 未连接")
         key = uid()
         future = asyncio.get_running_loop().create_future()
         self.pending[key] = future
@@ -128,7 +146,7 @@ class OneBot:
             async with asyncio.timeout(30):
                 result = await future
             if result.get("status") != "ok" or result.get("retcode", 0) != 0:
-                raise PublicError(f"OneBot 操作失败 (retcode={result.get('retcode')})")
+                raise OneBotActionError(action, result)
             return result.get("data") or {}
         finally:
             self.pending.pop(key, None)
@@ -685,39 +703,45 @@ class AdapterHub:
                     row["status"] = "failed"
                     get_logger(adapter_id).warning(f"表情 {row['meme']} 已被删除，跳过发送")
                 else:
-                    try:
-                        receipt = await bot.call(
-                            "send_group_msg" if kind == "group" else "send_private_msg",
-                            {
-                                "group_id" if kind == "group" else "user_id": int(target),
-                                "message": message,
-                            },
-                        )
-                        row.update(status="sent", receipt=receipt)
-                        bot.log.debug(
-                            f"已发送：{brief(row['text'], 80)}",
-                            f"→ {'群' if kind == 'group' else '私聊'} {target}",
-                        )
-                        if kind == "group" and self.config.value.group_context.enabled:
-                            await self.store.record_group(
-                                row["scope"],
-                                f"{adapter_id}:self:{row['id']}",
-                                bot.self_id,
-                                self.config.value.assistant_name,
-                                row["text"],
-                                False,
-                            )
-                    except Exception as exc:
-                        # An unacknowledged send may have succeeded. Do not automatically duplicate it.
-                        row["status"] = "uncertain"
-                        bot.log.warning(
-                            f"发送未确认（{type(exc).__name__}），为避免重复不再重试："
-                            f"{brief(row['text'], 60)}",
-                            f"→ {'群' if kind == 'group' else '私聊'} {target}",
-                        )
-                    await asyncio.sleep(0.7)
+                    await self.flush_onebot(bot, row, kind, target, message)
+                    continue
                 await self.store.put("outbox", row["id"], row, row["scope"])
             await asyncio.sleep(1)
+
+    async def flush_onebot(self, bot: OneBot, row: dict, kind: str, target: str, message: list[dict]) -> None:
+        group = kind == "group"
+        where = f"→ {'群' if group else '私聊'} {target}"
+        if not target.isascii() or not target.isdecimal():
+            row["status"] = "failed"
+            bot.log.warning("无效的 OneBot 目标，已跳过", where)
+            await self.store.put("outbox", row["id"], row, row["scope"])
+            return
+        row["status"] = "uncertain"
+        await self.store.put("outbox", row["id"], row, row["scope"])
+        try:
+            receipt = await bot.call(
+                "send_group_msg" if group else "send_private_msg",
+                {"group_id" if group else "user_id": int(target), "message": message},
+            )
+            if not isinstance(receipt, dict) or receipt.get("message_id") is None:
+                raise PublicError("OneBot 回包未包含 message_id")
+        except OneBotNotConnected:
+            # call() did not submit anything, so the queue can wait for a reconnect.
+            row["status"] = "pending"
+            await self.store.put("outbox", row["id"], row, row["scope"])
+        except Exception as exc:
+            reason = str(exc) if isinstance(exc, PublicError) else type(exc).__name__
+            bot.log.warning(f"发送未确认（{reason}），为避免重复不再重试", where)
+        else:
+            row.update(status="sent", receipt=receipt)
+            await self.store.put("outbox", row["id"], row, row["scope"])
+            bot.log.debug(f"已发送：{brief(row['text'], 80)}", where)
+            if group and self.config.value.group_context.enabled:
+                await self.store.record_group(
+                    row["scope"], f"outbox:self:{row['id']}", bot.self_id,
+                    self.config.value.assistant_name, row["text"], False,
+                )
+        await asyncio.sleep(0.7)
 
     def current_feishu_delivery(self, row: dict) -> bool:
         batch_id = row.get("approval_batch")
