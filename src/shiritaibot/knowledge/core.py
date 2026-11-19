@@ -25,20 +25,9 @@ POOL = 50
 # Below this cosine a semantic hit is noise rather than a weak match.
 VECTOR_FLOOR = 0.3
 EMBED_PAGE = 256
-DOCUMENT_REF = re.compile(r"^d([1-9][0-9]*)$")
-REF_PATTERN = DOCUMENT_REF.pattern
+REF_PATTERN = r"^(?:([a-z][a-z0-9_-]{0,63}):)?d([1-9][0-9]*)$"
+DOCUMENT_REF = re.compile(REF_PATTERN)
 CJK_RUN = re.compile(r"[\u3400-\u9fff]{2,}")
-
-
-def document_key(ref: str) -> int:
-    match = DOCUMENT_REF.fullmatch(ref)
-    if not match:
-        raise PublicError("无效的文档编号")
-    return int(match[1])
-
-
-def public(row: dict) -> dict:
-    return {**row, "id": f"d{row['id']}"}
 
 
 def searchable(title: str, label: str, text: str) -> str:
@@ -62,8 +51,9 @@ def clean_filename(filename: str) -> str:
 
 
 class KnowledgeBase:
-    def __init__(self, store, config, llm):
+    def __init__(self, store, config, llm, *, library: str = "default"):
         self.store, self.config, self.llm = store, config, llm
+        self.library = library
         self.folder = store.home / "knowledge"
         self.vectors = VectorIndex(store, llm, "kb_vector")
         self.lock = asyncio.Lock()
@@ -71,6 +61,18 @@ class KnowledgeBase:
 
     async def open(self) -> None:
         await asyncio.to_thread(self.folder.mkdir, parents=True, exist_ok=True)
+
+    def ref(self, key: int) -> str:
+        return f"d{key}" if self.library == "default" else f"{self.library}:d{key}"
+
+    def document_key(self, ref: str) -> int:
+        match = DOCUMENT_REF.fullmatch(ref)
+        if not match or (match[1] or "default") != self.library:
+            raise PublicError("文档编号不属于当前知识库，请重新查询")
+        return int(match[2])
+
+    def public(self, row: dict) -> dict:
+        return {**row, "id": self.ref(row["id"])}
 
     # ---- writes --------------------------------------------------------------------
 
@@ -123,10 +125,10 @@ class KnowledgeBase:
             except BaseException:
                 await asyncio.to_thread(path.unlink, missing_ok=True)
                 raise
+            document = await self.get(self.ref(key))
+            assert document is not None
         self.wake.set()
         log.log(f"已收录《{title}》：{len(chunks)} 个分块")
-        document = await self.get(f"d{key}")
-        assert document is not None
         return {**document, "duplicate": False}
 
     async def insert(self, document: tuple, chunks: list, tokens: list) -> int:
@@ -166,38 +168,41 @@ class KnowledgeBase:
                 raise
 
     async def delete(self, ref: str) -> None:
-        key = document_key(ref)
-        rows = await self.store.query("SELECT sha256 FROM kb_document WHERE id=?", (key,))
-        if not rows:
-            raise PublicError("文档不存在")
+        key = self.document_key(ref)
         db = self.store.db
-        async with self.lock, self.store.lock:
-            try:
-                for sql in (
-                    "DELETE FROM kb_fts WHERE rowid IN (SELECT id FROM kb_chunk WHERE document=?)",
-                    "DELETE FROM kb_vector WHERE id IN "
-                    "(SELECT CAST(id AS TEXT) FROM kb_chunk WHERE document=?)",
-                    "DELETE FROM kb_chunk WHERE document=?",
-                    "DELETE FROM kb_document WHERE id=?",
-                ):
-                    await db.execute(sql, (key,))
-                await db.commit()
-            except BaseException:
-                await db.rollback()
-                raise
-        self.vectors.cache.clear()
-        await asyncio.to_thread((self.folder / rows[0]["sha256"]).unlink, missing_ok=True)
+        async with self.lock:
+            document = await self.get(ref)
+            if document is None:
+                raise PublicError("文档不存在")
+            async with self.store.lock:
+                try:
+                    for sql in (
+                        "DELETE FROM kb_fts WHERE rowid IN (SELECT id FROM kb_chunk WHERE document=?)",
+                        "DELETE FROM kb_vector WHERE id IN "
+                        "(SELECT CAST(id AS TEXT) FROM kb_chunk WHERE document=?)",
+                        "DELETE FROM kb_chunk WHERE document=?",
+                        "DELETE FROM kb_document WHERE id=?",
+                    ):
+                        await db.execute(sql, (key,))
+                    await db.commit()
+                except BaseException:
+                    await db.rollback()
+                    raise
+            self.vectors.cache.clear()
+            await asyncio.to_thread((self.folder / document["sha256"]).unlink, missing_ok=True)
         log.log(f"已删除文档 {ref}")
 
     # ---- reads ---------------------------------------------------------------------
 
     async def by_hash(self, digest: str) -> dict | None:
         rows = await self.store.query("SELECT * FROM kb_document WHERE sha256=?", (digest,))
-        return public(rows[0]) if rows else None
+        return self.public(rows[0]) if rows else None
 
     async def get(self, ref: str) -> dict | None:
-        rows = await self.store.query("SELECT * FROM kb_document WHERE id=?", (document_key(ref),))
-        return public(rows[0]) if rows else None
+        rows = await self.store.query(
+            "SELECT * FROM kb_document WHERE id=?", (self.document_key(ref),)
+        )
+        return self.public(rows[0]) if rows else None
 
     async def file(self, ref: str) -> tuple[dict, Path] | None:
         document = await self.get(ref)
@@ -206,7 +211,7 @@ class KnowledgeBase:
     async def chunks(self, ref: str, start: int = 0, count: int = 3) -> list[dict]:
         return await self.store.query(
             "SELECT seq,label,text FROM kb_chunk WHERE document=? AND seq>=? ORDER BY seq LIMIT ?",
-            (document_key(ref), start, count),
+            (self.document_key(ref), start, count),
         )
 
     async def listing(self, query: str, page: int, page_size: int) -> dict:
@@ -223,7 +228,7 @@ class KnowledgeBase:
             (*args, page_size, (page - 1) * page_size),
         )
         return {
-            "items": [public(row) for row in rows],
+            "items": [self.public(row) for row in rows],
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -288,7 +293,7 @@ class KnowledgeBase:
 
     async def search(self, query: str, limit: int = 5, document: str = "") -> list[dict]:
         """Reciprocal rank fusion of BM25 and cosine; either side alone still works."""
-        scope = document_key(document) if document else 0
+        scope = self.document_key(document) if document else 0
         keyword, semantic = await asyncio.gather(
             self.keyword_hits(query, scope, POOL), self.vector_hits(query, scope, POOL)
         )
@@ -310,7 +315,7 @@ class KnowledgeBase:
         keyword_set, semantic_set = set(keyword), set(semantic)
         return [
             {
-                "document": f"d{by_id[key]['document']}",
+                "document": self.ref(by_id[key]["document"]),
                 "seq": by_id[key]["seq"],
                 "title": by_id[key]["title"],
                 "label": by_id[key]["label"],
@@ -361,7 +366,11 @@ class KnowledgeBase:
         while True:
             self.wake.clear()
             try:
-                done = await self.embed_pending()
+                active = (
+                    self.library == "default"
+                    or self.library in self.config.value.knowledge.libraries
+                )
+                done = await self.embed_pending() if active else 0
                 if done:
                     log.debug(f"已为 {done} 个分块计算向量")
                 backoff = 30.0

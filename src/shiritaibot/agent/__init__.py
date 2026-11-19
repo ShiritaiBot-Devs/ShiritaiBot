@@ -427,7 +427,12 @@ class AgentRuntime:
             ctx = actor.context
             if (ctx is not None and not cfg.adapter_context_valid(ctx)) or (
                 not session.startswith(("background:", PREPARE_SESSION))
-                and cfg.session_memory(session) != previous.session_memory(session)
+                and (
+                    cfg.session_memory(session) != previous.session_memory(session)
+                    or cfg.knowledge.library_for(session) != previous.knowledge.library_for(session)
+                    or (session in cfg.knowledge.sessions)
+                    != (session in previous.knowledge.sessions)
+                )
             ):
                 self.actors.pop(session, None)
                 actor.task.cancel()

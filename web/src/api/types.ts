@@ -297,11 +297,18 @@ export interface MemeListing extends Paginated<MemeRecord> {
 }
 
 export interface KnowledgeConfig {
+  libraries: Record<string, { name: string }>;
+  sessions: Record<string, string>;
   enabled: boolean;
   chat: boolean;
   chunk_chars: number;
   chunk_overlap: number;
   max_file_mb: number;
+}
+
+export interface KnowledgeLibrary {
+  id: string;
+  name: string;
 }
 
 export interface KnowledgeDocument {

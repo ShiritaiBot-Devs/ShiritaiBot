@@ -580,15 +580,27 @@ def create_app(
         q: str = "",
         page: int = Query(default=1, ge=1),
         page_size: int = Query(default=20, ge=1, le=100),
+        library: str = "default",
     ):
-        kb = runtime.knowledge
+        kb = runtime.knowledge_for(library)
         return {**await kb.listing(q[:200].strip(), page, page_size), **await kb.stats()}
+
+    @api.get("/api/knowledge/libraries", dependencies=protected)
+    async def knowledge_libraries():
+        return [
+            {"id": "default", "name": "默认知识库"},
+            *(
+                {"id": library, "name": config.name}
+                for library, config in runtime.config.value.knowledge.libraries.items()
+            ),
+        ]
 
     @api.post("/api/knowledge", dependencies=protected)
     async def knowledge_upload(
         request: Request,
         filename: str = Query(min_length=1, max_length=255),
         title: str = Query(default="", max_length=200),
+        library: str = "default",
     ):
         limit = runtime.config.value.knowledge.max_file_mb
         data = bytearray()
@@ -596,29 +608,34 @@ def create_app(
             data.extend(chunk)
             if len(data) > limit * 1024 * 1024:
                 raise HTTPException(413, f"文件不能超过 {limit} MiB")
-        return await runtime.knowledge.add(bytes(data), filename, title=title, source="web")
+        return await runtime.knowledge_for(library).add(
+            bytes(data), filename, title=title, source="web"
+        )
 
     @api.get("/api/knowledge/search", dependencies=protected)
     async def knowledge_search(
         q: str = Query(min_length=1, max_length=500),
         limit: int = Query(default=10, ge=1, le=20),
+        library: str = "default",
     ):
-        return await runtime.knowledge.search(q, limit)
+        return await runtime.knowledge_for(library).search(q, limit)
 
     @api.get("/api/knowledge/{key}", dependencies=protected)
     async def knowledge_detail(
         key: str,
         start: int = Query(default=0, ge=0),
         count: int = Query(default=20, ge=1, le=100),
+        library: str = "default",
     ):
-        document = await runtime.knowledge.get(key)
+        kb = runtime.knowledge_for(library)
+        document = await kb.get(key)
         if document is None:
             raise HTTPException(404, "文档不存在")
-        return {**document, "items": await runtime.knowledge.chunks(key, start, count)}
+        return {**document, "items": await kb.chunks(key, start, count)}
 
     @api.get("/api/knowledge/{key}/file", dependencies=protected)
-    async def knowledge_file(key: str):
-        found = await runtime.knowledge.file(key)
+    async def knowledge_file(key: str, library: str = "default"):
+        found = await runtime.knowledge_for(library).file(key)
         if found is None:
             raise HTTPException(404, "文档不存在")
         document, path = found
@@ -630,8 +647,8 @@ def create_app(
         )
 
     @api.delete("/api/knowledge/{key}", dependencies=protected)
-    async def knowledge_delete(key: str):
-        await runtime.knowledge.delete(key)
+    async def knowledge_delete(key: str, library: str = "default"):
+        await runtime.knowledge_for(library).delete(key)
         return {"ok": True}
 
     @api.post("/api/routines", dependencies=protected)

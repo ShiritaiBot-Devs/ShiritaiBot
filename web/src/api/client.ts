@@ -11,6 +11,7 @@ import type {
   KnowledgeDetail,
   KnowledgeDocument,
   KnowledgeHit,
+  KnowledgeLibrary,
   KnowledgeListing,
   LogFeed,
   MemeListing,
@@ -140,20 +141,23 @@ export interface ApiClient {
   ): Promise<MemeRecord>;
   describeMeme(id: string): Promise<MemeRecord>;
   deleteMeme(id: string): Promise<unknown>;
+  knowledgeLibraries(): Promise<KnowledgeLibrary[]>;
   knowledge(
     query: string,
     page: number,
     pageSize: number,
+    library?: string,
   ): Promise<KnowledgeListing>;
   knowledgeDocument(
     id: string,
     start: number,
     count: number,
+    library?: string,
   ): Promise<KnowledgeDetail>;
-  knowledgeFile(id: string): Promise<Blob>;
-  knowledgeSearch(query: string): Promise<KnowledgeHit[]>;
-  uploadKnowledge(file: File): Promise<KnowledgeDocument>;
-  deleteKnowledge(id: string): Promise<unknown>;
+  knowledgeFile(id: string, library?: string): Promise<Blob>;
+  knowledgeSearch(query: string, library?: string): Promise<KnowledgeHit[]>;
+  uploadKnowledge(file: File, library?: string): Promise<KnowledgeDocument>;
+  deleteKnowledge(id: string, library?: string): Promise<unknown>;
   createRoutine(draft: RoutineDraft): Promise<RoutineRecord>;
   setRoutineStatus(id: string, status: string): Promise<RoutineRecord>;
   cancelSubagent(id: string): Promise<unknown>;
@@ -403,27 +407,37 @@ export function createClient(getToken: () => string): ApiClient {
         "POST",
       ),
     deleteMeme: (id) => request("/memes/" + encodeURIComponent(id), "DELETE"),
-    knowledge: (query, page, pageSize) =>
+    knowledgeLibraries: () =>
+      request<KnowledgeLibrary[]>("/knowledge/libraries"),
+    knowledge: (query, page, pageSize, library = "default") =>
       request<KnowledgeListing>(
         "/knowledge?" +
           new URLSearchParams({
             q: query,
+            library,
             page: String(page),
             page_size: String(pageSize),
           }),
       ),
-    knowledgeDocument: (id, start, count) =>
+    knowledgeDocument: (id, start, count, library = "default") =>
       request<KnowledgeDetail>(
         "/knowledge/" +
           encodeURIComponent(id) +
           "?" +
-          new URLSearchParams({ start: String(start), count: String(count) }),
+          new URLSearchParams({
+            start: String(start),
+            count: String(count),
+            library,
+          }),
       ),
-    knowledgeFile: async (id) => {
+    knowledgeFile: async (id, library = "default") => {
       let response: Response;
       try {
         response = await fetch(
-          "/api/knowledge/" + encodeURIComponent(id) + "/file",
+          "/api/knowledge/" +
+            encodeURIComponent(id) +
+            "/file?" +
+            new URLSearchParams({ library }),
           { headers: { Authorization: "Bearer " + getToken() } },
         );
       } catch {
@@ -433,18 +447,24 @@ export function createClient(getToken: () => string): ApiClient {
         throw new ApiError(messageFor(response.status, null), response.status);
       return response.blob();
     },
-    knowledgeSearch: (query) =>
+    knowledgeSearch: (query, library = "default") =>
       request<KnowledgeHit[]>(
-        "/knowledge/search?" + new URLSearchParams({ q: query }),
+        "/knowledge/search?" + new URLSearchParams({ q: query, library }),
       ),
-    uploadKnowledge: (file) =>
+    uploadKnowledge: (file, library = "default") =>
       request<KnowledgeDocument>(
-        "/knowledge?" + new URLSearchParams({ filename: file.name }),
+        "/knowledge?" + new URLSearchParams({ filename: file.name, library }),
         "POST",
         file,
       ),
-    deleteKnowledge: (id) =>
-      request("/knowledge/" + encodeURIComponent(id), "DELETE"),
+    deleteKnowledge: (id, library = "default") =>
+      request(
+        "/knowledge/" +
+          encodeURIComponent(id) +
+          "?" +
+          new URLSearchParams({ library }),
+        "DELETE",
+      ),
     createRoutine: (draft) =>
       request<RoutineRecord>("/routines", "POST", draft),
     setRoutineStatus: (id, status) =>

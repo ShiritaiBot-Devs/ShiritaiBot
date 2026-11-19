@@ -21,6 +21,11 @@ export interface ConfigPageProps extends PageProps {
   setConfig: (next: Settings) => void;
 }
 
+export interface SessionConfigPageProps extends ConfigPageProps {
+  currentSession: string;
+  draftSessions: string[];
+}
+
 export interface NavigationProps {
   onNavigate: (page: PageId) => void;
 }

@@ -865,13 +865,13 @@ export const KNOWLEDGE_FIELDS: FieldSpec[] = [
     key: "enabled",
     label: "启用知识库工具",
     kind: "boolean",
-    help: "开启后主人的 Agent 会话可以检索和写入知识库。关闭只隐藏工具，已存的文档不受影响。",
+    help: "开启后按会话绑定和工具权限开放检索。主人会话可导入和删除文档。",
   },
   {
     key: "chat",
-    label: "在 Chat 模式开放检索",
+    label: "未绑定的 Chat 会话可检索默认库",
     kind: "boolean",
-    help: "开启后其他人的私聊和群聊也能让助手检索知识库的全部内容，存有私人资料时不要开启。写入和删除始终只限主人私聊。",
+    help: "开启后，未绑定的 Chat 单聊和群聊可以检索默认库。显式绑定的会话按绑定选择检索范围。",
   },
   {
     key: "chunk_chars",

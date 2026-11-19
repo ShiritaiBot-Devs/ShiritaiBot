@@ -61,6 +61,7 @@ class Application:
         self.tasks: list[asyncio.Task] = []
         self.configure_lock = asyncio.Lock()
         self.memories: dict[str, MemoryManager] = {}
+        self.knowledge_bases: dict[str, KnowledgeBase] = {}
 
     async def start(self) -> None:
         log.log(f"正在启动，数据目录 {self.home}")
@@ -87,6 +88,8 @@ class Application:
         await self.memes.open()
         self.knowledge = KnowledgeBase(self.store, self.config, self.llm)
         await self.knowledge.open()
+        self.knowledge_bases["default"] = self.knowledge
+        await self.open_knowledge_libraries(self.config.value)
         self.adapters = AdapterHub(self.config, self.vault, self.store)
         self.adapters.memes = self.memes
         self.proactive = ProactiveEngine(
@@ -155,6 +158,25 @@ class Application:
         if memory is None:
             raise PublicError("记忆库不存在或未配置")
         return memory
+
+    def knowledge_for(self, library: str) -> KnowledgeBase:
+        if library != "default" and library not in self.config.value.knowledge.libraries:
+            raise PublicError("知识库不存在或未配置")
+        return self.knowledge_bases[library]
+
+    async def open_knowledge_libraries(self, settings: Settings) -> None:
+        for library in settings.knowledge.libraries.keys() - self.knowledge_bases.keys():
+            store = Store(self.home / "knowledge-libraries" / f"library-{library}", self.bus)
+            try:
+                await store.open()
+                knowledge = KnowledgeBase(store, self.config, self.llm, library=library)
+                await knowledge.open()
+            except BaseException:
+                if hasattr(store, "db"):
+                    await store.close()
+                raise
+            self.knowledge_bases[library] = knowledge
+            self.tasks.append(asyncio.create_task(knowledge.run()))
 
     async def open_memory_profiles(self, settings: Settings) -> None:
         profiles = dict(settings.memory.profiles)
@@ -330,7 +352,10 @@ class Application:
                 )
         settings = await self.vault.protect_settings(settings, await self.plugins.schemas())
         await self.open_memory_profiles(settings)
+        await self.open_knowledge_libraries(settings)
         await self.config.save(settings, expected_version=expected_version)
+        for library in settings.knowledge.libraries:
+            self.knowledge_bases[library].wake.set()
         await self.runtime.cancel_reconfigured_sessions(previous)
         await self.permissions.menu.reconfigured()
         await self.refresh_secret_list()
@@ -358,5 +383,8 @@ class Application:
         for profile_id, memory in self.memories.items():
             if profile_id != "default":
                 await memory.store.close()
+        for library, knowledge in self.knowledge_bases.items():
+            if library != "default":
+                await knowledge.store.close()
         await self.store.close()
         log.log("已关闭")

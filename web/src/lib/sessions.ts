@@ -1,6 +1,12 @@
 import type { AdapterConfig, TurnRecord } from "../api/types";
 import { TIME_ZONE } from "./utils";
 
+export function isMainSession(value: string): boolean {
+  return /^(?:web:[^:\s]{1,128}|(?:group|private):[A-Za-z0-9_-]{1,64}:[^:\s]{1,256})$/.test(
+    value,
+  );
+}
+
 export type SessionGroupKey =
   | "local"
   | "private"

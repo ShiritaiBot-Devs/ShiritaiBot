@@ -343,7 +343,13 @@ function ConsoleApp() {
       case "memes":
         return <MemesPage {...configProps} />;
       case "knowledge":
-        return <KnowledgePage {...configProps} />;
+        return (
+          <KnowledgePage
+            {...configProps}
+            currentSession={session}
+            draftSessions={drafts}
+          />
+        );
       case "logs":
         return <LogsPage client={api} act={act} />;
       case "models":

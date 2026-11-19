@@ -11,7 +11,14 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import tomli_w
-from pydantic import Field, JsonValue, ValidationError, field_validator, model_validator
+from pydantic import (
+    Field,
+    JsonValue,
+    StringConstraints,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from shiritaibot.core import Context, Model, PublicError
 
@@ -44,6 +51,9 @@ def is_feishu_session(session: str) -> bool:
 
 
 ProfileId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")]
+MAIN_SESSION = re.compile(
+    r"(?:web:[^:\s]{1,128}|(?:private|group):[A-Za-z0-9_-]{1,64}:[^:\s]{1,256})"
+)
 QQ_OFFICIAL_SESSION = re.compile(
     r"(private|group):([A-Za-z0-9_-]{1,64}):qqofficial\.([0-9]+)/([A-Za-z0-9_-]{1,128})"
 )
@@ -479,7 +489,13 @@ class MemeConfig(Model):
         return value
 
 
+class KnowledgeLibrary(Model):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
+
+
 class KnowledgeConfig(Model):
+    libraries: dict[ProfileId, KnowledgeLibrary] = Field(default_factory=dict)
+    sessions: dict[str, ProfileId] = Field(default_factory=dict)
     # Tools for the owner's Agent sessions; nothing happens until documents are added.
     enabled: bool = True
     # Also offer read-only search in Chat sessions, including other people and groups.
@@ -490,10 +506,21 @@ class KnowledgeConfig(Model):
     max_file_mb: int = Field(default=50, ge=1, le=50)
 
     @model_validator(mode="after")
-    def overlap_fits(self):
+    def valid_configuration(self):
         if self.chunk_overlap * 2 > self.chunk_chars:
             raise ValueError("chunk_overlap must be at most half of chunk_chars")
+        if self.libraries.keys() & {"default", "disabled"}:
+            raise ValueError("default 和 disabled 是保留的知识库标识")
+        for session, library in self.sessions.items():
+            if not MAIN_SESSION.fullmatch(session):
+                raise ValueError(f"无效的知识库绑定会话：{session}")
+            if library not in {"default", "disabled"} and library not in self.libraries:
+                raise ValueError(f"会话 {session} 引用了未知知识库 {library}")
         return self
+
+    def library_for(self, session: str) -> str | None:
+        library = self.sessions.get(session, "default")
+        return library if self.enabled and library != "disabled" else None
 
 
 class GroupContextConfig(Model):
@@ -958,10 +985,7 @@ class Settings(Model):
         if self.memory.profiles.keys() & BUILTIN_MEMORY_PROFILES.keys():
             raise ValueError("default 和 feishu 是保留的记忆库标识")
         for session, profile_id in self.memory.sessions.items():
-            if not re.fullmatch(
-                r"(?:web:[^:\s]{1,128}|(?:private|group):[A-Za-z0-9_-]{1,64}:[^:\s]{1,256})",
-                session,
-            ):
+            if not MAIN_SESSION.fullmatch(session):
                 raise ValueError(f"无效的记忆绑定会话：{session}")
             profile = self.memory.profile(profile_id)
             if profile is None:

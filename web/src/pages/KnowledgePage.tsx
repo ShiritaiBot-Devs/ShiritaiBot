@@ -6,10 +6,11 @@ import type { ApiClient } from "../api/client";
 import type { KnowledgeDocument, KnowledgeHit } from "../api/types";
 import { EmptyState } from "../components/EmptyState";
 import { FieldForm } from "../components/FieldForm";
+import { KnowledgeLibraries } from "../components/KnowledgeLibraries";
 import { Pagination } from "../components/Pagination";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
 import { KNOWLEDGE_FIELDS } from "../config/schema";
-import type { Action, ConfigPageProps } from "./common";
+import type { Action, SessionConfigPageProps } from "./common";
 
 const PAGE_SIZE = 20;
 const CHUNK_PAGE = 20;
@@ -32,38 +33,84 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function KnowledgePage({
-  client,
-  act,
-  config,
-  setConfig,
-}: ConfigPageProps) {
-  const [draft, setDraft] = useState("");
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
-  const listing = useQuery({
-    queryKey: ["knowledge", query, page],
-    queryFn: () => client.knowledge(query, page, PAGE_SIZE),
-    refetchInterval: 15000,
+export function KnowledgePage(props: SessionConfigPageProps) {
+  const { client, act, config, setConfig } = props;
+  const [selected, setSelected] = useState("default");
+  const profiles = useQuery({
+    queryKey: ["knowledge-libraries"],
+    queryFn: () => client.knowledgeLibraries(),
   });
-  const data = listing.data;
+  const libraries = profiles.data ?? [{ id: "default", name: "默认知识库" }];
+  const library = libraries.some((entry) => entry.id === selected)
+    ? selected
+    : "default";
 
   return (
     <>
+      <KnowledgeLibraries {...props} />
       <section className="panel">
-        <h2>知识库</h2>
-        <p className="muted">
-          知识库存放不会变化的资料：手册、规章、表格、讲义。它和长期记忆不同，不区分人物和事件，也不追踪时效，检索不调用文本模型，适合存放大量文档。在
-          QQ 私聊里把文件发给助手并说“存到知识库”，或在下方上传。语义检索使用
-          Embedding 路由，没有配置时只用关键词。
-        </p>
+        <h2>检索与导入设置</h2>
         <FieldForm
           value={config.knowledge}
           fields={KNOWLEDGE_FIELDS}
           onChange={(next) => setConfig({ ...config, knowledge: next })}
         />
       </section>
-      <SearchPanel client={client} />
+      <section className="panel">
+        <label className="field">
+          <span className="field-name">管理的知识库</span>
+          <select
+            value={library}
+            onChange={(event) => setSelected(event.target.value)}
+          >
+            {libraries.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {profiles.error && (
+          <QueryErrorNotice
+            message={`读取库列表失败：${profiles.error.message}`}
+          />
+        )}
+      </section>
+      <KnowledgeContent
+        key={library}
+        client={client}
+        act={act}
+        library={library}
+        limit={config.knowledge.max_file_mb}
+      />
+    </>
+  );
+}
+
+function KnowledgeContent({
+  client,
+  act,
+  library,
+  limit,
+}: {
+  client: ApiClient;
+  act: Action;
+  library: string;
+  limit: number;
+}) {
+  const [draft, setDraft] = useState("");
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const listing = useQuery({
+    queryKey: ["knowledge", library, query, page],
+    queryFn: () => client.knowledge(query, page, PAGE_SIZE, library),
+    refetchInterval: 15000,
+  });
+  const data = listing.data;
+
+  return (
+    <>
+      <SearchPanel client={client} library={library} />
       <section className="panel">
         <h2>文档</h2>
         {data && (
@@ -75,11 +122,7 @@ export function KnowledgePage({
               : "未配置 Embedding，检索只用关键词"}
           </p>
         )}
-        <UploadForm
-          client={client}
-          act={act}
-          limit={config.knowledge.max_file_mb}
-        />
+        <UploadForm client={client} act={act} limit={limit} library={library} />
         <form
           className="inline"
           onSubmit={(event) => {
@@ -115,7 +158,13 @@ export function KnowledgePage({
         ) : (
           <div className="kb-documents">
             {data?.items.map((row) => (
-              <DocumentRow key={row.id} client={client} act={act} row={row} />
+              <DocumentRow
+                key={row.id}
+                client={client}
+                act={act}
+                row={row}
+                library={library}
+              />
             ))}
           </div>
         )}
@@ -138,10 +187,12 @@ function UploadForm({
   client,
   act,
   limit,
+  library,
 }: {
   client: ApiClient;
   act: Action;
   limit: number;
+  library: string;
 }) {
   const [files, setFiles] = useState<File[]>([]);
   const [reset, setReset] = useState(0);
@@ -155,7 +206,7 @@ function UploadForm({
           // One at a time so that a bad file names itself and the rest stay queued.
           for (const [index, file] of files.entries()) {
             try {
-              await client.uploadKnowledge(file);
+              await client.uploadKnowledge(file, library);
             } catch (error) {
               setFiles(files.slice(index));
               throw new Error(
@@ -194,12 +245,18 @@ function UploadForm({
   );
 }
 
-function SearchPanel({ client }: { client: ApiClient }) {
+function SearchPanel({
+  client,
+  library,
+}: {
+  client: ApiClient;
+  library: string;
+}) {
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
   const hits = useQuery({
-    queryKey: ["knowledge-search", query],
-    queryFn: () => client.knowledgeSearch(query),
+    queryKey: ["knowledge-search", library, query],
+    queryFn: () => client.knowledgeSearch(query, library),
     enabled: Boolean(query),
   });
   return (
@@ -251,10 +308,12 @@ function DocumentRow({
   client,
   act,
   row,
+  library,
 }: {
   client: ApiClient;
   act: Action;
   row: KnowledgeDocument;
+  library: string;
 }) {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -283,7 +342,7 @@ function DocumentRow({
             onClick={() =>
               void act(async () => {
                 const url = URL.createObjectURL(
-                  await client.knowledgeFile(row.id),
+                  await client.knowledgeFile(row.id, library),
                 );
                 const link = document.createElement("a");
                 link.href = url;
@@ -301,7 +360,10 @@ function DocumentRow({
                 type="button"
                 className="danger"
                 onClick={() =>
-                  void act(() => client.deleteKnowledge(row.id), "文档已删除")
+                  void act(
+                    () => client.deleteKnowledge(row.id, library),
+                    "文档已删除",
+                  )
                 }
               >
                 确认删除
@@ -322,7 +384,14 @@ function DocumentRow({
           )}
         </div>
       </div>
-      {open && <ChunkList client={client} id={row.id} total={row.chunks} />}
+      {open && (
+        <ChunkList
+          client={client}
+          id={row.id}
+          total={row.chunks}
+          library={library}
+        />
+      )}
     </article>
   );
 }
@@ -331,16 +400,23 @@ function ChunkList({
   client,
   id,
   total,
+  library,
 }: {
   client: ApiClient;
   id: string;
   total: number;
+  library: string;
 }) {
   const [page, setPage] = useState(1);
   const detail = useQuery({
-    queryKey: ["knowledge-document", id, page],
+    queryKey: ["knowledge-document", library, id, page],
     queryFn: () =>
-      client.knowledgeDocument(id, (page - 1) * CHUNK_PAGE, CHUNK_PAGE),
+      client.knowledgeDocument(
+        id,
+        (page - 1) * CHUNK_PAGE,
+        CHUNK_PAGE,
+        library,
+      ),
   });
   return (
     <div className="kb-chunks">

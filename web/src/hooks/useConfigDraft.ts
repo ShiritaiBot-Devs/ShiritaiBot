@@ -54,6 +54,10 @@ export function useConfigDraft(client: ApiClient | null) {
       ["tools"],
       ["diagnostics"],
       ["memory-profiles"],
+      ["knowledge-libraries"],
+      ["knowledge"],
+      ["knowledge-search"],
+      ["knowledge-document"],
       ["history"],
       ["memory-detail"],
     ];

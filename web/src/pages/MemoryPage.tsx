@@ -1,13 +1,14 @@
 import { LoadingBar } from "../components/LoadingBar";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { EmptyState } from "../components/EmptyState";
 import { Pagination, PAGE_SIZE } from "../components/Pagination";
+import { SessionPicker } from "../components/SessionPicker";
 import type { MemoryKind, MemoryProfileConfig } from "../api/types";
-import { adapterSessionId, sessionTitle } from "../lib/sessions";
-import type { ConfigPageProps } from "./common";
+import { adapterSessionId, isMainSession, sessionTitle } from "../lib/sessions";
+import type { SessionConfigPageProps } from "./common";
 
 const KINDS: { key: MemoryKind | ""; label: string }[] = [
   { key: "", label: "全部" },
@@ -27,11 +28,6 @@ const STATUS: Record<string, string> = {
   resolved: "已处理",
 };
 
-type MemoryPageProps = ConfigPageProps & {
-  currentSession: string;
-  draftSessions: string[];
-};
-
 const BUILTIN_PROFILES: Record<string, MemoryProfileConfig> = {
   default: { name: "默认记忆库", audience: "personal" },
   feishu: { name: "飞书记忆库", audience: "personal" },
@@ -43,19 +39,14 @@ function MemorySettings({
   setConfig,
   currentSession,
   draftSessions,
-}: MemoryPageProps) {
+}: SessionConfigPageProps) {
   const [id, setId] = useState("");
   const [name, setName] = useState("");
   const [audience, setAudience] =
     useState<MemoryProfileConfig["audience"]>("personal");
   const [session, setSession] = useState(
-    currentSession.startsWith("background:") ? "web:owner" : currentSession,
+    isMainSession(currentSession) ? currentSession : "web:owner",
   );
-  const suggestions = useId();
-  const observed = useQuery({
-    queryKey: ["records", "session"],
-    queryFn: () => client.records("session"),
-  });
   const memory = config.memory;
   const custom = memory.profiles ?? {};
   const bindings = memory.sessions ?? {};
@@ -65,30 +56,6 @@ function MemorySettings({
       ? [adapterSessionId(adapter, "private", adapter.owner_id)]
       : [],
   );
-  const configured = config.adapters.flatMap((adapter) => [
-    ...adapter.groups.map((target) =>
-      adapterSessionId(adapter, "group", target),
-    ),
-    ...adapter.friends.map((target) =>
-      adapterSessionId(adapter, "private", target),
-    ),
-  ]);
-  const availableSessions = [
-    ...new Set([
-      "web:owner",
-      ...draftSessions,
-      ...ownerSessions,
-      ...configured,
-      ...Object.keys(bindings),
-      ...(observed.data ?? []).map((row) => row.id),
-    ]),
-  ]
-    .filter((value) => /^(web|private|group):/.test(value))
-    .sort();
-  const validSession =
-    /^(?:web:[^:\s]{1,128}|(?:group|private):[A-Za-z0-9_-]{1,64}:[^:\s]{1,256})$/.test(
-      session,
-    );
   const personal =
     session.startsWith("web:") || ownerSessions.includes(session);
   const eligible = Object.entries(profiles).filter(
@@ -206,26 +173,17 @@ function MemorySettings({
       })}
       <h3>会话绑定</h3>
       <div className="field-grid">
-        <label className="field">
-          <span className="field-name">会话</span>
-          <input
-            list={suggestions}
-            placeholder="选择或输入完整会话 ID"
-            value={session}
-            onChange={(event) => setSession(event.target.value.trim())}
-          />
-          <datalist id={suggestions}>
-            {availableSessions.map((value) => (
-              <option key={value} value={value}>
-                {sessionTitle(value)}
-              </option>
-            ))}
-          </datalist>
-        </label>
+        <SessionPicker
+          client={client}
+          adapters={config.adapters}
+          suggestions={[...draftSessions, ...Object.keys(bindings)]}
+          session={session}
+          onChange={setSession}
+        />
         <label className="field">
           <span className="field-name">使用的记忆库</span>
           <select
-            disabled={!validSession}
+            disabled={!isMainSession(session)}
             value={bindings[session] ?? ""}
             onChange={(event) => bind(event.target.value)}
           >
@@ -258,7 +216,7 @@ function MemorySettings({
   );
 }
 
-export function MemoryPage(props: MemoryPageProps) {
+export function MemoryPage(props: SessionConfigPageProps) {
   const { client } = props;
   const [selectedProfile, setProfile] = useState("default");
   const profiles = useQuery({

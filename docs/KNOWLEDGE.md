@@ -3,6 +3,11 @@
 知识库存放不会变化的资料：手册、规章、表格、讲义。代码在 `src/shiritaibot/knowledge/`，配置在
 `config.toml` 的 `[knowledge]`，WebUI 对应“知识库”页。
 
+在「知识库设置」添加库，给 WebUI 对话、私聊或群聊选择要使用的库，再保存配置。
+同一个库可以绑定多个会话。每个会话的检索和导入只作用于绑定的库，也可以选「停用知识库」。
+「管理的知识库」用于选择 WebUI 上传、检索、下载和删除文档的目标。
+移出库配置会保留磁盘数据，用原标识重新添加即可恢复。
+
 ## 1. 和记忆层的区别
 
 | | 长期记忆（`docs/MEMORY.md`） | 知识库 |
@@ -15,8 +20,8 @@
 
 ## 2. 存储
 
-- 原始文件存为 `<home>/knowledge/<sha256>`，内容相同只存一份。
-- `kb_document` 是文档元数据，对外编号 `d12`；`kb_chunk` 是分块，对外写作 `d12#3`（第 3 块，从 0 起）。
+- 已有文件与索引留在默认库，原始文件仍位于 `<home>/knowledge/<sha256>`。自定义库有独立的 SQLite、全文索引、向量索引和文件目录。同一库内才按内容去重。
+- 默认库保留 `d12` 一类的文档编号。自定义库带库标识，例如 `project:d12`，分块写作 `project:d12#3`（从 0 起）。
 - `kb_fts` 是 FTS5 全文索引，`rowid` 等于分块 id；`kb_vector` 是向量，和记忆、表情分开。
 - 一篇文档的所有行在一个事务里写入，中途失败不会留下半篇文档。
 
@@ -67,9 +72,9 @@
 
 | 工具 | 权限 | Chat 模式 | 作用 |
 | --- | --- | --- | --- |
-| `kb_search` | safe | 看 `knowledge.chat` | 混合检索，可限定文档 |
-| `kb_read` | safe | 看 `knowledge.chat` | 按顺序读取分块，用来看命中处的上下文 |
-| `kb_list` | safe | 看 `knowledge.chat` | 列出文档 |
+| `kb_search` | safe | 可按会话开放 | 混合检索，可限定文档 |
+| `kb_read` | safe | 可按会话开放 | 按顺序读取分块，用来看命中处的上下文 |
+| `kb_list` | safe | 可按会话开放 | 列出文档 |
 | `kb_import` | normal | 不开放 | 导入 QQ 文件引用、会话目录里的文件或纯文本 |
 | `kb_delete` | sensitive | 不开放 | 删除一篇文档 |
 
@@ -79,20 +84,29 @@
 QQ 私聊的流程：主人发送文件并说“存到知识库”，消息里带 `[QQ 文件引用 ref: 文件名]`，模型把 ref 传给 `kb_import`。
 不会自动入库，只发文件不说明用途时由模型询问或判断。
 
-开启 `knowledge.chat` 后，其他人的私聊和群聊也能让助手读到知识库的全部内容，没有按文档控制权限。
+显式绑定的 Chat 会话可以检索选中的整个库，仍受会话工具权限约束。
+`knowledge.chat` 控制未绑定的 Chat 会话能否检索默认库。切换绑定只影响后续工具调用，旧对话中已出现的内容仍在原对话中。
 
 ## 6. 配置
 
 ```toml
 [knowledge]
 enabled = true       # 关闭只隐藏工具，已存文档不受影响
-chat = false         # 是否在 Chat 模式开放只读工具
+chat = false         # 未绑定的 Chat 会话能否检索默认库
 chunk_chars = 600    # 200–2000
 chunk_overlap = 80   # 0–500，不超过 chunk_chars 的一半
 max_file_mb = 50     # 1–50
+
+[knowledge.libraries.project]
+name = "项目资料"
+
+[knowledge.sessions]
+"group:qq:123456" = "project"
+"web:archive" = "disabled"
 ```
 
 ## 7. WebUI 接口
 
 `GET /api/knowledge`、`POST /api/knowledge?filename=&title=`（请求体为文件）、`GET /api/knowledge/search?q=`、
 `GET /api/knowledge/{id}?start=&count=`、`GET /api/knowledge/{id}/file`、`DELETE /api/knowledge/{id}`。
+这些接口接受 `library` 查询参数，省略时使用默认库。`GET /api/knowledge/libraries` 返回已配置的库。
