@@ -24,7 +24,6 @@ import time
 from collections import deque
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from importlib import metadata
 from pathlib import Path
 from typing import Any
 
@@ -57,12 +56,9 @@ log = get_logger("更新")
 
 
 def package_version() -> str:
-    try:
-        return metadata.version("shiritaibot")
-    except metadata.PackageNotFoundError:
-        from shiritaibot import __version__
+    from shiritaibot import __version__
 
-        return __version__
+    return __version__
 
 
 def first_line(text: str) -> str:

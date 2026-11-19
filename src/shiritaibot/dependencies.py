@@ -375,8 +375,9 @@ class RuntimeEnvironment:
         reader = DeclarationReader()
         core_text = reader.read(self.core / "pyproject.toml")
         reader.read(self.core / "uv.lock")
-        if (self.core / ".python-version").is_file():
-            reader.read(self.core / ".python-version")
+        for path in (".python-version", "src/shiritaibot/__init__.py"):
+            if (self.core / path).is_file():
+                reader.read(self.core / path)
         try:
             metadata = tomllib.loads(core_text)["project"]
         except (ValueError, KeyError):
