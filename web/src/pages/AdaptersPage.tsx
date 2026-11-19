@@ -17,10 +17,10 @@ const CONNECTION_LABELS: Record<string, string> = {
   error: "连接异常",
 };
 
-function savedFeishuIdentity(current: AdapterConfig, saved?: AdapterConfig) {
+function savedAppIdentity(current: AdapterConfig, saved?: AdapterConfig) {
   return (
-    current.type === "feishu" &&
-    saved?.type === "feishu" &&
+    (current.type === "feishu" || current.type === "qq_official") &&
+    saved?.type === current.type &&
     current.app_id === saved.app_id &&
     (current.domain ?? "feishu") === (saved.domain ?? "feishu")
   );
@@ -62,11 +62,10 @@ function AddAdapterDialog({
         <span className="field-name">适配器类型</span>
         <select
           value={type}
-          onChange={(event) =>
-            setType(event.target.value === "feishu" ? "feishu" : "onebot11")
-          }
+          onChange={(event) => setType(event.target.value as AdapterType)}
         >
           <option value="onebot11">QQ · OneBot V11</option>
+          <option value="qq_official">QQ 官方机器人</option>
           <option value="feishu">飞书应用机器人</option>
         </select>
       </label>
@@ -204,7 +203,7 @@ export function AdaptersPage({
           const saved = savedAdapter(item);
           return adapterFields(
             item,
-            savedFeishuIdentity(item, saved) &&
+            savedAppIdentity(item, saved) &&
               Boolean(saved?.app_secret_configured),
           );
         }}
@@ -213,19 +212,24 @@ export function AdaptersPage({
             ? item.domain === "lark"
               ? "Lark 应用机器人"
               : "飞书应用机器人"
-            : item.url
+            : item.type === "qq_official"
+              ? "QQ 官方机器人"
+              : item.url
         }
         emptyText="添加实例，连接 QQ 或飞书。"
         renderStatus={(item) => {
           const saved = savedAdapter(item);
           const status = health.data?.adapters[item.id];
-          const isFeishu = item.type === "feishu";
+          const hasAppSecret =
+            item.type === "feishu" || item.type === "qq_official";
           const savedConnection =
             saved &&
             saved.enabled === item.enabled &&
-            (isFeishu
-              ? savedFeishuIdentity(item, saved) && !item.app_secret
-              : saved.type !== "feishu" &&
+            (hasAppSecret
+              ? savedAppIdentity(item, saved) &&
+                !item.app_secret &&
+                Boolean(item.qq_sandbox) === Boolean(saved.qq_sandbox)
+              : (saved.type ?? "onebot11") === "onebot11" &&
                 item.url === saved.url &&
                 item.token === saved.token);
           const label = !savedConnection
@@ -236,9 +240,11 @@ export function AdaptersPage({
                 ? "正在读取状态"
                 : health.isError
                   ? "状态暂不可用"
-                  : (CONNECTION_LABELS[status ?? ""] ?? status ?? "未连接");
+                  : item.type === "qq_official" && status === "connected"
+                    ? "凭证可用"
+                    : (CONNECTION_LABELS[status ?? ""] ?? status ?? "未连接");
           const diagnostic =
-            isFeishu && item.enabled && savedConnection
+            hasAppSecret && item.enabled && savedConnection
               ? health.data?.adapter_diagnostics?.[item.id]
               : null;
           return (
@@ -256,6 +262,12 @@ export function AdaptersPage({
                 )}
               </span>
               {diagnostic && <p>{diagnostic}</p>}
+              {item.type === "qq_official" && (
+                <p>
+                  回调路径{" "}
+                  <code>/api/adapters/qq-official/{item.id}/callback</code>
+                </p>
+              )}
             </div>
           );
         }}

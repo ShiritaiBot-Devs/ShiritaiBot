@@ -16,7 +16,7 @@ from shiritaibot.agent.commands import command
 from shiritaibot.agent.context import ContextManager, context_chars
 from shiritaibot.api.event import AgentResult, LLMRequest, LLMResponse, Turn
 from shiritaibot.config import is_feishu_session
-from shiritaibot.core import Context, PublicError, canonical, fingerprint, now, uid
+from shiritaibot.core import Context, PublicError, canonical, current_reply, fingerprint, now, uid
 from shiritaibot.core.logs import Logger, brief, describe_session, get_logger
 from shiritaibot.meme.inject import meme_prompt
 from shiritaibot.memory.judge import recall_question
@@ -265,7 +265,7 @@ class SessionActor:
 
     @staticmethod
     def _merge_batch(batch: list[tuple[Context, str]]) -> tuple[Context, str]:
-        return batch[0][0], "\n".join(text for _, text in batch)
+        return batch[-1][0], "\n".join(text for _, text in batch)
 
     def _discard_buffered(self, ctx: Context) -> None:
         if ctx.owner:
@@ -376,7 +376,7 @@ class AgentRuntime:
             return await self._submit(ctx, text)
 
     async def _submit(self, ctx: Context, text: str) -> str:
-        if not self.config.value.feishu_context_valid(ctx):
+        if not self.config.value.adapter_context_valid(ctx):
             return "ignored"
 
         if not ctx.background:
@@ -397,7 +397,7 @@ class AgentRuntime:
                     "memory_profile": ctx.memory_profile,
                 },
             )
-            if not self.config.value.feishu_context_valid(ctx):
+            if not self.config.value.adapter_context_valid(ctx):
                 return "ignored"
         if text.strip().startswith("/"):
             loop_logger(ctx).log(f"{'主人' if ctx.owner else ctx.actor} 执行指令 {brief(text, 80)}")
@@ -425,7 +425,7 @@ class AgentRuntime:
         cfg = self.config.value
         for session, actor in list(self.actors.items()):
             ctx = actor.context
-            if (ctx is not None and not cfg.feishu_context_valid(ctx)) or (
+            if (ctx is not None and not cfg.adapter_context_valid(ctx)) or (
                 not session.startswith(("background:", PREPARE_SESSION))
                 and cfg.session_memory(session) != previous.session_memory(session)
             ):
@@ -558,11 +558,15 @@ class AgentRuntime:
 
     async def turn(self, actor: SessionActor, ctx: Context, text: str) -> None:
         async with self.context_locks.setdefault(ctx.session, asyncio.Lock()):
-            await self._turn(actor, ctx, text)
+            token = current_reply.set(ctx.reply_anchor)
+            try:
+                await self._turn(actor, ctx, text)
+            finally:
+                current_reply.reset(token)
 
     async def _turn(self, actor: SessionActor, ctx: Context, text: str) -> None:
         settings = self.config.value
-        if not settings.feishu_context_valid(ctx) or (
+        if not settings.adapter_context_valid(ctx) or (
             not ctx.background and ctx.memory_profile != settings.session_memory(ctx.session)
         ):
             return

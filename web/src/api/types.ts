@@ -55,7 +55,7 @@ export interface ModelPricing {
 }
 
 export interface AdapterConfig extends Instance {
-  type?: "onebot11" | "feishu";
+  type?: "onebot11" | "feishu" | "qq_official";
   url: string;
   token: string;
   self_id: string;
@@ -66,6 +66,7 @@ export interface AdapterConfig extends Instance {
   auto_start: string[];
   auto_start_after: number;
   app_id?: string;
+  qq_sandbox?: boolean;
   app_secret?: string;
   app_secret_configured?: boolean;
   domain?: "feishu" | "lark";
@@ -396,7 +397,7 @@ export interface ToolCatalog {
   source: "session" | "default";
   tools: ToolInfo[];
   revision?: string;
-  platform?: "feishu" | "web" | "qq";
+  platform?: "feishu" | "web" | "qq" | "qq_official";
   active?: boolean;
 }
 

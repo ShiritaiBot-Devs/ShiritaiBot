@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import uuid
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -65,6 +66,16 @@ class ExternalEvent(Model):
         return value.strip() if isinstance(value, str) else value
 
 
+@dataclass(frozen=True)
+class ReplyAnchor:
+    session: str
+    message_id: str
+    expires: float
+
+
+current_reply: ContextVar[ReplyAnchor | None] = ContextVar("current_reply", default=None)
+
+
 @dataclass(frozen=True, slots=True)
 class Context:
     session: str
@@ -80,6 +91,7 @@ class Context:
     # Group chatter the Bot may answer or pass on; a pass is not delivered.
     interject: bool = False
     memory_profile: str = "default"
+    reply_anchor: ReplyAnchor | None = None
 
 
 @dataclass(slots=True)
@@ -134,9 +146,7 @@ class RuntimePort(Protocol):
 class ApprovalPort(Protocol):
     menu: ApprovalMenu
 
-    async def resolve(
-        self, key: str, allow: bool, *, approver: Context | None = None
-    ) -> None: ...
+    async def resolve(self, key: str, allow: bool, *, approver: Context | None = None) -> None: ...
 
     async def resolve_latest(self, approver: Context, allow: bool) -> dict: ...
 

@@ -44,6 +44,13 @@ def is_feishu_session(session: str) -> bool:
 
 
 ProfileId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")]
+QQ_OFFICIAL_SESSION = re.compile(
+    r"(private|group):([A-Za-z0-9_-]{1,64}):qqofficial\.([0-9]+)/([A-Za-z0-9_-]{1,128})"
+)
+
+
+def is_qq_official_session(session: str) -> bool:
+    return QQ_OFFICIAL_SESSION.fullmatch(session) is not None
 
 
 def check_proxy(value: str) -> str:
@@ -138,7 +145,7 @@ class ModelConfig(Instance):
 
 
 class AdapterConfig(Instance):
-    type: Literal["onebot11", "feishu"] = "onebot11"
+    type: Literal["onebot11", "feishu", "qq_official"] = "onebot11"
     url: str = "ws://127.0.0.1:3001"
     token: str = ""
     self_id: str = ""
@@ -150,7 +157,8 @@ class AdapterConfig(Instance):
     # process itself disappeared. One argv element per entry; empty disables it.
     auto_start: list[str] = Field(default_factory=list)
     auto_start_after: int = Field(default=60, ge=5, le=3600)
-    app_id: str = Field(default="", pattern=r"^(cli_[A-Za-z0-9]+)?$")
+    app_id: str = Field(default="", max_length=64)
+    qq_sandbox: bool = False
     app_secret: str = Field(default="", max_length=10000, repr=False)
     domain: Literal["feishu", "lark"] = "feishu"
     wake_keywords: list[str] = Field(default_factory=lambda: ["小知"])
@@ -170,14 +178,27 @@ class AdapterConfig(Instance):
         return list(dict.fromkeys(word.strip() for word in value if word.strip()))
 
     @model_validator(mode="after")
-    def feishu_ids(self) -> AdapterConfig:
+    def platform_ids(self) -> AdapterConfig:
         if self.type == "feishu":
+            if self.app_id and not re.fullmatch(r"cli_[A-Za-z0-9]+", self.app_id):
+                raise ValueError("飞书 App ID 必须以 cli_ 开头")
             if self.owner_id and not re.fullmatch(r"ou_[A-Za-z0-9]+", self.owner_id):
                 raise ValueError("飞书主人 ID 必须是 ou_ 开头的 open_id")
             if any(not re.fullmatch(r"oc_[A-Za-z0-9]+", group) for group in self.groups):
                 raise ValueError("飞书群 ID 必须是 oc_ 开头的 chat_id")
             if self.groups and not self.wake_keywords:
                 raise ValueError("配置飞书群时至少填写一个句首唤醒词")
+        if self.type == "qq_official":
+            if self.app_id and not re.fullmatch(r"[0-9]+", self.app_id):
+                raise ValueError("QQ 官方机器人 App ID 必须为数字")
+            if self.enabled and not self.app_id:
+                raise ValueError("启用 QQ 官方机器人需要填写 App ID")
+            if any(
+                not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value)
+                for value in [self.owner_id, *self.groups, *self.friends, *self.ignore_users]
+                if value
+            ):
+                raise ValueError("QQ 官方机器人会话配置需要使用 OpenID")
         return self
 
     @property
@@ -188,6 +209,8 @@ class AdapterConfig(Instance):
         target = user_or_group
         if self.type == "feishu":
             target = f"{self.feishu_binding}/{target}"
+        elif self.type == "qq_official":
+            target = f"qqofficial.{self.app_id}/{target}"
         kind = "group" if group else "private"
         return f"{kind}:{self.id}:{target}"
 
@@ -779,6 +802,40 @@ class Settings(Model):
         profile = self.memory.profile(profile_id)
         return profile is not None and profile.audience == "shared"
 
+    def active_qq_official_session(self, session: str) -> AdapterConfig | None:
+        match = QQ_OFFICIAL_SESSION.fullmatch(session)
+        if match is None:
+            return None
+        kind, adapter_id, app_id, recipient = match.groups()
+        return next(
+            (
+                a
+                for a in self.adapters
+                if a.enabled
+                and a.type == "qq_official"
+                and a.id == adapter_id
+                and a.app_id == app_id
+                and (
+                    recipient in a.groups
+                    if kind == "group"
+                    else recipient == a.owner_id or recipient in a.friends
+                )
+            ),
+            None,
+        )
+
+    def adapter_context_valid(self, ctx: Context) -> bool:
+        if is_qq_official_session(ctx.session):
+            adapter = self.active_qq_official_session(ctx.session)
+            return (
+                adapter is not None
+                and not ctx.background
+                and ctx.group == ctx.session.startswith("group:")
+                and (ctx.group or ctx.actor == ctx.session.rpartition("/")[2])
+                and ctx.owner == (not ctx.group and ctx.actor == adapter.owner_id)
+            )
+        return self.feishu_context_valid(ctx)
+
     def feishu_session(self, session: str) -> AdapterConfig | None:
         match = _parse_feishu_session(session)
         if match is None:
@@ -915,6 +972,9 @@ class Settings(Model):
                 (profile.audience == "personal") != session.startswith("web:")
             ):
                 raise ValueError("群聊需绑定会话记忆库，WebUI 对话需绑定个人记忆库")
+        official_ids = [a.app_id for a in self.adapters if a.type == "qq_official" and a.enabled]
+        if len(set(official_ids)) != len(official_ids):
+            raise ValueError("同一个 QQ 官方机器人 App ID 只能启用一个连接")
         for adapter in self.adapters:
             if adapter.type == "feishu":
                 profile = self.memory.profile(adapter.memory_profile)

@@ -62,7 +62,7 @@ ShiritaiBot践行“一切皆工具(和Skill，未来方向)”的理念，希�
 
 可以参见 `/scripts` 当中的部署脚本，也可以采用下方的手动部署方式。
 
-部署后可连接 QQ / OneBot 或飞书应用机器人。飞书的私聊、群唤醒和记忆配置见 [飞书接入指南](docs/FEISHU.md)。
+部署后可连接 OneBot、[QQ 官方机器人](docs/QQ-OFFICIAL.md)或[飞书应用机器人](docs/FEISHU.md)。
 
 手动部署需要 Python 3.12+、[uv](https://docs.astral.sh/uv/) 和 Node.js 20.19+。
 

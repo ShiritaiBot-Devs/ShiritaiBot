@@ -17,16 +17,19 @@ from websockets.asyncio.client import connect
 
 from shiritaibot.adapters.feishu import Feishu
 from shiritaibot.adapters.feishu_transport import FeishuSendError
+from shiritaibot.adapters.qq_official import QQMessage, QQOfficial, QQOfficialSendError
 from shiritaibot.api.event import MessageEvent
-from shiritaibot.config import is_feishu_session
+from shiritaibot.config import is_feishu_session, is_qq_official_session
 from shiritaibot.core import (
     Actor,
     ApprovalPort,
     Context,
     ExternalEvent,
     PublicError,
+    ReplyAnchor,
     RuntimePort,
     canonical,
+    current_reply,
     fingerprint,
     now,
     uid,
@@ -284,7 +287,7 @@ class OneBot:
 class AdapterHub:
     def __init__(self, config, vault, store):
         self.config, self.vault, self.store = config, vault, store
-        self.instances: dict[str, OneBot | Feishu] = {}
+        self.instances: dict[str, OneBot | Feishu | QQOfficial] = {}
         self.tasks: list[asyncio.Task] = []
         self.runtime: RuntimePort | None = None
         self.permissions: ApprovalPort | None = None
@@ -302,7 +305,7 @@ class AdapterHub:
         for cfg in self.config.value.adapters:
             if not cfg.enabled:
                 continue
-            bot: OneBot | Feishu
+            bot: OneBot | Feishu | QQOfficial
             if cfg.type == "feishu":
                 assert self.runtime is not None and self.permissions is not None
                 get_logger(cfg.id).log("启动飞书应用机器人长连接")
@@ -317,6 +320,10 @@ class AdapterHub:
                     settings=self.config,
                     active_context=lambda ctx: self.config.value.feishu_context_valid(ctx),
                 )
+            elif cfg.type == "qq_official":
+                logger = get_logger(cfg.id)
+                logger.log("启动 QQ 官方机器人 Webhook")
+                bot = QQOfficial(cfg, self.vault, self.receive_qq_official, logger)
             else:
                 get_logger(cfg.id).log(f"启动协议端（OneBot 11 → {cfg.url}）")
                 bot = OneBot(cfg, self.vault, self.store, self.receive)
@@ -328,7 +335,7 @@ class AdapterHub:
         return {
             key: bot.diagnostic
             for key, bot in self.instances.items()
-            if isinstance(bot, Feishu) and bot.diagnostic
+            if isinstance(bot, (Feishu, QQOfficial)) and bot.diagnostic
         }
 
     async def close(self) -> None:
@@ -337,6 +344,98 @@ class AdapterHub:
         await asyncio.gather(*self.tasks, return_exceptions=True)
         self.tasks.clear()
         self.instances.clear()
+
+    async def receive_qq_official(self, bot: QQOfficial, incoming: QQMessage) -> None:
+        assert self.runtime is not None and self.permissions is not None
+        cfg, settings = bot.config, self.config.value
+        group, target, user = incoming.group, incoming.target, incoming.user
+        session = cfg.session(target, group=group)
+        if not settings.active_qq_official_session(session):
+            field = "群 OpenID" if group else "用户 OpenID"
+            bot.log.debug(f"忽略未配置的 QQ 官方会话（{field} {target}）")
+            return
+        if user in cfg.ignore_users:
+            return
+        dedup = f"qqofficial:{cfg.app_id}:{incoming.message_id}"
+        if not await self.store.execute(
+            "INSERT OR IGNORE INTO seen_messages VALUES(?,?)", (dedup, now().timestamp())
+        ):
+            return
+        text = incoming.text
+        owner = not group and user == cfg.owner_id
+        keyword = settings.matches_wake_keyword(text)
+        wake = incoming.mentioned or keyword
+        profile = settings.session_memory(session)
+        if group and settings.group_context.enabled and text:
+            await self.store.record_group(
+                session, dedup, user, user, text, wake, memory_profile=profile
+            )
+        if not text:
+            return
+        rest = settings.strip_wake_prefix(text)
+        if rest != text and (
+            rest.startswith("/")
+            or rest in {"停", "取消"}
+            or approval_reply(rest)
+            or self.permissions.menu.accepts(session, rest)
+        ):
+            text = rest
+        if (
+            group
+            and not wake
+            and not (
+                not settings.group_command_require_wake and text.startswith("/") and self.hooks
+            )
+        ):
+            return
+        anchor = ReplyAnchor(session, incoming.message_id, incoming.at + incoming.reply_limit[0])
+        ctx = Context(
+            session, user, owner=owner, group=group, memory_profile=profile, reply_anchor=anchor
+        )
+        token = current_reply.set(anchor)
+        try:
+            if owner and (reply := approval_reply(text)):
+                try:
+                    if reply[2]:
+                        await self.permissions.resolve(reply[2], reply[1] == "同意", approver=ctx)
+                    else:
+                        await self.permissions.resolve_latest(ctx, reply[1] == "同意")
+                except PublicError as exc:
+                    await self.enqueue(session, str(exc), decorate=False)
+                else:
+                    await self.enqueue(session, "已处理审批。", decorate=False)
+                return
+            if owner and await self.permissions.menu.reply(session, text, approver=ctx):
+                return
+            if (
+                not group
+                and settings.private_require_keyword
+                and not keyword
+                and not (text.startswith("/") or text in {"停", "取消"})
+            ):
+                return
+            event = MessageEvent(
+                session,
+                text,
+                user,
+                platform="qq_official",
+                adapter=cfg.id,
+                group_id=target if group else "",
+                message_id=incoming.message_id,
+                is_owner=owner,
+                is_wake=not group or wake or text.startswith("/"),
+                raw=incoming.raw,
+            )
+            if self.hooks is not None:
+                if group and not wake:
+                    await self.hooks.dispatch_command(event)
+                    return
+                if await self.hooks.dispatch(event):
+                    return
+            if not group or wake:
+                await self.runtime.submit(ctx, text)
+        finally:
+            current_reply.reset(token)
 
     async def receive(self, bot: OneBot, event: dict) -> None:
         assert self.runtime is not None and self.permissions is not None
@@ -612,7 +711,8 @@ class AdapterHub:
             await self.store.put("reply", uid(), {"text": text, "at": now().isoformat()}, session)
             return
         text = clean_outbound(text)
-        if is_feishu_session(session) and injector is not None:
+        official = is_qq_official_session(session)
+        if (official or is_feishu_session(session)) and injector is not None:
             text = injector.plain(text)
             injector = None
         # <meme> markers become their own sticker messages, splitting the text around them.
@@ -623,6 +723,12 @@ class AdapterHub:
             "expires": expires,
             "memory_profile": self.config.value.session_memory(session),
         }
+        if official:
+            anchor = current_reply.get()
+            if anchor is None or anchor.session != session:
+                get_logger(session.split(":")[1]).warning("QQ 官方回复缺少对应的入站消息，已跳过")
+                return
+            delivery.update(qq_reply_to=anchor.message_id, expires=anchor.expires)
         if approval_batch:
             delivery["approval_batch"] = approval_batch
         for piece in pieces:
@@ -638,11 +744,12 @@ class AdapterHub:
                     session,
                 )
                 continue
-            for index in range(0, len(piece), 3500):
+            chunk = 600 if official else 3500
+            for index in range(0, len(piece), chunk):
                 await self.store.put(
                     "outbox",
                     uid(),
-                    {"text": piece[index : index + 3500], **delivery},
+                    {"text": piece[index : index + chunk], **delivery},
                     session,
                 )
 
@@ -698,12 +805,16 @@ class AdapterHub:
                 bot = self.instances.get(adapter_id)
                 if row["expires"] < now().timestamp():
                     row["status"] = "expired"
-                    get_logger(adapter_id).warning(
-                        f"消息超过 24 小时仍未发出，已放弃：{brief(row['text'], 60)}"
-                    )
+                    get_logger(adapter_id).warning("消息超过发送有效期，已放弃")
                 elif kind == "group" and row.get(
                     "memory_profile", "default"
                 ) != self.config.value.session_memory(row["scope"]):
+                    row["status"] = "failed"
+                elif is_qq_official_session(row["scope"]) and (
+                    not self.config.value.active_qq_official_session(row["scope"])
+                    or bot is not None
+                    and not isinstance(bot, QQOfficial)
+                ):
                     row["status"] = "failed"
                 elif is_feishu_session(row["scope"]) and (
                     not self.current_feishu_delivery(row)
@@ -712,6 +823,9 @@ class AdapterHub:
                 ):
                     row["status"] = "failed"
                 elif not bot or bot.status != "connected":
+                    continue
+                elif isinstance(bot, QQOfficial):
+                    await self.flush_qq_official(bot, row, kind, target.rpartition("/")[2])
                     continue
                 elif isinstance(bot, Feishu):
                     await self.flush_feishu(bot, row, kind, target)
@@ -755,6 +869,38 @@ class AdapterHub:
             row.update(status="sent", receipt=receipt)
             await self.store.put("outbox", row["id"], row, row["scope"])
             bot.log.debug(f"已发送：{brief(row['text'], 80)}", where)
+            await self.record_sent_group(
+                bot.self_id, row, kind, enabled=self.config.value.group_context.enabled
+            )
+        await asyncio.sleep(0.7)
+
+    async def flush_qq_official(self, bot: QQOfficial, row: dict, kind: str, target: str) -> None:
+        message_id = row.get("qq_reply_to")
+        # Reserve a sequence before POST. QQ deduplicates on (msg_id, msg_seq).
+        key = fingerprint([bot.config.app_id, message_id])
+        seq = await self.store.get("qq_official_reply", key) or {"sequence": 0}
+        limit = 5 if kind == "group" else 4
+        if not message_id or seq["sequence"] >= limit:
+            row["status"] = "failed"
+            bot.log.warning("QQ 官方回复缺少消息 ID 或已达到单条消息回复上限", row["scope"])
+            await self.store.put("outbox", row["id"], row, row["scope"])
+            return
+        seq.update(sequence=seq["sequence"] + 1, expires=row["expires"])
+        await self.store.put("qq_official_reply", key, seq)
+        row["status"] = "uncertain"
+        await self.store.put("outbox", row["id"], row, row["scope"])
+        try:
+            receipt = await bot.send_text(kind, target, row["text"], message_id, seq["sequence"])
+        except PublicError as exc:
+            if not isinstance(exc, QQOfficialSendError) or not exc.uncertain:
+                row["status"] = "failed"
+                await self.store.put("outbox", row["id"], row, row["scope"])
+            bot.log.warning(f"QQ 官方回复未成功（{exc}）", row["scope"])
+        except Exception as exc:
+            bot.log.warning(f"QQ 官方回复未确认（{type(exc).__name__}）", row["scope"])
+        else:
+            row.update(status="sent", receipt=receipt)
+            await self.store.put("outbox", row["id"], row, row["scope"])
             await self.record_sent_group(
                 bot.self_id, row, kind, enabled=self.config.value.group_context.enabled
             )

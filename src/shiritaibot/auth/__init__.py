@@ -14,7 +14,13 @@ from cryptography.fernet import Fernet
 from pydantic import Field, StrictBool
 
 from shiritaibot.auth.menu import QUICK_SECONDS, SENSITIVE_FILE, ApprovalMenu
-from shiritaibot.config import ConfigRevisionConflict, SessionPolicy, ToolPolicy, is_feishu_session
+from shiritaibot.config import (
+    ConfigRevisionConflict,
+    SessionPolicy,
+    ToolPolicy,
+    is_feishu_session,
+    is_qq_official_session,
+)
 from shiritaibot.core import Context, Model, PublicError, Tool, canonical, fingerprint, now, uid
 from shiritaibot.core.logs import brief, describe_session, get_logger
 
@@ -175,8 +181,8 @@ class Permissions:
             while True:
                 version = self.config.version
                 settings = self.config.value.model_copy(deep=True)
-                if not settings.feishu_context_valid(approver or ctx):
-                    raise PublicError("飞书会话绑定已变更。")
+                if not settings.adapter_context_valid(approver or ctx):
+                    raise PublicError("协议端会话绑定已变更。")
                 update = value(self.session_policy(ctx)) if callable(value) else value
                 if update is None:
                     settings.policy.sessions.pop(ctx.session, None)
@@ -208,7 +214,7 @@ class Permissions:
         return "allow" if tool.safe else "auto" if profile.preset == "safe_auto" else "manual"
 
     def decision(self, ctx: Context, tool: Tool) -> str:
-        if not self.config.value.feishu_context_valid(ctx):
+        if not self.config.value.adapter_context_valid(ctx):
             return "deny"
         policy = self.config.value.policy
         if not ctx.background and self.session_policy(ctx).mode != "agent" and not tool.chat:
@@ -381,9 +387,7 @@ class Permissions:
             raise PublicError("工具被权限策略拒绝")
         # Credential-bearing files are never auto-approved or exempted, however the shell
         # policy is set: reading config.toml keeps leaking keys into the conversation.
-        sensitive = tool.name == "shell" and SENSITIVE_FILE.search(
-            str(args.get("command", ""))
-        )
+        sensitive = tool.name == "shell" and SENSITIVE_FILE.search(str(args.get("command", "")))
         if decision == "allow" and not sensitive:
             return
         if decision in {"auto", "allow"} and sensitive:
@@ -465,7 +469,14 @@ class Permissions:
     async def grant_permanent(
         self, session: str, tool: str, risk: str, reason: str, *, menu_target: str
     ) -> str:
+        settings = self.config.value
+        adapter = settings.active_feishu_session(
+            menu_target
+        ) or settings.active_qq_official_session(menu_target)
         ctx = Context(session, "owner", "agent", owner=True)
+        approver = Context(
+            menu_target, adapter.owner_id if adapter else "owner", "agent", owner=True
+        )
 
         def grant(profile: SessionPolicy) -> SessionPolicy:
             if not self.approval_target_current(menu_target):
@@ -474,7 +485,7 @@ class Permissions:
             updated.tools[tool] = "allow"
             return updated
 
-        await self.set_session(ctx, grant)
+        await self.set_session(ctx, grant, approver=approver)
         await self.store.put(
             "approval_grant",
             f"{session}|{tool}",
@@ -497,7 +508,11 @@ class Permissions:
         return f"以后 {tool} 都同意{tail}"
 
     async def grant_rows(self, approver: Context) -> list[dict]:
-        scope = approver.session if is_feishu_session(approver.session) else None
+        scope = (
+            approver.session
+            if (is_feishu_session(approver.session) or is_qq_official_session(approver.session))
+            else None
+        )
         return [
             row
             for row in await self.store.list("approval_grant", scope=scope)
@@ -553,8 +568,15 @@ class Permissions:
 
     def approval_target(self, ctx: Context | None = None) -> str:
         settings = self.config.value
-        if ctx is not None and is_feishu_session(ctx.session):
-            if ctx.owner and not ctx.group and not ctx.background and settings.feishu_context_valid(ctx):
+        if ctx is not None and (
+            is_feishu_session(ctx.session) or is_qq_official_session(ctx.session)
+        ):
+            if (
+                ctx.owner
+                and not ctx.group
+                and not ctx.background
+                and settings.adapter_context_valid(ctx)
+            ):
                 return ctx.session
             return ""  # Feishu approvals without a current owner session stay in WebUI.
         return next(
@@ -568,9 +590,13 @@ class Permissions:
 
     def approval_target_current(self, target: str) -> bool:
         if is_feishu_session(target):
-            return target.startswith("private:") and (
-                self.config.value.active_feishu_session(target) is not None
+            return (
+                target.startswith("private:")
+                and self.config.value.active_feishu_session(target) is not None
             )
+        if is_qq_official_session(target):
+            adapter = self.config.value.active_qq_official_session(target)
+            return adapter is not None and target == adapter.owner_session()
         return target == self.approval_target()
 
     def can_review(self, scope: str, approver: Context | None) -> bool:
@@ -578,9 +604,11 @@ class Permissions:
             return True  # Authenticated WebUI approval API.
         if not approver.owner or approver.group or approver.background:
             return False
-        if is_feishu_session(approver.session):
-            return scope == approver.session and self.config.value.feishu_context_valid(approver)
-        return approver.session.startswith("web:") or not is_feishu_session(scope)
+        if is_feishu_session(approver.session) or is_qq_official_session(approver.session):
+            return scope == approver.session and self.config.value.adapter_context_valid(approver)
+        return approver.session.startswith("web:") or not (
+            is_feishu_session(scope) or is_qq_official_session(scope)
+        )
 
     def is_waiting(self, row: dict | None) -> bool:
         return bool(

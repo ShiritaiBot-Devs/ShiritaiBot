@@ -318,14 +318,16 @@ class Application:
         log.log("配置已更新，正在重载协议端、内置工具与插件")
         previous = self.config.value
         settings = settings.model_copy(deep=True)
-        saved_feishu = {
-            (item.id, item.app_id, item.domain): item.app_secret
+        saved_secrets = {
+            (item.type, item.id, item.app_id, item.domain): item.app_secret
             for item in previous.adapters
-            if item.type == "feishu"
+            if item.type in {"feishu", "qq_official"}
         }
         for item in settings.adapters:
-            if item.type == "feishu" and not item.app_secret:
-                item.app_secret = saved_feishu.get((item.id, item.app_id, item.domain), "")
+            if item.type in {"feishu", "qq_official"} and not item.app_secret:
+                item.app_secret = saved_secrets.get(
+                    (item.type, item.id, item.app_id, item.domain), ""
+                )
         settings = await self.vault.protect_settings(settings, await self.plugins.schemas())
         await self.open_memory_profiles(settings)
         await self.config.save(settings, expected_version=expected_version)

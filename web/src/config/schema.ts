@@ -210,8 +210,12 @@ const ADAPTER_COMMON_FIELDS: FieldSpec[] = [
     key: "type",
     label: "适配器类型",
     kind: "select",
-    options: ["onebot11", "feishu"],
-    optionLabels: { onebot11: "QQ · OneBot V11", feishu: "飞书应用机器人" },
+    options: ["onebot11", "qq_official", "feishu"],
+    optionLabels: {
+      onebot11: "QQ · OneBot V11",
+      qq_official: "QQ 官方机器人",
+      feishu: "飞书应用机器人",
+    },
   },
   {
     key: "enabled",
@@ -275,6 +279,33 @@ export function adapterFields(
   item: AdapterConfig,
   hasSavedSecret: boolean,
 ): FieldSpec[] {
+  if (item.type === "qq_official") {
+    return [
+      ...ADAPTER_COMMON_FIELDS,
+      {
+        key: "app_id",
+        label: "App ID",
+        kind: "text",
+        help: "填写 QQ 开放平台提供的数字 App ID。",
+      },
+      {
+        key: "app_secret",
+        label: "App Secret",
+        kind: "write-only",
+        placeholder: hasSavedSecret ? "已配置 · 留空保留" : "输入机器人密钥",
+      },
+      { key: "qq_sandbox", label: "使用沙盒 API", kind: "boolean" },
+      {
+        key: "owner_id",
+        label: "主人 OpenID",
+        kind: "text",
+        help: "填写此 App 下的单聊 OpenID。",
+      },
+      { key: "groups", label: "允许的群 OpenID", kind: "list" },
+      { key: "friends", label: "允许的单聊 OpenID", kind: "list" },
+      { key: "ignore_users", label: "忽略的成员 OpenID", kind: "list" },
+    ];
+  }
   if (item.type !== "feishu")
     return [...ADAPTER_COMMON_FIELDS, ...ONEBOT_FIELDS];
   return [
@@ -1051,7 +1082,10 @@ export function createAdapter(
   type: NonNullable<AdapterConfig["type"]> = "onebot11",
 ): AdapterConfig {
   return {
-    id: uniqueId(type === "feishu" ? "feishu" : "qq-main", rows),
+    id: uniqueId(
+      type === "onebot11" ? "qq-main" : type.replace("_", "-"),
+      rows,
+    ),
     enabled: false,
     type,
     url: "ws://127.0.0.1:3001",

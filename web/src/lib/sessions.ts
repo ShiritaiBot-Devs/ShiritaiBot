@@ -38,6 +38,9 @@ const GROUP_LABELS: Record<SessionGroupKey, string> = {
   background: "后台任务",
 };
 
+const QQ_OFFICIAL_SESSION =
+  /^(private|group):[^:]+:qqofficial\.[0-9]+\/([A-Za-z0-9_-]+)$/;
+
 const FEISHU_SESSION =
   /^(private|group):[^:]+:(feishu|lark)\.cli_[A-Za-z0-9]+\/((?:ou|oc)_[A-Za-z0-9]+)$/;
 
@@ -49,7 +52,9 @@ export function adapterSessionId(
   const binding =
     adapter.type === "feishu"
       ? `${adapter.domain ?? "feishu"}.${adapter.app_id ?? ""}/`
-      : "";
+      : adapter.type === "qq_official"
+        ? `qqofficial.${adapter.app_id ?? ""}/`
+        : "";
   return `${kind}:${adapter.id}:${binding}${target}`;
 }
 
@@ -101,6 +106,9 @@ export function sessionTitle(id: string): string {
     const kind = feishu[1] === "private" ? "私聊" : "群聊";
     return `${platform}${kind} ${feishu[3]}`;
   }
+  const official = QQ_OFFICIAL_SESSION.exec(id);
+  if (official)
+    return `QQ 官方${official[1] === "private" ? "私聊" : "群聊"} ${official[2]}`;
   const private_ = /^private:[^:]+:([^:]+)$/.exec(id);
   if (private_) return `QQ ${private_[1]}`;
   const group = /^group:[^:]+:([^:]+)$/.exec(id);

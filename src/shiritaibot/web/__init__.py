@@ -17,6 +17,7 @@ from starlette.background import BackgroundTask
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from shiritaibot import __version__ as BOT_VERSION
+from shiritaibot.adapters.qq_official import MAX_CALLBACK_BYTES, CallbackError, QQOfficial
 from shiritaibot.agent.commands import COMMANDS
 from shiritaibot.api.event import MessageEvent
 from shiritaibot.app import Application
@@ -26,6 +27,7 @@ from shiritaibot.config import (
     ProviderConfig,
     Settings,
     is_feishu_session,
+    is_qq_official_session,
 )
 from shiritaibot.core import Context, ExternalEvent, Model, PublicError, canonical, logs
 from shiritaibot.core.process import run_process
@@ -254,7 +256,7 @@ def create_app(
         data = runtime.config.value.model_dump()
         for adapter in data["adapters"]:
             configured = bool(adapter.pop("app_secret"))
-            if adapter["type"] == "feishu":
+            if adapter["type"] in {"feishu", "qq_official"}:
                 adapter.update(app_secret="", app_secret_configured=configured)
         return data
 
@@ -286,6 +288,21 @@ def create_app(
     async def config_schema():
         return Settings.model_json_schema()
 
+    @api.post("/api/adapters/qq-official/{adapter_id}/callback")
+    async def qq_official_callback(adapter_id: str, request: Request):
+        bot = runtime.adapters.instances.get(adapter_id)
+        if not isinstance(bot, QQOfficial):
+            raise HTTPException(404, "QQ 官方适配器不存在或未启用")
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > MAX_CALLBACK_BYTES:
+                raise HTTPException(413, "回调内容过大")
+        try:
+            return await bot.callback(bytes(body), request.headers)
+        except CallbackError as exc:
+            raise HTTPException(exc.status, "QQ 官方机器人回调未通过") from None
+
     @api.post("/api/adapters/feishu/qr", dependencies=protected)
     async def feishu_qr_start(body: FeishuQrStart):
         return await feishu_qr.start(body.domain)
@@ -312,6 +329,7 @@ def create_app(
         feishu = is_feishu_session(session)
         actor = row.get("actor", "")
         memory_profile = settings.session_memory(session)
+        official = is_qq_official_session(session)
         active = True
         if feishu:
             adapter = settings.active_feishu_session(session)
@@ -322,6 +340,11 @@ def create_app(
                     actor = actor or "ou_preview"
                 else:
                     actor = adapter.owner_id
+        elif official:
+            adapter = settings.active_qq_official_session(session)
+            active = adapter is not None
+            owner = adapter is not None and session == adapter.owner_session()
+            actor = actor if group else session.rpartition("/")[2]
         else:
             owner = row.get("owner", session.startswith("web:"))
             if session.startswith("private:"):
@@ -333,7 +356,13 @@ def create_app(
         response.headers["ETag"] = config_etag()
         return {
             "session": session,
-            "platform": "feishu" if feishu else "web" if session.startswith("web:") else "qq",
+            "platform": "feishu"
+            if feishu
+            else "qq_official"
+            if official
+            else "web"
+            if session.startswith("web:")
+            else "qq",
             "active": active,
             "config_version": runtime.config.version,
             "policy": runtime.permissions.session_policy(ctx).model_dump(),
