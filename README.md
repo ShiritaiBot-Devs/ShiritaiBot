@@ -60,7 +60,7 @@ ShiritaiBot践行“一切皆工具(和Skill，未来方向)”的理念，希�
 
 ## 快速部署
 
-可以参见 `/scripts` 当中的部署脚本，也可以采用下方的手动部署方式。
+可以使用 [一键部署脚本](scripts/README.md)，也可以采用下方的手动部署方式。Linux 上使用 Docker 时，在源码目录运行 `bash scripts/deploy-docker.sh`。
 
 部署后可连接 OneBot、[QQ 官方机器人](docs/QQ-OFFICIAL.md)或[飞书应用机器人](docs/FEISHU.md)。
 

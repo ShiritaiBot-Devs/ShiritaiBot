@@ -1,0 +1,31 @@
+name: shiritaibot
+services:
+  bot:
+    build:
+      context: .
+    init: true
+    network_mode: host
+    user: "${SHIRITAI_UID:-1000}:${SHIRITAI_GID:-1000}"
+    environment:
+      HOME: /data
+      SHIRITAI_PORT: "${SHIRITAI_PORT:-8765}"
+      SHIRITAI_ALLOWED_HOSTS: "${SHIRITAI_ALLOWED_HOSTS:-}"
+    volumes:
+      - type: bind
+        source: "${SHIRITAI_DATA_DIR:-./.local/docker-data}"
+        target: /data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import os, pathlib, urllib.request;
+          url = 'http://127.0.0.1:' + os.environ['SHIRITAI_PORT'] + '/api/health';
+          token = pathlib.Path('/data/web.token').read_text().strip();
+          urllib.request.urlopen(urllib.request.Request(url, headers={'Authorization': 'Bearer ' + token}), timeout=3).close()
+      interval: 5s
+      timeout: 4s
+      retries: 24
+      start_period: 60s

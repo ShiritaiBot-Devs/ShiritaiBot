@@ -62,3 +62,22 @@ macOS / Linux 还会在 `~/.local/bin` 添加 `shiritaibot` 快捷入口。
 ```sh
 bash -n scripts/install.sh
 ```
+
+## Docker 部署
+
+在装有 Docker Engine 和 Compose 插件的 Linux 主机上，从源码目录运行：
+
+```bash
+bash scripts/deploy-docker.sh
+```
+
+脚本会按锁文件构建 WebUI 和 Python 依赖，并等待健康检查通过。WebUI 默认监听宿主机的 `127.0.0.1:8765`，同一主机上的 NapCat 可以继续使用回环地址。数据默认保存在 `./.local/docker-data`。
+
+```bash
+SHIRITAI_PORT=8766 SHIRITAI_DATA_DIR=/srv/shiritaibot \
+  SHIRITAI_ALLOWED_HOSTS="bot.example.com" bash scripts/deploy-docker.sh
+```
+
+使用 `docker compose exec bot shiritaibot token --home /data` 读取管理令牌，使用 `docker compose logs -f bot` 查看日志。更新源码后用同一组环境变量重跑脚本。
+
+迁移已有安装时，先停止使用该数据目录的进程，再令 `SHIRITAI_DATA_DIR` 指向该目录。镜像打包仓库内置插件，独立插件从挂载数据目录的 `plugins/` 加载。
