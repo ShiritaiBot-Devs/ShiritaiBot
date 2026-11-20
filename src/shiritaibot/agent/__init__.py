@@ -185,7 +185,7 @@ class SessionActor:
     def __init__(self, runtime, session: str):
         self.runtime, self.session = runtime, session
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=20)
-        self.steering: deque[str] = deque()
+        self.steering: deque[tuple[Context, str]] = deque()
         self.buffered: list[tuple[Context, str]] = []
         self.ready: deque[list[tuple[Context, str]]] = deque()
         self.first_buffered: float | None = None
@@ -222,7 +222,7 @@ class SessionActor:
             and ctx.memory_profile == self.context.memory_profile
             and ctx.mode == "agent"
         ):
-            self.steering.append(text)
+            self.steering.append((ctx, text))
             loop_logger(ctx).log(f"任务进行中，插话已转交模型：{brief(text, 80)}")
             return "steering"
         policy = self.runtime.config.value.policy
@@ -334,9 +334,12 @@ class SessionActor:
                 finally:
                     self.current = None
                 if self.steering:
-                    followup = "\n".join(self.steering)
+                    followup = "\n".join(item for _, item in self.steering)
+                    ids = tuple(
+                        key for origin, _ in self.steering for key in origin.web_message_ids
+                    )
                     self.steering.clear()
-                    await self.queue.put((ctx, followup))
+                    await self.queue.put((replace(ctx, web_message_ids=ids), followup))
                     self.wake.set()
         finally:
             if self.current:
@@ -583,6 +586,7 @@ class AgentRuntime:
                 current_reply.reset(token)
 
     async def _turn(self, actor: SessionActor, ctx: Context, text: str) -> None:
+        turn_started = now()
         settings = self.config.value
         if not settings.adapter_context_valid(ctx) or (
             not ctx.background and ctx.memory_profile != settings.session_memory(ctx.session)
@@ -650,7 +654,7 @@ class AgentRuntime:
         body = {
             "status": "running",
             "actor": ctx.actor,
-            "started": now().isoformat(),
+            "started": turn_started.isoformat(),
             "steps": 0,
             "memory_profile": ctx.memory_profile,
             "memory_scope": owner_memory_scope(ctx.memory_profile)
@@ -712,6 +716,8 @@ class AgentRuntime:
                     + "\n</context>",
                 }
                 # Persist the original input even if context compression fails.
+                if ctx.web_message_ids:
+                    user["_client_ids"] = list(ctx.web_message_ids)
                 # Interject turns carry a synthetic observation, not something anyone said.
                 if not ctx.interject:
                     await append(user)
@@ -741,13 +747,15 @@ class AgentRuntime:
                 repetitions: Counter = Counter()
                 for step in range(cfg.policy.max_steps):
                     while actor.steering:
-                        steering = actor.steering.popleft()
+                        origin, steering = actor.steering.popleft()
                         item = {
                             "role": "user",
                             "content": prefix + "[用户在你工作时追加] " + steering,
                             "_original_content": steering,
                             "_speaker": cfg.owner_name if ctx.owner else name or ctx.actor,
                         }
+                        if origin.web_message_ids:
+                            item["_client_ids"] = list(origin.web_message_ids)
                         await append(item)
                         history.append(item)
                     if context_chars(history) > cfg.policy.max_context_chars * 2:
@@ -832,7 +840,9 @@ class AgentRuntime:
                             requested_at = now().timestamp()
                             try:
                                 output = await self.registry.execute(
-                                    ctx, function["name"], function["arguments"]
+                                    replace(ctx, tool_call_id=call["id"]),
+                                    function["name"],
+                                    function["arguments"],
                                 )
                             except InteractionRequired as interaction:
                                 if not proactive or self.wait_for_interaction is None:

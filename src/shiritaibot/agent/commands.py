@@ -256,7 +256,12 @@ async def command(runtime, ctx, text):
     await runtime.store.append(
         ctx.session,
         turn,
-        {"role": "user", "content": text, "_command": True},
+        {
+            "role": "user",
+            "content": text,
+            "_command": True,
+            **({"_client_ids": list(ctx.web_message_ids)} if ctx.web_message_ids else {}),
+        },
         memory_profile=ctx.memory_profile,
     )
     await runtime.store.append(

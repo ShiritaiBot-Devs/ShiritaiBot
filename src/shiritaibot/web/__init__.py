@@ -7,6 +7,7 @@ import secrets
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
@@ -51,8 +52,17 @@ class LogLevelInput(Model):
 
 
 class MessageInput(Model):
+    client_id: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]{1,80}$")
     text: str = Field(min_length=1, max_length=32000)
     session: str = Field(default="web:owner", pattern=r"^web:[a-zA-Z0-9_-]{1,80}$")
+
+
+WebChatId = Annotated[str, Field(pattern=r"^web:[a-zA-Z0-9_-]{1,80}$")]
+
+
+class WebChatUpdate(Model):
+    title: str | None = Field(default=None, min_length=1, max_length=100)
+    pinned: bool | None = None
 
 
 class ApprovalInput(Model):
@@ -184,8 +194,13 @@ def create_app(
 
     @api.get("/api/commands", dependencies=protected)
     async def commands():
+        event = MessageEvent("web:owner", "", "owner", platform="web", is_owner=True)
         return [
             {"name": name, "description": description} for name, description in COMMANDS.items()
+        ] + [
+            {"name": handler.command[1:], "description": handler.description or handler.plugin}
+            for handler in runtime.plugins.hooks.of("command")
+            if runtime.plugins.hooks.matches(handler, event)
         ]
 
     @api.get("/api/health", dependencies=protected)
@@ -449,10 +464,34 @@ def create_app(
         return {"level": level}
 
     @api.get("/api/history", dependencies=protected)
-    async def history(session: str = "web:owner", profile: str | None = None):
+    async def history(
+        session: str = "web:owner", profile: str | None = None, timeline: bool = False
+    ):
         return await runtime.store.history(
-            session, memory_profile=profile or runtime.config.value.session_memory(session)
+            session,
+            memory_profile=profile or runtime.config.value.session_memory(session),
+            timeline=timeline,
         )
+
+    @api.get("/api/web-chats", dependencies=protected)
+    async def web_chats():
+        return await runtime.store.web_chats()
+
+    @api.put("/api/web-chats/{session}", dependencies=protected)
+    async def update_web_chat(session: WebChatId, body: WebChatUpdate):
+        title = body.title.strip() if body.title is not None else None
+        if title == "":
+            raise HTTPException(422, "对话名称不能为空")
+        await runtime.store.update_web_chat(session, title, body.pinned)
+        return {"ok": True}
+
+    @api.delete("/api/web-chats/{session}", dependencies=protected)
+    async def delete_web_chat(session: WebChatId):
+        async with runtime.runtime.submit_locks.setdefault(session, asyncio.Lock()):
+            if runtime.runtime.busy(session):
+                raise HTTPException(409, "请先停止当前任务，再删除对话。")
+            await runtime.store.delete_web_chat(session)
+        return {"ok": True}
 
     @api.post("/api/messages", dependencies=protected)
     async def message(body: MessageInput):
@@ -464,13 +503,21 @@ def create_app(
             sender_id="owner",
             sender_name=runtime.config.value.owner_name,
             platform="web",
+            message_id=body.client_id or "",
             is_owner=True,
         )
         if await runtime.plugins.hooks.dispatch(event):
             return {"status": "plugin"}
         return {
             "status": await runtime.runtime.submit(
-                Context(body.session, "owner", "agent", True), body.text
+                Context(
+                    body.session,
+                    "owner",
+                    "agent",
+                    True,
+                    web_message_ids=(body.client_id,) if body.client_id else (),
+                ),
+                body.text,
             )
         }
 
@@ -552,10 +599,11 @@ def create_app(
     @api.get("/api/memes/{key}/image", dependencies=protected)
     async def meme_image(key: str):
         core = runtime.memes.core
-        data = await core.image(key)
-        if data is None:
+        row = core.get(key) or core.resolve(key)
+        data = await core.image(row["id"]) if row else None
+        if row is None or data is None:
             raise HTTPException(404, "表情不存在")
-        return Response(data, media_type=core.items[key].get("mime") or "image/png")
+        return Response(data, media_type=row.get("mime") or "image/png")
 
     @api.put("/api/memes/{key}", dependencies=protected)
     async def meme_update(key: str, body: MemeInput):

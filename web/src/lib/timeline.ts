@@ -8,7 +8,7 @@ export interface ToolItem {
 export type TimelineEntry =
   | { kind: "user"; message: HistoryMessage }
   | { kind: "assistant"; message: HistoryMessage }
-  | { kind: "tools"; items: ToolItem[] };
+  | { kind: "tools"; items: ToolItem[]; seq?: number };
 
 export function buildTimeline(history: HistoryMessage[]): TimelineEntry[] {
   const entries: TimelineEntry[] = [];
@@ -27,7 +27,7 @@ export function buildTimeline(history: HistoryMessage[]): TimelineEntry[] {
       if (last?.kind === "tools") {
         last.items.push(...items);
       } else {
-        entries.push({ kind: "tools", items });
+        entries.push({ kind: "tools", items, seq: message._seq });
       }
       continue;
     }

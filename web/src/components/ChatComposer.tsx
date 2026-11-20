@@ -26,6 +26,7 @@ export interface ChatComposerProps {
   session: string;
   assistantName: string;
   running?: boolean;
+  onSend: (text: string) => void;
 }
 
 interface Queued {
@@ -39,6 +40,7 @@ export function ChatComposer({
   session,
   assistantName,
   running = false,
+  onSend,
 }: ChatComposerProps) {
   const [text, setText] = useState(() => readValue(draftKey(session)));
   const [lastSent, setLastSent] = useState("");
@@ -49,7 +51,6 @@ export function ChatComposer({
   const [dismissed, setDismissed] = useState(false);
   const [index, setIndex] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const loadedFor = useRef("");
   const wasRunning = useRef(running);
   const nextId = useRef(0);
 
@@ -67,18 +68,6 @@ export function ChatComposer({
   });
 
   useEffect(() => {
-    if (loadedFor.current === session) return;
-    loadedFor.current = session;
-    setText(readValue(draftKey(session)));
-    setModel(readValue(modelKey(session)));
-    setPreset("");
-    setQueue([]);
-    setDismissed(false);
-    setIndex(0);
-  }, [session]);
-
-  useEffect(() => {
-    if (loadedFor.current !== session) return;
     writeValue(draftKey(session), text);
   }, [session, text]);
 
@@ -95,8 +84,8 @@ export function ChatComposer({
     if (!settled || queue.length === 0) return;
     const [head] = queue;
     setQueue((items) => items.slice(1));
-    void act(() => client.sendMessage(head.text, session), "");
-  }, [running, queue, session, act, client]);
+    onSend(head.text);
+  }, [running, queue, onSend]);
 
   const providers = new Set(
     (config.data?.providers ?? [])
@@ -125,10 +114,10 @@ export function ChatComposer({
   const sendLabel =
     SEND_MODES.find((row) => row.value === sendMode)?.label ?? "发送性质";
 
-  const query = text.trim();
+  const query = text.trimStart();
   const menuOpen =
     query.startsWith("/") &&
-    !/\s/.test(query) &&
+    !/\s$/.test(query) &&
     !dismissed &&
     Boolean(commands.data);
   const matches = menuOpen
@@ -137,16 +126,22 @@ export function ChatComposer({
       )
     : [];
   const active = matches.length ? Math.min(index, matches.length - 1) : -1;
+  useEffect(() => {
+    if (active >= 0)
+      document
+        .getElementById(`command-option-${active}`)
+        ?.scrollIntoView({ block: "nearest" });
+  }, [active]);
 
   function pick(name: string) {
     setText("/" + name + " ");
-    setDismissed(false);
+    setDismissed(true);
     setIndex(0);
     inputRef.current?.focus();
   }
 
   function stop() {
-    void act(() => client.sendMessage("/stop", session), "已发送停止指令");
+    onSend("/stop");
   }
 
   function send() {
@@ -161,7 +156,7 @@ export function ChatComposer({
       setQueue((items) => [...items, { id: nextId.current, text: message }]);
       return;
     }
-    void act(() => client.sendMessage(message, session), "");
+    onSend(message);
   }
 
   function chooseModel(id: string) {
@@ -199,7 +194,12 @@ export function ChatComposer({
         setIndex(stepIndex(active, -1, matches.length));
         return;
       }
-      if (event.key === "Tab" || event.key === "Enter") {
+      if (
+        event.key === "Tab" ||
+        (event.key === "Enter" &&
+          !event.shiftKey &&
+          query !== "/" + matches[active].name)
+      ) {
         event.preventDefault();
         pick(matches[active].name);
         return;
@@ -256,12 +256,20 @@ export function ChatComposer({
         </ul>
       )}
       {matches.length > 0 && (
-        <div className="command-menu" role="listbox" aria-label="斜杠命令">
+        <div
+          className="command-menu"
+          role="listbox"
+          id="chat-commands"
+          aria-label="斜杠命令"
+        >
           {matches.map((command, position) => (
             <button
               type="button"
               role="option"
               key={command.name}
+              id={`command-option-${position}`}
+              tabIndex={-1}
+              onMouseDown={(event) => event.preventDefault()}
               aria-selected={position === active}
               onClick={() => pick(command.name)}
             >
@@ -273,10 +281,19 @@ export function ChatComposer({
       )}
       <textarea
         aria-label="消息"
+        aria-autocomplete="list"
+        aria-controls={matches.length ? "chat-commands" : undefined}
+        aria-activedescendant={
+          active >= 0 ? `command-option-${active}` : undefined
+        }
         ref={inputRef}
         value={text}
-        rows={3}
-        onChange={(event) => setText(event.target.value)}
+        rows={1}
+        onChange={(event) => {
+          setText(event.target.value);
+          setDismissed(false);
+          setIndex(0);
+        }}
         onKeyDown={onKeyDown}
         placeholder={`告诉 ${assistantName} 你想做什么，或输入 / 查看命令…`}
       />

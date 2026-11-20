@@ -7,7 +7,7 @@ from typing import Any
 
 import aiosqlite
 
-from shiritaibot.core import EventBus, canonical, now, uid
+from shiritaibot.core import EventBus, PublicError, canonical, now, uid
 from shiritaibot.core.logs import get_logger
 
 # Call sites log a readable line themselves; this keeps the raw activity kind for debugging.
@@ -130,14 +130,23 @@ class Store:
         return [json.loads(row["data"]) for row in rows]
 
     async def append(
-        self, session: str, turn: str, message: dict, *, memory_profile: str | None = None
+        self,
+        session: str,
+        turn: str,
+        message: dict,
+        *,
+        memory_profile: str | None = None,
+        require_turn: bool = False,
     ) -> None:
         if memory_profile is not None:
             message = {**message, "_memory_profile": memory_profile}
-        await self.execute(
-            "INSERT INTO messages(session,turn,data,created) VALUES(?,?,?,?)",
-            (session, turn, canonical(message), now().timestamp()),
-        )
+        sql = "INSERT INTO messages(session,turn,data,created) SELECT ?,?,?,?"
+        args = (session, turn, canonical(message), now().timestamp())
+        if require_turn:
+            # A delayed plugin reply must not recreate a chat deleted since dispatch.
+            sql += " WHERE EXISTS (SELECT 1 FROM messages WHERE session=? AND turn=?)"
+            args += (session, turn)
+        await self.execute(sql, args)
 
     async def history(
         self,
@@ -146,17 +155,84 @@ class Store:
         *,
         include_commands: bool = True,
         memory_profile: str = "default",
+        timeline: bool = False,
     ) -> list[dict]:
         epoch = await self.get("session_epoch", memory_context_key(session, memory_profile))
         condition = "" if include_commands else " AND COALESCE(json_extract(data,'$._command'),0)=0"
-        rows = await self.query(
-            "SELECT data FROM (SELECT seq,data FROM messages WHERE session=? AND seq>?"
-            f" AND {MEMORY_PROFILE_FILTER}"
-            + condition
-            + " ORDER BY seq DESC LIMIT ?) ORDER BY seq",
-            (session, epoch["seq"] if epoch else 0, memory_profile, limit),
+        recent = (
+            "SELECT seq,turn,data FROM messages WHERE session=? AND seq>?"
+            f" AND {MEMORY_PROFILE_FILTER}" + condition + " ORDER BY seq DESC LIMIT ?"
         )
-        return [json.loads(row["data"]) for row in rows]
+        args = (session, epoch["seq"] if epoch else 0, memory_profile, limit)
+        if not timeline:
+            rows = await self.query(f"SELECT data FROM ({recent}) ORDER BY seq", args)
+            return [json.loads(row["data"]) for row in rows]
+
+        rows = await self.query(
+            "SELECT m.seq,m.turn,m.data,d.data AS diff,json_extract(t.data,'$.status') AS status,"
+            "(julianday(json_extract(t.data,'$.finished')) - "
+            "julianday(json_extract(t.data,'$.started'))) * 86400 AS elapsed "
+            f"FROM ({recent}) m LEFT JOIN records t ON t.kind='turn' AND t.id=m.turn "
+            "AND t.scope=? LEFT JOIN records d ON d.kind='tool_diff' AND d.scope=? "
+            "AND d.id=m.turn||':'||json_extract(m.data,'$.tool_call_id') ORDER BY m.seq DESC",
+            (*args, session, session),
+        )
+        messages, finished = [], set()
+        for row in rows:
+            message = {**json.loads(row["data"]), "_seq": row["seq"]}
+            if row["diff"]:
+                message["_file_diffs"] = json.loads(row["diff"])["files"]
+            if (
+                row["turn"] not in finished
+                and message.get("role") == "assistant"
+                and message.get("content")
+                and row["elapsed"] is not None
+            ):
+                message["_elapsed_seconds"] = max(0, round(row["elapsed"]))
+                message["_turn_status"] = row["status"]
+                finished.add(row["turn"])
+            messages.append(message)
+        timeline_messages = messages[::-1]
+        shell_calls = set()
+        artifacts = {}
+        for message in timeline_messages:
+            for call in message.get("tool_calls") or ():
+                if call.get("function", {}).get("name") == "shell":
+                    shell_calls.add(call.get("id"))
+            if message.get("role") == "tool" and message.get("tool_call_id") in shell_calls:
+                try:
+                    value = json.loads(message.get("content") or "{}")
+                except ValueError:
+                    continue
+                if (
+                    isinstance(value, dict)
+                    and isinstance(value.get("artifact"), str)
+                    and value.get("truncated")
+                ):
+                    artifacts[value["artifact"]] = message
+        if artifacts:
+            marks = ",".join("?" for _ in artifacts)
+            for row in await self.query(
+                f"SELECT id,json_extract(data,'$.content') AS content FROM records "
+                f"WHERE kind='artifact' AND scope=? AND id IN ({marks})",
+                (session, *artifacts),
+            ):
+                try:
+                    output = json.loads(row["content"])
+                except (ValueError, TypeError):
+                    continue
+                if isinstance(output, dict) and isinstance(output.get("exit_code"), int):
+                    out, err = output.get("stdout", ""), output.get("stderr", "")
+                    if isinstance(out, str) and isinstance(err, str):
+                        artifacts[row["id"]]["_shell_output"] = {
+                            "exit_code": output["exit_code"],
+                            "stdout": out[:16000],
+                            "stderr": err[:16000],
+                            "truncated": bool(output.get("truncated"))
+                            or len(out) > 16000
+                            or len(err) > 16000,
+                        }
+        return timeline_messages
 
     async def reset_history(self, session: str, *, memory_profile: str = "default") -> None:
         key = memory_context_key(session, memory_profile)
@@ -166,6 +242,64 @@ class Store:
         )
         await self.put("session_epoch", key, {"seq": rows[0]["seq"]})
         await self.delete("context_state", key)
+
+    async def web_chats(self) -> list[dict]:
+        rows = await self.query("""
+            WITH ids(id) AS (
+                SELECT 'web:owner' UNION SELECT id FROM web_chat
+                UNION SELECT id FROM records WHERE kind='session' AND id GLOB 'web:*'
+                UNION SELECT DISTINCT session FROM messages WHERE session GLOB 'web:*'
+            )
+            SELECT i.id, c.title, coalesce(c.pinned,0) AS pinned,
+                (SELECT substr(coalesce(json_extract(data,'$._original_content'),
+                                        json_extract(data,'$.content')),1,120)
+                 FROM messages WHERE session=i.id AND json_extract(data,'$.role')='user'
+                 ORDER BY seq LIMIT 1) AS opening
+            FROM ids i LEFT JOIN web_chat c ON c.id=i.id
+            WHERE coalesce(c.deleted,0)=0 OR EXISTS (SELECT 1 FROM messages WHERE session=i.id)
+            ORDER BY i.id
+        """)
+        for row in rows:
+            opening = " ".join((row.pop("opening") or "").split("\n<context", 1)[0].split())
+            row["title"] = row["title"] or (
+                "默认对话" if row["id"] == "web:owner" else opening[:48] or "新对话"
+            )
+            row["pinned"] = bool(row["pinned"])
+        return rows
+
+    async def update_web_chat(self, session: str, title: str | None, pinned: bool | None) -> None:
+        changed = await self.execute(
+            "INSERT INTO web_chat(id,title,pinned) VALUES(?,?,coalesce(?,0)) "
+            "ON CONFLICT(id) DO UPDATE SET title=coalesce(excluded.title,web_chat.title),"
+            "pinned=coalesce(?,web_chat.pinned),deleted=0 "
+            "WHERE web_chat.deleted=0 OR EXISTS (SELECT 1 FROM messages WHERE session=?)",
+            (session, title, pinned, pinned, session),
+        )
+        if not changed:
+            raise PublicError("对话已删除")
+
+    async def delete_web_chat(self, session: str) -> None:
+        async with self.lock:
+            try:
+                await self.db.execute("DELETE FROM messages WHERE session=?", (session,))
+                await self.db.execute(
+                    "DELETE FROM records WHERE kind IN ('tool_diff','artifact') AND scope=?",
+                    (session,),
+                )
+                await self.db.execute(
+                    "DELETE FROM records WHERE (id=? AND kind IN ('session','session_model','session_persona')) "
+                    "OR (kind IN ('session_epoch','context_state') AND (id=? OR id GLOB ?))",
+                    (session, session, "memory:*:" + session),
+                )
+                await self.db.execute(
+                    "INSERT INTO web_chat(id,deleted) VALUES(?,1) ON CONFLICT(id) "
+                    "DO UPDATE SET title=NULL,pinned=0,deleted=1",
+                    (session,),
+                )
+                await self.db.commit()
+            except BaseException:
+                await self.db.rollback()
+                raise
 
     async def record_group(
         self,

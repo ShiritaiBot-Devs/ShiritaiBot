@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS web_chat (
+    id TEXT PRIMARY KEY,
+    title TEXT,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);

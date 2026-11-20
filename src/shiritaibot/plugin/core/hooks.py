@@ -354,7 +354,10 @@ class HookBus:
                 raise RuntimeError("plugin send queue is not available")
             if record:
                 await self.store.append(
-                    event.session, record, {"role": "assistant", "content": text, "_command": True}
+                    event.session,
+                    record,
+                    {"role": "assistant", "content": text, "_command": True},
+                    require_turn=event.platform == "web",
                 )
             await self.send(event.session, text)
 
@@ -368,7 +371,18 @@ class HookBus:
                 handler, rest = found
                 turn = uid()
                 await self.store.append(
-                    event.session, turn, {"role": "user", "content": event.text, "_command": True}
+                    event.session,
+                    turn,
+                    {
+                        "role": "user",
+                        "content": event.text,
+                        "_command": True,
+                        **(
+                            {"_client_ids": [event.message_id]}
+                            if event.platform == "web" and event.message_id
+                            else {}
+                        ),
+                    },
                 )
                 self.bind_sender(event, turn)
                 event.stop_event()

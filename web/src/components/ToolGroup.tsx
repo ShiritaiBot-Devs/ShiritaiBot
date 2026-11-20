@@ -1,85 +1,79 @@
-import { ChevronRight, Wrench } from "lucide-react";
-import { toolFailure, toolSummary } from "../lib/timeline";
-import type { ToolItem } from "../lib/timeline";
+﻿import {
+  CircleCheck,
+  CircleX,
+  Clock3,
+  ChevronRight,
+  Wrench,
+} from "lucide-react";
+import { toolFailure, type ToolItem } from "../lib/timeline";
+import { ShellCall } from "./ShellCall";
 
-function parse(text: string | undefined): unknown {
-  if (text === undefined) return undefined;
+function pretty(text = "") {
   try {
-    return JSON.parse(text);
+    return JSON.stringify(JSON.parse(text), null, 2);
   } catch {
     return text;
   }
 }
 
-function show(value: unknown): string {
-  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
-}
-
-function ToolCallRow({ item }: { item: ToolItem }) {
-  const { call, result } = item;
-  const args = parse(call.function.arguments);
-  const output = parse(result?.content);
-  const failed = toolFailure(result);
-  const status = result === undefined ? "执行中" : failed ? "失败" : "完成";
-  const entries =
-    typeof args === "object" && args !== null && !Array.isArray(args)
-      ? Object.entries(args)
-      : null;
-  return (
-    <details className={"tool-call" + (failed ? " failed" : "")}>
-      <summary>
-        <Wrench size={12} aria-hidden="true" />
-        <code>{call.function.name}</code>
-        <span className="tool-status">{status}</span>
-        <ChevronRight size={12} aria-hidden="true" />
-      </summary>
-      <div className="tool-call-body">
-        <span className="tool-label">参数</span>
-        {entries ? (
-          entries.length ? (
-            <dl className="tool-args">
-              {entries.map(([key, value]) => (
-                <div key={key}>
-                  <dt>{key}</dt>
-                  <dd>{show(value)}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : (
-            <p className="muted">无参数</p>
-          )
-        ) : (
-          <pre>{show(args)}</pre>
-        )}
-        {result !== undefined && (
-          <details className="tool-result">
-            <summary>
-              返回结果
-              <ChevronRight size={12} aria-hidden="true" />
-            </summary>
-            <pre>{show(output)}</pre>
-          </details>
-        )}
-      </div>
-    </details>
-  );
+function argumentPreview(text: string) {
+  try {
+    const args = JSON.parse(text);
+    if (args && typeof args === "object" && !Array.isArray(args)) {
+      return Object.entries(args)
+        .map(
+          ([key, value]) =>
+            `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`,
+        )
+        .join(" · ");
+    }
+  } catch {
+    /* Plain text arguments are also supported. */
+  }
+  return text;
 }
 
 export function ToolGroup({ items }: { items: ToolItem[] }) {
-  const { count, names } = toolSummary(items);
   return (
-    <details className="tool-group">
-      <summary>
-        <Wrench size={14} aria-hidden="true" />
-        <span>{count} 次工具调用</span>
-        <span className="tool-names">{names}</span>
-        <ChevronRight size={14} className="chevron" aria-hidden="true" />
-      </summary>
-      <div className="tool-group-body">
-        {items.map((item) => (
-          <ToolCallRow key={item.call.id} item={item} />
-        ))}
-      </div>
-    </details>
+    <div className="tool-trace" aria-label="工具调用">
+      {items.map(({ call, result }) => {
+        if (call.function.name === "shell")
+          return <ShellCall key={call.id} item={{ call, result }} />;
+        const failed = toolFailure(result);
+        const StatusIcon = !result ? Clock3 : failed ? CircleX : CircleCheck;
+        return (
+          <div className="trace-step" key={call.id}>
+            <details>
+              <summary>
+                <span className="trace-name">
+                  <Wrench size={14} />
+                  {call.function.name}
+                  <ChevronRight size={12} />
+                </span>
+                <span className="trace-preview">
+                  {argumentPreview(call.function.arguments) || "无参数"}
+                </span>
+              </summary>
+              <div className="trace-details">
+                <strong>参数</strong>
+                <pre>{pretty(call.function.arguments)}</pre>
+                {result && (
+                  <>
+                    <strong>返回结果</strong>
+                    <pre>{pretty(result.content)}</pre>
+                  </>
+                )}
+              </div>
+            </details>
+            <div
+              className={`trace-status ${!result ? "waiting" : failed ? "failed" : "done"}`}
+            >
+              <StatusIcon size={13} />
+              {!result ? "执行中" : failed ? "失败" : "已完成"}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }

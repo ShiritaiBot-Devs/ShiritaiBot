@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { MemeImage } from "../components/MemeImage";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, RefreshCw, Search, Trash2, Upload } from "lucide-react";
 import type { ApiClient } from "../api/client";
@@ -302,27 +303,6 @@ function UploadForm({
   );
 }
 
-function MemeImage({ client, id }: { client: ApiClient; id: string }) {
-  const image = useQuery({
-    queryKey: ["meme-image", id],
-    queryFn: () => client.memeImage(id),
-    staleTime: Infinity,
-  });
-  const [url, setUrl] = useState("");
-  useEffect(() => {
-    if (!image.data) return;
-    const next = URL.createObjectURL(image.data);
-    setUrl(next);
-    return () => URL.revokeObjectURL(next);
-  }, [image.data]);
-  if (image.isError) return <div className="meme-thumb muted">图片缺失</div>;
-  return (
-    <div className="meme-thumb">
-      {url && <img src={url} alt={`表情 ${id}`} loading="lazy" />}
-    </div>
-  );
-}
-
 function MemeCard({
   client,
   act,
@@ -340,7 +320,9 @@ function MemeCard({
   const known = categories.some((item) => item.name === row.category);
   return (
     <article className="meme-card">
-      <MemeImage client={client} id={row.id} />
+      <div className="meme-thumb">
+        <MemeImage client={client} id={row.id} />
+      </div>
       <div className="meme-meta">
         <code>{row.id}</code>
         <span className="muted">

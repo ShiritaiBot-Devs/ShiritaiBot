@@ -92,6 +92,8 @@ class Context:
     interject: bool = False
     memory_profile: str = "default"
     reply_anchor: ReplyAnchor | None = None
+    web_message_ids: tuple[str, ...] = ()
+    tool_call_id: str = ""
 
 
 @dataclass(slots=True)

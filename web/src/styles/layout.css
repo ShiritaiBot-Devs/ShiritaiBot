@@ -57,7 +57,7 @@ aside {
   object-position: center top;
 }
 
-nav {
+aside nav {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -85,7 +85,7 @@ nav {
   font-weight: 600;
 }
 
-nav button {
+aside nav button {
   justify-content: flex-start;
   padding: 10px 12px;
   gap: 12px;
@@ -105,11 +105,11 @@ aside nav button.active:hover:not(:disabled) {
   background: #e3ebf8;
 }
 
-nav button.active {
+aside nav button.active {
   color: var(--accent);
 }
 
-nav button b {
+aside nav button b {
   margin-left: auto;
   padding: 1px 6px;
   border-radius: 4px;
@@ -255,17 +255,17 @@ footer .muted {
   .nav-group-title,
   .sidebar-status,
   .restart-button > span:not(.loading-bar),
-  nav button span,
-  nav button b {
+  aside nav button span,
+  aside nav button b {
     display: none;
   }
   .sidebar-bottom {
     padding: 12px 0 0;
   }
-  nav {
+  aside nav {
     margin-top: 18px;
   }
-  nav button {
+  aside nav button {
     justify-content: center;
     padding: 11px;
   }

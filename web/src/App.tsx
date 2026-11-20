@@ -71,7 +71,9 @@ function ConsoleApp() {
   const [mode, setMode] = useState<"console" | "chat">(() =>
     localStorage.getItem(MODE_KEY) === "chat" ? "chat" : "console",
   );
-  const [session, setSession] = useState("web:owner");
+  const [session, setSession] = useState(
+    () => sessionStorage.getItem("shiritaibot-chat-session") || "web:owner",
+  );
   const [drafts, setDrafts] = useState<string[]>([]);
   const queryClient = useQueryClient();
 
@@ -79,8 +81,11 @@ function ConsoleApp() {
     localStorage.setItem(MODE_KEY, mode);
   }, [mode]);
 
-  const startConversation = useCallback(() => {
-    const id = "web:" + Date.now();
+  useEffect(() => {
+    sessionStorage.setItem("shiritaibot-chat-session", session);
+  }, [session]);
+
+  const startConversation = useCallback((id: string) => {
     setDrafts((previous) => [...previous, id]);
     setSession(id);
   }, []);
@@ -299,6 +304,9 @@ function ConsoleApp() {
         session={session}
         onSelectSession={setSession}
         onCreateSession={startConversation}
+        onForgetSession={(id) =>
+          setDrafts((previous) => previous.filter((item) => item !== id))
+        }
         draftSessions={drafts}
         onOpenSettings={() => {
           setMode("console");

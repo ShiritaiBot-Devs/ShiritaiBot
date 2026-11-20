@@ -5,7 +5,7 @@ import { Plus } from "lucide-react";
 import { AgentTimeline } from "../components/AgentTimeline";
 import { ChatComposer } from "../components/ChatComposer";
 import { EmptyState } from "../components/EmptyState";
-import { latestTurnStatus } from "../lib/sessions";
+import { useChatOutbox } from "../hooks/useChatOutbox";
 import type { PageProps } from "./common";
 
 export function ChatPage({
@@ -32,11 +32,7 @@ export function ChatPage({
     queryFn: () => client.history(session),
     refetchInterval: 2500,
   });
-  const turns = useQuery({
-    queryKey: ["records", "turn"],
-    queryFn: () => client.records("turn"),
-    refetchInterval: 4000,
-  });
+  const { pending, send } = useChatOutbox(client, act, session, history.data);
 
   const options = Array.from(
     new Set([
@@ -74,20 +70,18 @@ export function ChatPage({
             message={`读取会话失败：${history.error.message}`}
           />
         )}
-        {!history.data?.length && (
+        {!history.data?.length && !pending.length && (
           <EmptyState text="从一句话开始。请先在「模型与服务」里配置模型路由。" />
         )}
-        {history.data && (
-          <AgentTimeline
-            history={history.data}
-            assistantName={assistantName}
-            userLabel={session.startsWith("background:") ? "任务" : "你"}
-            failed={latestTurnStatus(turns.data ?? [], session) === "failed"}
-          />
-        )}
+        <AgentTimeline
+          client={client}
+          history={[...(history.data ?? []), ...pending]}
+        />
       </section>
       {session.startsWith("web:") ? (
         <ChatComposer
+          key={session}
+          onSend={send}
           client={client}
           act={act}
           session={session}

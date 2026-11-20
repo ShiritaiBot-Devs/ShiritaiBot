@@ -16,6 +16,7 @@ from shiritaibot.store import MEMORY_PROFILE_FILTER
 from shiritaibot.tools import TEXT, schema
 from shiritaibot.tools.feishu import feishu_file_tool
 from shiritaibot.tools.qq import qq_tools
+from shiritaibot.tools.shell_diff import file_diffs, snapshot
 from shiritaibot.tools.web_search import search_token, search_web
 
 
@@ -38,12 +39,30 @@ async def register_builtin(app) -> None:
     async def shell(ctx, args):
         workspace = session_dir(app.home, "workspaces", ctx.session)
         await asyncio.to_thread(workspace.mkdir, parents=True, exist_ok=True)
-        return await run_process(
-            [*app.config.value.policy.shell_command, app.plugins.filter_shell(args["command"])],
-            workspace,
-            timeout=args.get("timeout", 60),
-            env=app.plugins.child_env(),
+        before = (
+            await asyncio.to_thread(snapshot, workspace)
+            if ctx.tool_call_id and ctx.session.startswith("web:")
+            else None
         )
+        try:
+            return await run_process(
+                [*app.config.value.policy.shell_command, app.plugins.filter_shell(args["command"])],
+                workspace,
+                timeout=args.get("timeout", 60),
+                env=app.plugins.child_env(),
+            )
+        finally:
+            if before is not None:
+                after = await asyncio.to_thread(snapshot, workspace)
+                if after is not None:
+                    changes = await asyncio.to_thread(file_diffs, before, after, registry.secrets)
+                    if changes:
+                        await app.store.put(
+                            "tool_diff",
+                            f"{ctx.turn}:{ctx.tool_call_id}",
+                            {"files": changes},
+                            ctx.session,
+                        )
 
     async def history_query(ctx, args):
         # Ignore context epochs/checkpoints: these are the original records.

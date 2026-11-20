@@ -1,51 +1,58 @@
+﻿import { lazy, Suspense } from "react";
+import type { ApiClient } from "../api/client";
 import type { HistoryMessage } from "../api/types";
 import { buildTimeline } from "../lib/timeline";
-import { Markdown } from "./Markdown";
 import { ToolGroup } from "./ToolGroup";
+
+const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
+
+function elapsed(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  return minutes ? `${minutes}m ${seconds % 60}s` : `${seconds}s`;
+}
 
 export function AgentTimeline({
   history,
-  assistantName,
-  userLabel = "你",
-  failed = false,
+  client,
 }: {
   history: HistoryMessage[];
-  assistantName: string;
-  userLabel?: string;
-  failed?: boolean;
+  client: ApiClient;
 }) {
-  const entries = buildTimeline(history);
-  const lastAssistant = entries.reduce(
-    (found, entry, index) => (entry.kind === "assistant" ? index : found),
-    -1,
-  );
   return (
     <>
-      {entries.map((entry, index) => {
-        if (entry.kind === "user") {
+      {buildTimeline(history).map((entry, index) => {
+        if (entry.kind === "tools")
           return (
-            <div className="message user" key={index}>
-              <small>{userLabel}</small>
-              <p>{entry.message.content?.split("\n<context")[0]}</p>
-            </div>
+            <ToolGroup
+              key={`tools-${entry.seq ?? index}`}
+              items={entry.items}
+            />
           );
-        }
-        if (entry.kind === "tools") {
-          return <ToolGroup key={index} items={entry.items} />;
-        }
-        const marked = failed && index === lastAssistant;
+        const msg = entry.message;
+        const user = entry.kind === "user";
+        const text = user
+          ? (msg._original_content ?? msg.content?.split("\n<context")[0])
+          : msg.content;
+        const local = "localId" in msg;
         return (
           <div
-            className={"message assistant" + (marked ? " failed-turn" : "")}
-            key={index}
+            key={msg._client_ids?.[0] ?? msg._seq ?? index}
+            className={`message ${entry.kind}${local ? " outgoing" : ""}`}
           >
-            <small>
-              {marked && <span className="turn-failed">本轮失败</span>}
-              {entry.message._speaker || assistantName}
-            </small>
-            <div className="assistant-body">
-              <Markdown text={entry.message.content ?? ""} />
-            </div>
+            {!user && msg._elapsed_seconds !== undefined && (
+              <div className="turn-elapsed">
+                用时 {elapsed(msg._elapsed_seconds)}
+              </div>
+            )}
+            {msg._turn_status === "failed" && (
+              <span className="turn-failed">本轮失败</span>
+            )}
+            <Suspense fallback={<div className="chat-plain">{text}</div>}>
+              <ChatMarkdown client={client} text={text ?? ""} />
+            </Suspense>
+            {"sendFailed" in msg && msg.sendFailed === true && (
+              <small role="status">发送失败</small>
+            )}
           </div>
         );
       })}

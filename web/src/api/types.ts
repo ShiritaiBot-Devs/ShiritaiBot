@@ -690,6 +690,12 @@ export interface SessionRecord {
   background?: boolean;
 }
 
+export interface WebChat {
+  id: string;
+  title: string;
+  pinned: boolean;
+}
+
 export interface TurnRecord {
   id: string;
   scope?: string;
@@ -708,11 +714,31 @@ export interface ToolCall {
 }
 
 export interface HistoryMessage {
+  _file_diffs?: FileDiff[];
+  _shell_output?: {
+    exit_code: number;
+    stdout: string;
+    stderr: string;
+    truncated?: boolean;
+  };
+  _seq?: number;
+  _original_content?: string;
+  _client_ids?: string[];
+  _elapsed_seconds?: number;
+  _turn_status?: string;
   role: "user" | "assistant" | "tool";
   content?: string;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   _speaker?: string;
+}
+
+export interface FileDiff {
+  path: string;
+  patch: string;
+  added: number;
+  removed: number;
+  truncated?: boolean;
 }
 
 export type MemoryKind = "entity" | "fact" | "event" | "conflict";

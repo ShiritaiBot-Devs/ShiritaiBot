@@ -1,4 +1,4 @@
-import type { AdapterConfig, TurnRecord } from "../api/types";
+import type { AdapterConfig, TurnRecord, WebChat } from "../api/types";
 import { TIME_ZONE } from "./utils";
 
 export function isMainSession(value: string): boolean {
@@ -18,6 +18,7 @@ export type SessionGroupKey =
 export interface SessionItem {
   id: string;
   title: string;
+  pinned?: boolean;
 }
 
 export interface SessionGroup {
@@ -173,12 +174,18 @@ export function latestTurnStatus(
 export function sessionGroups(
   ids: string[],
   activity: Record<string, number>,
+  webChats?: Map<string, WebChat>,
 ): SessionGroup[] {
   const buckets = new Map<SessionGroupKey, SessionItem[]>();
   for (const id of ids) {
     const key = sessionRole(id);
     const items = buckets.get(key) ?? [];
-    items.push({ id, title: sessionTitle(id) });
+    items.push(
+      webChats?.get(id) ?? {
+        id,
+        title: webChats && id.startsWith("web:") ? "新对话" : sessionTitle(id),
+      },
+    );
     buckets.set(key, items);
   }
   const groups: SessionGroup[] = [];
@@ -186,6 +193,7 @@ export function sessionGroups(
     const items = buckets.get(key);
     if (!items || items.length === 0) continue;
     items.sort((a, b) => {
+      if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
       const diff = (activity[b.id] ?? 0) - (activity[a.id] ?? 0);
       return diff !== 0 ? diff : a.id.localeCompare(b.id);
     });

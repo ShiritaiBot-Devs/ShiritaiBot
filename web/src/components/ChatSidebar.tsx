@@ -1,10 +1,10 @@
-import { Plus } from "lucide-react";
-import type { SessionGroup } from "../lib/sessions";
-import { relativeTime } from "../lib/sessions";
+﻿import { useState } from "react";
+import { ChevronDown, ChevronRight, Pin, Plus } from "lucide-react";
+import type { SessionGroup, SessionGroupKey } from "../lib/sessions";
+import { ChatSessionActions, type ChatActions } from "./ChatSessionActions";
 
-export interface ChatSidebarProps {
+interface ChatSidebarProps extends ChatActions {
   groups: SessionGroup[];
-  activity: Record<string, number>;
   selected: string;
   running: Set<string>;
   pending: Set<string>;
@@ -14,13 +14,25 @@ export interface ChatSidebarProps {
 
 export function ChatSidebar({
   groups,
-  activity,
   selected,
   running,
   pending,
   onSelect,
   onNew,
+  onUpdate,
+  onDelete,
 }: ChatSidebarProps) {
+  const [closed, setClosed] = useState<Set<SessionGroupKey>>(
+    () => new Set(["private", "group", "background"]),
+  );
+  function toggle(key: SessionGroupKey) {
+    setClosed((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
   return (
     <div className="chat-sidebar">
       <div className="chat-brand">
@@ -31,36 +43,72 @@ export function ChatSidebar({
         <Plus size={15} aria-hidden="true" />
         新对话
       </button>
-      <nav className="chat-groups" aria-label="会话列表">
+      <nav
+        className="chat-groups"
+        aria-label="会话列表"
+        onScroll={(event) => {
+          event.currentTarget
+            .querySelector<HTMLElement>(".chat-actions-menu:popover-open")
+            ?.hidePopover();
+        }}
+      >
         {groups.map((group) => (
           <div className="chat-group" key={group.key}>
             <h2>
-              {group.label}
-              <span className="chat-group-count">{group.items.length}</span>
+              <button
+                type="button"
+                className="chat-group-toggle"
+                aria-expanded={!closed.has(group.key)}
+                aria-controls={`chat-list-${group.key}`}
+                onClick={() => toggle(group.key)}
+              >
+                {closed.has(group.key) ? (
+                  <ChevronRight size={13} />
+                ) : (
+                  <ChevronDown size={13} />
+                )}
+                {group.label}
+                <span className="chat-group-count">{group.items.length}</span>
+              </button>
             </h2>
-            {group.items.map((item) => {
-              const active = item.id === selected;
-              return (
-                <button
-                  type="button"
+            <div id={`chat-list-${group.key}`} hidden={closed.has(group.key)}>
+              {group.items.map((item) => (
+                <div
+                  className={
+                    "chat-row" + (item.id === selected ? " active" : "")
+                  }
                   key={item.id}
-                  className={"chat-session" + (active ? " active" : "")}
-                  aria-current={active ? "page" : undefined}
-                  onClick={() => onSelect(item.id)}
                 >
-                  <span className="chat-session-title">{item.title}</span>
-                  <small>{relativeTime(activity[item.id] ?? 0)}</small>
-                  {running.has(item.id) && (
-                    <span className="session-dot" aria-label="运行中" />
+                  <button
+                    type="button"
+                    className="chat-session"
+                    aria-current={item.id === selected ? "page" : undefined}
+                    title={item.title}
+                    aria-label={item.title}
+                    aria-description={item.pinned ? "已置顶" : undefined}
+                    onClick={() => onSelect(item.id)}
+                  >
+                    {item.pinned && <Pin size={12} aria-label="已置顶" />}
+                    <span className="chat-session-title">{item.title}</span>
+                    {running.has(item.id) && (
+                      <span className="session-dot" aria-label="运行中" />
+                    )}
+                    {pending.has(item.id) && (
+                      <span className="session-badge" aria-label="待审批">
+                        !
+                      </span>
+                    )}
+                  </button>
+                  {item.id.startsWith("web:") && (
+                    <ChatSessionActions
+                      item={item}
+                      onUpdate={onUpdate}
+                      onDelete={onDelete}
+                    />
                   )}
-                  {pending.has(item.id) && (
-                    <span className="session-badge" aria-label="待审批">
-                      !
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </nav>

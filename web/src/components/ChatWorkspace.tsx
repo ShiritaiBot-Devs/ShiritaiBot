@@ -1,17 +1,18 @@
 import { LoadingBar } from "./LoadingBar";
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Menu, Settings } from "lucide-react";
 import type { ApiClient } from "../api/client";
+import type { WebChat } from "../api/types";
+import { draftKey, modelKey, writeValue } from "../lib/composer";
 import { AgentTimeline } from "./AgentTimeline";
 import { ApprovalCard } from "./ApprovalCard";
 import { ChatComposer } from "./ChatComposer";
 import { ChatSidebar } from "./ChatSidebar";
-import { EmptyState } from "./EmptyState";
+import { useChatOutbox } from "../hooks/useChatOutbox";
 import { QueryErrorNotice } from "./QueryErrorNotice";
 import type { Action } from "../pages/common";
 import {
-  latestTurnStatus,
   runningSessions,
   sessionActivity,
   sessionGroups,
@@ -24,7 +25,8 @@ export interface ChatWorkspaceProps {
   assistantName: string;
   session: string;
   onSelectSession: (id: string) => void;
-  onCreateSession: () => void;
+  onCreateSession: (id: string) => void;
+  onForgetSession: (id: string) => void;
   draftSessions: string[];
   onOpenSettings: () => void;
 }
@@ -36,13 +38,21 @@ export function ChatWorkspace({
   session,
   onSelectSession,
   onCreateSession,
+  onForgetSession,
   draftSessions,
   onOpenSettings,
 }: ChatWorkspaceProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
+  const cache = useQueryClient();
+  const webChats = useQuery({
+    queryKey: ["web-chats"],
+    queryFn: () => client.webChats(),
+    refetchInterval: 10000,
+  });
 
   const sessions = useQuery({
     queryKey: ["records", "session"],
@@ -67,14 +77,30 @@ export function ChatWorkspace({
 
   const ids = Array.from(
     new Set([
-      "web:owner",
       ...draftSessions,
-      ...(sessions.data ?? []).map((row) => row.id),
+      ...(webChats.data ?? []).map((row) => row.id),
+      ...(sessions.data ?? [])
+        .map((row) => row.id)
+        .filter((id) => !id.startsWith("web:")),
       session,
     ]),
   );
   const activity = sessionActivity(turns.data ?? []);
-  const groups = sessionGroups(ids, activity);
+  const titles = new Map(webChats.data?.map((row) => [row.id, row]));
+  const groups = sessionGroups(ids, activity, titles);
+  useEffect(() => {
+    if (
+      !webChats.data ||
+      !session.startsWith("web:") ||
+      draftSessions.includes(session) ||
+      webChats.data.some((row) => row.id === session)
+    )
+      return;
+    const fallback =
+      webChats.data.find((row) => row.pinned) ?? webChats.data[0];
+    if (fallback) onSelectSession(fallback.id);
+    else onCreateSession("web:" + Date.now());
+  }, [webChats.data, session, draftSessions, onSelectSession, onCreateSession]);
   const running = runningSessions(turns.data ?? []);
   const pending = new Set(
     (approvals.data ?? [])
@@ -87,13 +113,32 @@ export function ChatWorkspace({
       row.reviewer !== "model" &&
       row.scope === session,
   );
-  const failed = latestTurnStatus(turns.data ?? [], session) === "failed";
+  const { pending: outgoing, send } = useChatOutbox(
+    client,
+    act,
+    session,
+    history.data,
+  );
+  const waiting =
+    outgoing.some((row) => !row.sendFailed) || running.has(session);
+
+  useEffect(() => {
+    stickRef.current = true;
+    const scroll = scrollRef.current;
+    const stream = streamRef.current;
+    if (!scroll || !stream) return;
+    const observer = new ResizeObserver(() => {
+      if (stickRef.current) scroll.scrollTop = scroll.scrollHeight;
+    });
+    observer.observe(stream);
+    return () => observer.disconnect();
+  }, [session]);
 
   useEffect(() => {
     const element = scrollRef.current;
     if (!element || !stickRef.current) return;
     element.scrollTop = element.scrollHeight;
-  }, [history.data, approvals.data, session]);
+  }, [history.data, approvals.data, session, outgoing.length, waiting]);
 
   function resolve(id: string, allow: boolean) {
     setBusy(true);
@@ -108,16 +153,45 @@ export function ChatWorkspace({
     setDrawerOpen(false);
   }
 
+  async function updateChat(
+    id: string,
+    patch: Partial<Pick<WebChat, "title" | "pinned">>,
+  ) {
+    await client.updateWebChat(id, patch);
+    await cache.invalidateQueries({ queryKey: ["web-chats"] });
+  }
+
+  async function removeChat(id: string) {
+    await client.deleteWebChat(id);
+    onForgetSession(id);
+    writeValue(draftKey(id), "");
+    writeValue(modelKey(id), "");
+    cache.removeQueries({ queryKey: ["chat-outbox", id], exact: true });
+    cache.removeQueries({ queryKey: ["history", id], exact: true });
+    cache.setQueryData<WebChat[]>(["web-chats"], (rows) =>
+      rows?.filter((row) => row.id !== id),
+    );
+    await cache.invalidateQueries({ queryKey: ["records", "session"] });
+  }
+
   return (
     <div className={"chat-workspace" + (drawerOpen ? " drawer-open" : "")}>
       <ChatSidebar
         groups={groups}
-        activity={activity}
         selected={session}
         running={running}
         pending={pending}
         onSelect={select}
-        onNew={onCreateSession}
+        onUpdate={updateChat}
+        onDelete={removeChat}
+        onNew={() => {
+          setDrawerOpen(false);
+          const id = "web:" + Date.now();
+          void act(async () => {
+            await updateChat(id, {});
+            onSelectSession(id);
+          }, "");
+        }}
       />
       <main className="chat-main">
         <header className="chat-header">
@@ -129,7 +203,10 @@ export function ChatWorkspace({
           >
             <Menu size={18} aria-hidden="true" />
           </button>
-          <h1>{sessionTitle(session)}</h1>
+          <h1>
+            {titles.get(session)?.title ??
+              (session.startsWith("web:") ? "新对话" : sessionTitle(session))}
+          </h1>
           <button
             type="button"
             aria-label="设置"
@@ -149,43 +226,59 @@ export function ChatWorkspace({
               80;
           }}
         >
-          {history.isPending && <LoadingBar label="正在读取会话…" />}
-          {history.error && (
-            <QueryErrorNotice
-              message={`读取会话失败：${history.error.message}`}
-            />
-          )}
-          {history.data?.length === 0 && (
-            <EmptyState text="从一句话开始。请先在「模型与服务」里配置模型路由。" />
-          )}
-          {history.data && (
+          <div className="chat-stream" key={session} ref={streamRef}>
+            {webChats.error && (
+              <QueryErrorNotice
+                message={`读取网页会话失败：${webChats.error.message}`}
+              />
+            )}
+            {history.isPending && !outgoing.length && (
+              <LoadingBar label="正在读取会话…" />
+            )}
+            {history.error && (
+              <QueryErrorNotice
+                message={`读取会话失败：${history.error.message}`}
+              />
+            )}
+            {history.data?.length === 0 &&
+              !outgoing.length &&
+              !current.length &&
+              !waiting && (
+                <div className="chat-greeting">
+                  <h2>Hi I'm ShiritaiBot</h2>
+                  <p>今天想做些什么？⭐</p>
+                </div>
+              )}
             <AgentTimeline
-              history={history.data}
-              assistantName={assistantName}
-              userLabel={session.startsWith("background:") ? "任务" : "你"}
-              failed={failed}
+              client={client}
+              history={[...(history.data ?? []), ...outgoing]}
             />
-          )}
-          {current.map((row) => (
-            <ApprovalCard
-              key={row.id}
-              approval={row}
-              busy={busy}
-              onResolve={(allow) => resolve(row.id, allow)}
-            />
-          ))}
-          {running.has(session) && (
-            <div
-              className="chat-loading"
-              role="status"
-              aria-label="助手正在回复"
-            >
-              <LoadingBar compact label="等待助手回复" />
-            </div>
-          )}
+            {current.map((row) => (
+              <ApprovalCard
+                key={row.id}
+                approval={row}
+                busy={busy}
+                onResolve={(allow) => resolve(row.id, allow)}
+              />
+            ))}
+            {waiting && (
+              <div
+                className="chat-loading"
+                role="status"
+                aria-label="助手正在回复"
+              >
+                <LoadingBar compact label="等待助手回复" />
+              </div>
+            )}
+          </div>
         </div>
         {session.startsWith("web:") ? (
           <ChatComposer
+            key={session}
+            onSend={(message) => {
+              stickRef.current = true;
+              send(message);
+            }}
             client={client}
             act={act}
             session={session}

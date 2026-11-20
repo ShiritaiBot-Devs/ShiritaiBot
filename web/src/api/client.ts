@@ -40,6 +40,7 @@ import type {
   ReleaseListing,
   UpdateInspect,
   UpdateStatus,
+  WebChat,
 } from "./types";
 
 export class ApiError extends Error {
@@ -102,11 +103,21 @@ export interface ApiClient {
   exchangeRate(): Promise<ExchangeRate>;
   commands(): Promise<CommandInfo[]>;
   history(session: string): Promise<HistoryMessage[]>;
+  webChats(): Promise<WebChat[]>;
+  updateWebChat(
+    session: string,
+    patch: Partial<Pick<WebChat, "title" | "pinned">>,
+  ): Promise<unknown>;
+  deleteWebChat(session: string): Promise<unknown>;
   rawLogs(lines: number, query: string): Promise<{ lines: string[] }>;
   logs(filter: LogFilter): Promise<LogFeed>;
   logLevel(): Promise<{ level: string }>;
   setLogLevel(level: string): Promise<{ level: string }>;
-  sendMessage(text: string, session: string): Promise<unknown>;
+  sendMessage(
+    text: string,
+    session: string,
+    clientId?: string,
+  ): Promise<{ status: string }>;
   resolveApproval(id: string, allow: boolean): Promise<unknown>;
   memoryProfiles(): Promise<MemoryProfile[]>;
   memories(
@@ -316,9 +327,14 @@ export function createClient(getToken: () => string): ApiClient {
     stats: (hours) => request<Statistics>("/stats?hours=" + hours),
     exchangeRate: () => request<ExchangeRate>("/exchange-rate"),
     commands: () => request<CommandInfo[]>("/commands"),
+    webChats: () => request<WebChat[]>("/web-chats"),
+    updateWebChat: (id, patch) =>
+      request("/web-chats/" + encodeURIComponent(id), "PUT", patch),
+    deleteWebChat: (id) =>
+      request("/web-chats/" + encodeURIComponent(id), "DELETE"),
     history: (session) =>
       request<HistoryMessage[]>(
-        "/history?session=" + encodeURIComponent(session),
+        "/history?timeline=true&session=" + encodeURIComponent(session),
       ),
     rawLogs: (lines, query) =>
       request<{ lines: string[] }>(
@@ -337,8 +353,8 @@ export function createClient(getToken: () => string): ApiClient {
     logLevel: () => request<{ level: string }>("/logs/level"),
     setLogLevel: (level) =>
       request<{ level: string }>("/logs/level", "PUT", { level }),
-    sendMessage: (text, session) =>
-      request("/messages", "POST", { text, session }),
+    sendMessage: (text, session, clientId) =>
+      request("/messages", "POST", { text, session, client_id: clientId }),
     resolveApproval: (id, allow) =>
       request("/approvals/" + encodeURIComponent(id), "POST", { allow }),
     memoryProfiles: () => request<MemoryProfile[]>("/memory/profiles"),

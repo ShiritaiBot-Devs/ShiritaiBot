@@ -66,7 +66,7 @@ export function writeSendMode(mode: SendMode): void {
 }
 
 export function composerHeight(scrollHeight: number, max = 240): number {
-  return Math.max(88, Math.min(scrollHeight, max));
+  return Math.max(42, Math.min(scrollHeight, max));
 }
 
 export function stepIndex(
