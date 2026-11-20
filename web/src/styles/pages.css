@@ -1126,6 +1126,138 @@
 
 /* Memory */
 
+.memory-settings {
+  container-type: inline-size;
+}
+
+.memory-settings > h2 {
+  margin-bottom: 6px;
+}
+
+.memory-settings > p {
+  margin-bottom: 20px;
+}
+
+.memory-settings-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
+
+.memory-settings-section + .memory-settings-section {
+  border-left: 1px solid var(--border);
+  padding-left: 24px;
+}
+
+.memory-settings-section h3 {
+  margin: 0 0 12px;
+}
+
+.memory-settings-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px 16px;
+}
+
+.memory-settings-fields .field > span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-label);
+}
+
+.memory-settings-fields > button {
+  justify-self: start;
+}
+
+.memory-profile-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.memory-profile-row small,
+.memory-binding-list button {
+  overflow-wrap: anywhere;
+}
+
+.memory-binding-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.memory-binding-list button {
+  display: grid;
+  justify-content: stretch;
+  gap: 2px;
+  text-align: left;
+  padding: 8px 12px;
+}
+
+.memory-binding-list small {
+  color: var(--muted);
+}
+
+.memory-binding-list button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}
+
+@container (max-width: 56rem) {
+  .memory-settings-columns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+
+  .memory-settings-section + .memory-settings-section {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding: 18px 0 0;
+  }
+}
+
+@container (max-width: 28rem) {
+  .memory-settings-fields,
+  .memory-profile-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .memory-profile-row button {
+    justify-self: start;
+  }
+}
+
+.memory-browser-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 14px;
+}
+
+.memory-browser-filters > select {
+  width: min(100%, 18rem);
+}
+
+.memory-browser-filters .range-tabs {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.memory-browser-filters .range-tabs button {
+  padding-inline: 9px;
+  white-space: nowrap;
+}
+
 .memory-detail {
   margin-top: 8px;
   padding-left: 12px;

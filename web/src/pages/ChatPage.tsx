@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { AgentTimeline } from "../components/AgentTimeline";
 import { ChatComposer } from "../components/ChatComposer";
 import { EmptyState } from "../components/EmptyState";
+import { SessionOptions } from "../components/SessionPicker";
 import { useChatOutbox } from "../hooks/useChatOutbox";
 import type { PageProps } from "./common";
 
@@ -34,13 +35,11 @@ export function ChatPage({
   });
   const { pending, send } = useChatOutbox(client, act, session, history.data);
 
-  const options = Array.from(
-    new Set([
-      "web:owner",
-      ...(sessions.data ?? []).map((row) => row.id),
-      session,
-    ]),
-  );
+  const options = [
+    "web:owner",
+    ...(sessions.data ?? []).map((row) => row.id),
+    session,
+  ];
 
   return (
     <>
@@ -50,11 +49,7 @@ export function ChatPage({
           value={session}
           onChange={(event) => selectSession(event.target.value)}
         >
-          {options.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
+          <SessionOptions ids={options} />
         </select>
         <button
           type="button"

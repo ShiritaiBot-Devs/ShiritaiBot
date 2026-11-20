@@ -104,7 +104,8 @@ export function sessionTitle(id: string): string {
   if (id === "web:owner") return "默认对话";
   if (id.startsWith("web:")) {
     const rest = id.slice(4);
-    if (/^\d+$/.test(rest)) return `对话 ${clock(Number(rest))}`;
+    if (/^\d+$/.test(rest) && Number.isFinite(new Date(Number(rest)).getTime()))
+      return `对话 ${clock(Number(rest))}`;
     return `对话 ${rest}`;
   }
   const feishu = FEISHU_SESSION.exec(id);

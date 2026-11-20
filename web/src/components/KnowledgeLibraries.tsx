@@ -119,7 +119,11 @@ export function KnowledgeLibraries({
         <SessionPicker
           client={client}
           adapters={config.adapters}
-          suggestions={[...draftSessions, ...Object.keys(bindings)]}
+          suggestions={[
+            currentSession,
+            ...draftSessions,
+            ...Object.keys(bindings),
+          ]}
           session={session}
           onChange={setSession}
         />

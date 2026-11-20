@@ -1,8 +1,23 @@
-import { useId } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ApiClient } from "../api/client";
 import type { AdapterConfig } from "../api/types";
-import { adapterSessionId, isMainSession, sessionTitle } from "../lib/sessions";
+import {
+  adapterSessionId,
+  isMainSession,
+  sessionGroups,
+} from "../lib/sessions";
+
+export function SessionOptions({ ids }: { ids: string[] }) {
+  return sessionGroups([...new Set(ids)], {}).map((group) => (
+    <optgroup key={group.key} label={group.label}>
+      {group.items.map(({ id, title }) => (
+        <option key={id} value={id} title={id}>
+          {title}
+        </option>
+      ))}
+    </optgroup>
+  ));
+}
 
 export function SessionPicker({
   client,
@@ -17,7 +32,6 @@ export function SessionPicker({
   session: string;
   onChange: (session: string) => void;
 }) {
-  const listId = useId();
   const observed = useQuery({
     queryKey: ["records", "session"],
     queryFn: () => client.records("session"),
@@ -31,32 +45,25 @@ export function SessionPicker({
     ),
   ]);
   const sessions = [
-    ...new Set([
-      "web:owner",
-      ...suggestions,
-      ...configured,
-      ...(observed.data ?? []).map((row) => row.id),
-    ]),
-  ]
-    .filter(isMainSession)
-    .sort();
+    "web:owner",
+    session,
+    ...suggestions,
+    ...configured,
+    ...(observed.data ?? [])
+      .filter((row) => !row.background)
+      .map((row) => row.id),
+  ].filter(isMainSession);
 
   return (
     <label className="field">
       <span className="field-name">会话</span>
-      <input
-        list={listId}
-        placeholder="选择或输入完整会话 ID"
+      <select
+        aria-label="会话"
         value={session}
-        onChange={(event) => onChange(event.target.value.trim())}
-      />
-      <datalist id={listId}>
-        {sessions.map((value) => (
-          <option key={value} value={value}>
-            {sessionTitle(value)}
-          </option>
-        ))}
-      </datalist>
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <SessionOptions ids={sessions} />
+      </select>
     </label>
   );
 }

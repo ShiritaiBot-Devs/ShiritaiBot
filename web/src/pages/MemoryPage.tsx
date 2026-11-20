@@ -70,148 +70,190 @@ function MemorySettings({
   }
 
   return (
-    <section className="panel">
+    <section className="panel memory-settings">
       <h2>记忆库设置</h2>
       <p className="muted">
         个人库供主人会话使用。多个群聊或访客私聊可以显式共用同一个会话库。
       </p>
-      <form
-        className="inline"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!name.trim() || Object.hasOwn(profiles, id)) return;
-          setConfig({
-            ...config,
-            memory: {
-              ...memory,
-              profiles: { ...custom, [id]: { name: name.trim(), audience } },
-            },
-          });
-          setId("");
-          setName("");
-        }}
-      >
-        <input
-          aria-label="记忆库标识"
-          placeholder="标识，例如 project"
-          pattern="[a-z][a-z0-9_\-]{0,63}"
-          value={id}
-          onChange={(event) => setId(event.target.value)}
-          required
-        />
-        <input
-          aria-label="记忆库名称"
-          placeholder="显示名称"
-          maxLength={80}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          required
-        />
-        <select
-          aria-label="访问范围"
-          value={audience}
-          onChange={(event) =>
-            setAudience(event.target.value === "shared" ? "shared" : "personal")
-          }
-        >
-          <option value="personal">个人库</option>
-          <option value="shared">会话库</option>
-        </select>
-        <button
-          type="submit"
-          disabled={!id || !name.trim() || Object.hasOwn(profiles, id)}
-        >
-          添加记忆库
-        </button>
-      </form>
-      {Object.entries(custom).map(([key, profile]) => {
-        const count = Object.values(bindings).filter(
-          (value) => value === key,
-        ).length;
-        const usedByAdapter = config.adapters.some(
-          (adapter) =>
-            adapter.type === "feishu" && adapter.memory_profile === key,
-        );
-        return (
-          <div className="inline" key={key}>
-            <code>{key}</code>
-            <input
-              aria-label={`${key} 的显示名称`}
-              value={profile.name}
-              maxLength={80}
-              onChange={(event) =>
-                setConfig({
-                  ...config,
-                  memory: {
-                    ...memory,
-                    profiles: {
-                      ...custom,
-                      [key]: { ...profile, name: event.target.value },
-                    },
+      <div className="memory-settings-columns">
+        <section className="memory-settings-section">
+          <h3>自定义记忆库</h3>
+          <form
+            className="memory-settings-fields"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!name.trim() || Object.hasOwn(profiles, id)) return;
+              setConfig({
+                ...config,
+                memory: {
+                  ...memory,
+                  profiles: {
+                    ...custom,
+                    [id]: { name: name.trim(), audience },
                   },
-                })
-              }
-            />
-            <span className="muted">
-              {profile.audience === "shared" ? "会话库" : "个人库"} · {count}{" "}
-              个会话
-            </span>
-            <button
-              type="button"
-              disabled={count > 0 || usedByAdapter}
-              title="移出配置会保留磁盘数据，重新添加同标识可恢复"
-              onClick={() => {
-                const next = { ...custom };
-                delete next[key];
-                setConfig({ ...config, memory: { ...memory, profiles: next } });
-              }}
-            >
-              移出配置
-            </button>
-          </div>
-        );
-      })}
-      <h3>会话绑定</h3>
-      <div className="field-grid">
-        <SessionPicker
-          client={client}
-          adapters={config.adapters}
-          suggestions={[...draftSessions, ...Object.keys(bindings)]}
-          session={session}
-          onChange={setSession}
-        />
-        <label className="field">
-          <span className="field-name">使用的记忆库</span>
-          <select
-            disabled={!isMainSession(session)}
-            value={bindings[session] ?? ""}
-            onChange={(event) => bind(event.target.value)}
+                },
+              });
+              setId("");
+              setName("");
+            }}
           >
-            <option value="">
-              {personal ? "使用会话默认库" : "未绑定长期记忆库"}
-            </option>
-            {bindings[session] &&
-              !eligible.some(([key]) => key === bindings[session]) && (
-                <option value={bindings[session]} disabled>
-                  已失效 · {bindings[session]}
+            <label className="field">
+              <span>标识</span>
+              <input
+                aria-label="记忆库标识"
+                placeholder="例如 project"
+                pattern="[a-z][a-z0-9_\-]{0,63}"
+                value={id}
+                onChange={(event) => setId(event.target.value)}
+                required
+              />
+            </label>
+            <label className="field">
+              <span>显示名称</span>
+              <input
+                aria-label="记忆库名称"
+                placeholder="例如 项目记忆库"
+                maxLength={80}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                required
+              />
+            </label>
+            <label className="field">
+              <span>访问范围</span>
+              <select
+                aria-label="访问范围"
+                value={audience}
+                onChange={(event) =>
+                  setAudience(
+                    event.target.value === "shared" ? "shared" : "personal",
+                  )
+                }
+              >
+                <option value="personal">个人库</option>
+                <option value="shared">会话库</option>
+              </select>
+            </label>
+            <button
+              type="submit"
+              disabled={!id || !name.trim() || Object.hasOwn(profiles, id)}
+            >
+              添加记忆库
+            </button>
+          </form>
+          {Object.entries(custom).map(([key, profile]) => {
+            const count = Object.values(bindings).filter(
+              (value) => value === key,
+            ).length;
+            const usedByAdapter = config.adapters.some(
+              (adapter) =>
+                adapter.type === "feishu" && adapter.memory_profile === key,
+            );
+            return (
+              <div className="memory-profile-row" key={key}>
+                <div className="field">
+                  <input
+                    aria-label={`${key} 的显示名称`}
+                    value={profile.name}
+                    maxLength={80}
+                    onChange={(event) =>
+                      setConfig({
+                        ...config,
+                        memory: {
+                          ...memory,
+                          profiles: {
+                            ...custom,
+                            [key]: { ...profile, name: event.target.value },
+                          },
+                        },
+                      })
+                    }
+                  />
+                  <small className="muted">
+                    <code>{key}</code> ·{" "}
+                    {profile.audience === "shared" ? "会话库" : "个人库"} ·{" "}
+                    {count} 个会话
+                  </small>
+                </div>
+                <button
+                  type="button"
+                  disabled={count > 0 || usedByAdapter}
+                  title="移出配置会保留磁盘数据，重新添加同标识可恢复"
+                  onClick={() => {
+                    const next = { ...custom };
+                    delete next[key];
+                    setConfig({
+                      ...config,
+                      memory: { ...memory, profiles: next },
+                    });
+                  }}
+                >
+                  移出配置
+                </button>
+              </div>
+            );
+          })}
+        </section>
+        <section className="memory-settings-section">
+          <h3>会话绑定</h3>
+          <div className="memory-settings-fields">
+            <SessionPicker
+              client={client}
+              adapters={config.adapters}
+              suggestions={[
+                currentSession,
+                ...draftSessions,
+                ...Object.keys(bindings),
+              ]}
+              session={session}
+              onChange={setSession}
+            />
+            <label className="field">
+              <span className="field-name">使用的记忆库</span>
+              <select
+                disabled={!isMainSession(session)}
+                value={bindings[session] ?? ""}
+                onChange={(event) => bind(event.target.value)}
+              >
+                <option value="">
+                  {personal ? "使用会话默认库" : "未绑定长期记忆库"}
                 </option>
-              )}
-            {eligible.map(([key, profile]) => (
-              <option key={key} value={key}>
-                {profile.name}
-              </option>
-            ))}
-          </select>
-        </label>
+                {bindings[session] &&
+                  !eligible.some(([key]) => key === bindings[session]) && (
+                    <option value={bindings[session]} disabled>
+                      已失效 · {bindings[session]}
+                    </option>
+                  )}
+                {eligible.map(([key, profile]) => (
+                  <option key={key} value={key}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {Object.keys(bindings).length > 0 && (
+            <div
+              className="memory-binding-list"
+              role="group"
+              aria-label="已绑定会话"
+            >
+              {Object.entries(bindings).map(([key, value]) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={session === key}
+                  title={key}
+                  onClick={() => setSession(key)}
+                >
+                  <span>{sessionTitle(key)}</span>
+                  <small>{profiles[value]?.name ?? value}</small>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
-      {Object.entries(bindings).map(([key, value]) => (
-        <div className="inline" key={key}>
-          <button type="button" onClick={() => setSession(key)}>
-            {sessionTitle(key)}
-          </button>
-          <span className="muted">{profiles[value]?.name ?? value}</span>
-        </div>
-      ))}
     </section>
   );
 }
@@ -246,8 +288,8 @@ export function MemoryPage(props: SessionConfigPageProps) {
     <>
       <MemorySettings {...props} />
       <section className="panel">
-        <div className="panel-head">
-          <h2>浏览记忆</h2>
+        <h2>浏览记忆</h2>
+        <div className="memory-browser-filters">
           <select
             aria-label="浏览的记忆库"
             value={profile}

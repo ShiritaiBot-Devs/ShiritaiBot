@@ -9,7 +9,8 @@ import { Field } from "../components/FieldForm";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
 import { POLICY_FIELDS } from "../config/schema";
 import { CONFIG_SNAPSHOT_KEY } from "../hooks/useConfigDraft";
-import { adapterSessionId, sessionGroups, sessionRole } from "../lib/sessions";
+import { SessionOptions } from "../components/SessionPicker";
+import { adapterSessionId, sessionRole } from "../lib/sessions";
 import {
   PERMISSIONS,
   PERMISSION_PRESETS,
@@ -140,21 +141,16 @@ export function ApprovalsPage({
       ...(a.owner_id ? [adapterSessionId(a, "private", a.owner_id)] : []),
       ...a.groups.map((group) => adapterSessionId(a, "group", group)),
     ]);
-  const knownSessions = sessionGroups(
-    [
-      ...new Set([
-        "web:owner",
-        session,
-        ...Object.keys(savedConfig.policy.sessions),
-        ...Object.keys(policy.sessions),
-        ...configuredFeishuSessions,
-        ...(sessions.data ?? [])
-          .filter((row) => !row.background)
-          .map((row) => row.id),
-      ]),
-    ].filter((id) => MAIN_SESSION.test(id)),
-    {},
-  );
+  const knownSessions = [
+    "web:owner",
+    session,
+    ...Object.keys(savedConfig.policy.sessions),
+    ...Object.keys(policy.sessions),
+    ...configuredFeishuSessions,
+    ...(sessions.data ?? [])
+      .filter((row) => !row.background)
+      .map((row) => row.id),
+  ].filter((id) => MAIN_SESSION.test(id));
   const tools = (refreshingConfig ? undefined : catalog.data?.tools) ?? [];
   const toolNames = [
     ...new Set([
@@ -254,15 +250,7 @@ export function ApprovalsPage({
                     setToolPage(1);
                   }}
                 >
-                  {knownSessions.map((group) => (
-                    <optgroup key={group.key} label={group.label}>
-                      {group.items.map(({ id, title }) => (
-                        <option key={id} value={id}>
-                          {title}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
+                  <SessionOptions ids={knownSessions} />
                 </select>
                 {policy.sessions[session] && (
                   <button type="button" onClick={restoreSessionDefaults}>
