@@ -567,12 +567,93 @@ class GroupContextConfig(Model):
 
 
 ToolPermission = Literal["deny", "manual", "auto", "allow"]
-PermissionPreset = Literal["all_manual", "safe_manual", "safe_auto", "full_access"]
+PermissionPreset = Literal["strict", "balanced", "autonomous", "full_access"]
+
+PERMISSION_PRESETS: dict[PermissionPreset, dict[ToolRisk, ToolPermission]] = {
+    "strict": {
+        "safe": "allow",
+        "normal": "manual",
+        "sensitive": "manual",
+        "dangerous": "manual",
+    },
+    "balanced": {
+        "safe": "allow",
+        "normal": "allow",
+        "sensitive": "auto",
+        "dangerous": "manual",
+    },
+    "autonomous": {
+        "safe": "allow",
+        "normal": "allow",
+        "sensitive": "auto",
+        "dangerous": "auto",
+    },
+    "full_access": {
+        "safe": "allow",
+        "normal": "allow",
+        "sensitive": "allow",
+        "dangerous": "allow",
+    },
+}
+
+# Accepted for legacy config files and /tools preset aliases.
+LEGACY_PERMISSION_PRESETS: dict[str, dict[ToolRisk, ToolPermission]] = {
+    "all_manual": {
+        "safe": "manual",
+        "normal": "manual",
+        "sensitive": "manual",
+        "dangerous": "manual",
+    },
+    "safe_manual": PERMISSION_PRESETS["strict"],
+    "safe_auto": {
+        "safe": "allow",
+        "normal": "auto",
+        "sensitive": "auto",
+        "dangerous": "auto",
+    },
+}
+
+
+def preset_risks(name: str) -> dict[ToolRisk, ToolPermission] | None:
+    matrix = PERMISSION_PRESETS.get(name) or LEGACY_PERMISSION_PRESETS.get(name)
+    return dict(matrix) if matrix is not None else None
+
+
+class RiskPolicy(Model):
+    safe: ToolPermission = "allow"
+    normal: ToolPermission = "allow"
+    sensitive: ToolPermission = "auto"
+    dangerous: ToolPermission = "manual"
+
+    def for_risk(self, risk: str) -> ToolPermission:
+        if risk in {"safe", "normal", "sensitive", "dangerous"}:
+            return getattr(self, risk)
+        return self.dangerous
 
 
 class ToolPolicy(Model):
-    preset: PermissionPreset = "safe_manual"
+    risks: RiskPolicy = Field(default_factory=RiskPolicy)
     tools: dict[str, ToolPermission] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_preset(cls, data):
+        if isinstance(data, dict) and "preset" in data:
+            data = dict(data)
+            preset = data.pop("preset")
+            if "risks" not in data and isinstance(preset, str):
+                mapped = preset_risks(preset)
+                if mapped is None:
+                    raise ValueError(f"unknown permission preset: {preset}")
+                data["risks"] = mapped
+        return data
+
+    def matched_preset(self) -> PermissionPreset | None:
+        current = self.risks.model_dump()
+        for name, matrix in PERMISSION_PRESETS.items():
+            if current == matrix:
+                return name
+        return None
 
 
 class SessionPolicy(ToolPolicy):

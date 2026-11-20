@@ -19,6 +19,7 @@ import {
   type Preset,
   type SendMode,
 } from "../lib/composer";
+import { matchPreset } from "../lib/permissions";
 
 export interface ChatComposerProps {
   client: ApiClient;
@@ -106,11 +107,14 @@ export function ChatComposer({
   const modelLabel = model
     ? modelNameById(config.data?.models ?? [], model)
     : "模型";
-  const currentPreset = (preset ||
-    tools.data?.policy?.preset ||
-    "safe_manual") as Preset;
+  const serverPreset = tools.data?.policy?.risks
+    ? matchPreset(tools.data.policy.risks)
+    : "balanced";
+  const currentPreset = preset || serverPreset;
   const presetLabel =
-    PRESETS.find((row) => row.value === currentPreset)?.label ?? "审查";
+    currentPreset === "custom"
+      ? "自定义"
+      : (PRESETS.find((row) => row.value === currentPreset)?.label ?? "审查");
   const sendLabel =
     SEND_MODES.find((row) => row.value === sendMode)?.label ?? "发送性质";
 
@@ -322,7 +326,7 @@ export function ChatComposer({
           />
           <ComposerSelect
             label="审查方式"
-            value={currentPreset}
+            value={currentPreset === "custom" ? ("" as Preset) : currentPreset}
             display={presetLabel}
             options={PRESETS}
             onSelect={choosePreset}

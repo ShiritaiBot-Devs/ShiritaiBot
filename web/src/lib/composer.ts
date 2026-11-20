@@ -1,3 +1,6 @@
+import { PERMISSION_PRESETS } from "./permissions";
+import type { PermissionPreset } from "../api/types";
+
 export type SendMode = "steer" | "queue";
 
 export interface ComposerOption<T extends string> {
@@ -11,22 +14,15 @@ export const SEND_MODES: ComposerOption<SendMode>[] = [
   { value: "queue", label: "排队", hint: "等这一轮结束后再按顺序发送" },
 ];
 
-export type Preset = "all_manual" | "safe_manual" | "safe_auto" | "full_access";
+export type Preset = PermissionPreset;
 
-export const PRESETS: ComposerOption<Preset>[] = [
-  { value: "all_manual", label: "全部人工", hint: "一切工具都需要人工审批" },
-  {
-    value: "safe_manual",
-    label: "安全外人工",
-    hint: "安全工具免审，其他人工审批",
-  },
-  {
-    value: "safe_auto",
-    label: "安全外自动",
-    hint: "安全工具免审，其他由模型审批",
-  },
-  { value: "full_access", label: "完全放行", hint: "所有工具无需审批" },
-];
+export const PRESETS: ComposerOption<Preset>[] = PERMISSION_PRESETS.map(
+  (item) => ({
+    value: item.value,
+    label: item.shortLabel,
+    hint: item.hint,
+  }),
+);
 
 const DRAFT_PREFIX = "shiritaibot-draft:";
 const MODEL_PREFIX = "shiritaibot-model:";

@@ -10,6 +10,17 @@ import { ScopeToolsField } from "../components/ScopeToolsField";
 import { POLICY_FIELDS } from "../config/schema";
 import { CONFIG_SNAPSHOT_KEY } from "../hooks/useConfigDraft";
 import { adapterSessionId, sessionGroups, sessionRole } from "../lib/sessions";
+import {
+  PERMISSIONS,
+  PERMISSION_PRESETS,
+  RISK_META,
+  RISK_ORDER,
+  inheritedPermission,
+  matchPreset,
+  normalizeRisks,
+  presetRisks,
+  toolRisk,
+} from "../lib/permissions";
 import type {
   ConfigSnapshot,
   PermissionPreset,
@@ -17,21 +28,10 @@ import type {
   ToolInfo,
   ToolPermission,
   ToolPolicy,
+  ToolRisk,
 } from "../api/types";
 import type { ConfigPageProps } from "./common";
 
-const PRESETS: Record<PermissionPreset, string> = {
-  all_manual: "一切工具需要人工审批",
-  safe_manual: "安全工具无需审批，其他人工审批",
-  safe_auto: "安全工具无需审批，其他由模型自动审批",
-  full_access: "完全访问：所有工具无需审批",
-};
-const PERMISSIONS: Record<ToolPermission, string> = {
-  deny: "禁止使用",
-  manual: "需要人工审批",
-  auto: "模型自动审批",
-  allow: "无需审批",
-};
 const MAIN_SESSION = /^(web|private|group):[^\s]{1,200}$/;
 type Target =
   | "session"
@@ -39,16 +39,6 @@ type Target =
   | "private_default"
   | "group_default"
   | "proactive_default";
-
-function inherited(policy: ToolPolicy, tool?: ToolInfo): ToolPermission {
-  if (policy.preset === "full_access") return "allow";
-  if (policy.preset === "all_manual") return "manual";
-  return tool?.safe
-    ? "allow"
-    : policy.preset === "safe_auto"
-      ? "auto"
-      : "manual";
-}
 
 function effectivePermission(tool: ToolInfo) {
   if (tool.decision === "approve") return PERMISSIONS.manual;
@@ -70,6 +60,8 @@ export function ApprovalsPage({
   );
   const [sessionInput, setSessionInput] = useState(session);
   const [search, setSearch] = useState("");
+  const [riskFilter, setRiskFilter] = useState<ToolRisk | "all">("all");
+  const [onlyCustom, setOnlyCustom] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toolPage, setToolPage] = useState(1);
   const [pendingPage, setPendingPage] = useState(1);
@@ -171,8 +163,14 @@ export function ApprovalsPage({
     ]),
   ].sort();
 
+  const profileRisks = normalizeRisks(profile.risks);
+  const matchedPreset = matchPreset(profileRisks);
+  const customToolCount = Object.keys(profile.tools).length;
+
   const filteredTools = toolNames.filter((name) => {
     const tool = tools.find((tool) => tool.name === name);
+    if (onlyCustom && !(name in profile.tools)) return false;
+    if (riskFilter !== "all" && toolRisk(tool) !== riskFilter) return false;
     return `${name} ${tool?.plugin ?? ""} ${tool?.description ?? ""}`
       .toLowerCase()
       .includes(search.toLowerCase());
@@ -287,23 +285,63 @@ export function ApprovalsPage({
             权限预设
             <select
               aria-label="权限预设"
-              value={profile.preset}
-              onChange={(event) =>
+              value={matchedPreset}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value === "custom") return;
                 update({
                   ...profile,
-                  preset: event.target.value as PermissionPreset,
+                  risks: presetRisks(value as PermissionPreset),
                   tools: {},
-                })
-              }
+                });
+              }}
             >
-              {Object.entries(PRESETS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
+              {matchedPreset === "custom" && (
+                <option value="custom" disabled>
+                  自定义（已调整下方风险等级）
+                </option>
+              )}
+              {PERMISSION_PRESETS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
                 </option>
               ))}
             </select>
-            <small>切换预设会清除当前范围的逐工具覆盖。</small>
+            <small>切换预设会填充下方风险矩阵并清除逐工具覆盖。</small>
           </label>
+        </div>
+        <div className="risk-matrix" aria-label="按风险等级配置默认权限">
+          {RISK_ORDER.map((level) => (
+            <div className="risk-matrix-row" key={level}>
+              <div>
+                <strong>{RISK_META[level].label}</strong>
+                <span className="badge">{level}</span>
+                <p className="muted">{RISK_META[level].description}</p>
+              </div>
+              <label className="field">
+                {RISK_META[level].label}工具默认权限
+                <select
+                  aria-label={`${RISK_META[level].label}工具默认权限`}
+                  value={profileRisks[level]}
+                  onChange={(event) =>
+                    update({
+                      ...profile,
+                      risks: {
+                        ...profileRisks,
+                        [level]: event.target.value as ToolPermission,
+                      },
+                    })
+                  }
+                >
+                  {Object.entries(PERMISSIONS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ))}
         </div>
         {dirtyPolicy && (
           <p className="muted" role="status">
@@ -384,33 +422,66 @@ export function ApprovalsPage({
             message={`读取会话失败：${sessions.error.message}`}
           />
         )}
-        <label className="field">
-          搜索工具
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setToolPage(1);
-            }}
-            placeholder="工具名、插件或说明"
-          />
-        </label>
+        <div className="field-grid">
+          <label className="field">
+            搜索工具
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setToolPage(1);
+              }}
+              placeholder="工具名、插件或说明"
+            />
+          </label>
+          <label className="field">
+            按风险等级筛选
+            <select
+              aria-label="按风险等级筛选"
+              value={riskFilter}
+              onChange={(event) => {
+                setRiskFilter(event.target.value as ToolRisk | "all");
+                setToolPage(1);
+              }}
+            >
+              <option value="all">全部风险等级</option>
+              {RISK_ORDER.map((level) => (
+                <option key={level} value={level}>
+                  {RISK_META[level].label}（{level}）
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field risk-filter-toggle">
+            <span>
+              <input
+                type="checkbox"
+                checked={onlyCustom}
+                onChange={(event) => {
+                  setOnlyCustom(event.target.checked);
+                  setToolPage(1);
+                }}
+              />{" "}
+              仅看已自定义覆盖（{customToolCount}）
+            </span>
+          </label>
+        </div>
         <div className="tool-permission-list">
           {visibleTools.map((name) => {
             const tool = tools.find((tool) => tool.name === name);
-            const permission = profile.tools[name] ?? inherited(profile, tool);
+            const level = toolRisk(tool);
+            const fallbackPerm = inheritedPermission(profile, tool);
+            const permission = profile.tools[name] ?? fallbackPerm;
             return (
               <article className="tool-permission-row" key={name}>
                 <div>
                   <strong>{name}</strong>
                   <span className="badge">{tool?.plugin ?? "未加载"}</span>
                   <span className="badge">
-                    {tool?.safe
-                      ? "安全"
-                      : tool
-                        ? `非安全 · ${tool.risk}`
-                        : "安全性未知"}
+                    {tool
+                      ? `${RISK_META[level].label} · ${level}`
+                      : "安全性未知"}
                   </span>
                   <p className="muted">
                     {tool?.description ??
@@ -442,7 +513,7 @@ export function ApprovalsPage({
                     }}
                   >
                     <option value="inherit">
-                      跟随预设 · {PERMISSIONS[inherited(profile, tool)]}
+                      跟随{RISK_META[level].label} · {PERMISSIONS[fallbackPerm]}
                     </option>
                     {Object.entries(PERMISSIONS).map(([value, label]) => (
                       <option key={value} value={value}>

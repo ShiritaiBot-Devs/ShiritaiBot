@@ -142,7 +142,12 @@ def test_native_manual_approval_waits_for_owner(tmp_path, monkeypatch):
     with TestClient(app, headers={"Authorization": "Bearer test-token"}) as client:
         runtime = app.state.runtime
         cfg = client.get("/api/config").json()
-        cfg["policy"]["owner_default"]["preset"] = "full_access"
+        cfg["policy"]["owner_default"]["risks"] = {
+            "safe": "allow",
+            "normal": "allow",
+            "sensitive": "allow",
+            "dangerous": "allow",
+        }
         cfg["subagents"] = [
             {
                 "id": "worker",

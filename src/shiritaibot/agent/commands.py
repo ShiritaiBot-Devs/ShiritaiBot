@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime
 
 from shiritaibot.auth.menu import RISK_LABELS
-from shiritaibot.config import SessionPolicy
+from shiritaibot.config import SessionPolicy, preset_risks
 from shiritaibot.core import PublicError, uid
 
 COMMANDS = {
@@ -17,7 +17,7 @@ COMMANDS = {
     "new": "开始新上下文，保留历史与长期记忆（仅主人）",
     "clear": "同 /new",
     "stop": "停止当前任务及自己的排队消息",
-    "tools": "列出所有工具权限；/tools 工具名 deny|manual|auto|allow|inherit；/tools preset 预设",
+    "tools": "列出所有工具权限；/tools 工具名 deny|manual|auto|allow|inherit；/tools risk safe|normal|sensitive|dangerous 权限；/tools preset 预设",
     "permissions": "查看当前工具的权限与审批要求",
     "mode": "查看会话模式；/mode agent|chat 切换（仅主人）",
     "tasks": "查看后台子代理任务（仅主人私聊）",
@@ -165,29 +165,52 @@ async def command(runtime, ctx, text):
                 if args == ["reset"]:
                     profile = await permissions.set_session(ctx, lambda _: None)
                 else:
-                    if len(args) != 2:
-                        raise PublicError(
-                            "用法：/tools 工具名 deny|manual|auto|allow|inherit；/tools mode agent|chat；/tools preset all_manual|safe_manual|safe_auto|full_access；/tools reset"
-                        )
-                    target, value = args
+                    usage = (
+                        "用法：/tools 工具名 deny|manual|auto|allow|inherit；"
+                        "/tools risk safe|normal|sensitive|dangerous deny|manual|auto|allow；"
+                        "/tools mode agent|chat；"
+                        "/tools preset strict|balanced|autonomous|full_access；"
+                        "/tools reset"
+                    )
+                    if len(args) not in {2, 3}:
+                        raise PublicError(usage)
 
                     def update(current: SessionPolicy) -> SessionPolicy:
                         data = current.model_dump()
-                        if target == "mode" and value in {"agent", "chat"}:
-                            data["mode"] = value
-                        elif target == "preset" and value in {
-                            "all_manual", "safe_manual", "safe_auto", "full_access"
-                        }:
-                            data.update(preset=value, tools={})
-                        elif target in runtime.registry.tools and value in {
-                            "deny", "manual", "auto", "allow", "inherit"
-                        }:
-                            if value == "inherit":
-                                data["tools"].pop(target, None)
+                        if len(args) == 3 and args[0] == "risk":
+                            level, perm = args[1], args[2]
+                            if level in {"safe", "normal", "sensitive", "dangerous"} and perm in {
+                                "deny",
+                                "manual",
+                                "auto",
+                                "allow",
+                            }:
+                                data["risks"][level] = perm
                             else:
-                                data["tools"][target] = value
+                                raise PublicError(usage)
+                        elif len(args) == 2:
+                            target, value = args
+                            if target == "mode" and value in {"agent", "chat"}:
+                                data["mode"] = value
+                            elif target == "preset" and (mapped := preset_risks(value)) is not None:
+                                data.update(risks=mapped, tools={})
+                            elif target in runtime.registry.tools and value in {
+                                "deny",
+                                "manual",
+                                "auto",
+                                "allow",
+                                "inherit",
+                            }:
+                                if value == "inherit":
+                                    data["tools"].pop(target, None)
+                                else:
+                                    data["tools"][target] = value
+                            else:
+                                raise PublicError(
+                                    "工具、模式、预设或权限值无效。使用 /tools 查看工具。"
+                                )
                         else:
-                            raise PublicError("工具、模式、预设或权限值无效。使用 /tools 查看工具。")
+                            raise PublicError(usage)
                         return SessionPolicy.model_validate(data)
 
                     profile = await permissions.set_session(ctx, update)
@@ -197,7 +220,20 @@ async def command(runtime, ctx, text):
                 "auto": "模型自动审批",
                 "allow": "无需审批",
             }
-            answer = f"当前会话：{ctx.session}\n模式：{profile.mode}\n预设：{profile.preset}"
+            preset_name = profile.matched_preset() or "custom"
+            risk_summary = " / ".join(
+                f"{title}:{labels[getattr(profile.risks, key)]}"
+                for key, title in (
+                    ("safe", "安全"),
+                    ("normal", "一般"),
+                    ("sensitive", "敏感"),
+                    ("dangerous", "危险"),
+                )
+            )
+            answer = (
+                f"当前会话：{ctx.session}\n模式：{profile.mode}\n"
+                f"预设：{preset_name}（{risk_summary}）"
+            )
             if name != "mode":
                 answer += "\n" + "\n".join(
                     f"{tool.name} · {labels[permissions.configured(ctx, tool)]}"

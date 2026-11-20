@@ -387,11 +387,12 @@ export interface GroupContextConfig {
 }
 
 export type ToolPermission = "deny" | "manual" | "auto" | "allow";
+export type RiskPolicy = Record<ToolRisk, ToolPermission>;
 export type PermissionPreset =
-  "all_manual" | "safe_manual" | "safe_auto" | "full_access";
+  "strict" | "balanced" | "autonomous" | "full_access";
 
 export interface ToolPolicy {
-  preset: PermissionPreset;
+  risks: RiskPolicy;
   tools: Record<string, ToolPermission>;
 }
 

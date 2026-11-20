@@ -760,6 +760,48 @@
   }
 }
 
+.risk-matrix {
+  margin: 18px 0 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  padding: 0 16px;
+}
+.risk-matrix-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.risk-matrix-row:last-child {
+  border-bottom: none;
+}
+.risk-matrix-row .badge {
+  margin-left: 8px;
+}
+.risk-matrix-row p {
+  margin: 4px 0 0;
+}
+.risk-matrix-row > .field {
+  flex: 0 0 220px;
+}
+.risk-filter-toggle {
+  justify-content: flex-end;
+}
+@media (max-width: 700px) {
+  .risk-matrix-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .risk-matrix-row > .field {
+    flex-basis: auto;
+    width: 100%;
+  }
+}
+
 .tool-permission-list {
   margin-top: 20px;
 }

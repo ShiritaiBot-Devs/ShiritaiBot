@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 from shiritaibot.agent import AgentRuntime
 from shiritaibot.auth import Permissions
-from shiritaibot.config import Settings
+from shiritaibot.config import RiskPolicy, Settings
 from shiritaibot.core import Context, EventBus, ExternalEvent, now
 from shiritaibot.learn import OneLearnPlugin
 from shiritaibot.plugin_api import InteractionRequired, PluginContext, schema
@@ -21,7 +21,9 @@ def test_proactive_interaction_lifecycle(tmp_path):
         await store.open()
         cfg = SimpleNamespace(value=Settings())
         cfg.value.memory.inject = False
-        cfg.value.policy.proactive_default.preset = "full_access"
+        cfg.value.policy.proactive_default.risks = RiskPolicy(
+            safe="allow", normal="allow", sensitive="allow", dangerous="allow"
+        )
         notify = AsyncMock()
         pe = ProactiveEngine(cfg, store, None, notify, AsyncMock())
         registry = ToolRegistry(Permissions(cfg, store), store)

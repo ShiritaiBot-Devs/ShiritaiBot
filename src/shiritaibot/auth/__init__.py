@@ -207,11 +207,7 @@ class Permissions:
         profile = self.tool_policy(ctx)
         if tool.name in profile.tools:
             return profile.tools[tool.name]
-        if profile.preset == "full_access":
-            return "allow"
-        if profile.preset == "all_manual":
-            return "manual"
-        return "allow" if tool.safe else "auto" if profile.preset == "safe_auto" else "manual"
+        return profile.risks.for_risk(tool.risk)
 
     def decision(self, ctx: Context, tool: Tool) -> str:
         if not self.config.value.adapter_context_valid(ctx):
