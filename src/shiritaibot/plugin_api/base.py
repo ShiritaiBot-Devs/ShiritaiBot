@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from shiritaibot.core import Context, ExternalEvent, PublicError, Tool
+from shiritaibot.core import Context, ExternalEvent, InteractionRequired, PublicError, Tool
 from shiritaibot.core.logs import Logger, brief, get_logger
 from shiritaibot.core.process import run_process
 from shiritaibot.tools import TEXT, schema
@@ -34,12 +34,20 @@ class PluginContext:
     # Colored terminal + rolling file + WebUI feed, tagged with this plugin's id.
     logger: Logger = field(init=False)
 
+    _resolve_interaction: Callable[[str], Awaitable[None]] | None = field(default=None, init=False)
+
     def __post_init__(self) -> None:
         self.logger = get_logger(f"插件:{self.id}")
 
     async def emit_many(self, events: list[ExternalEvent]) -> list[str]:
         """Submit a batch through the same ingress and deduplication as emit."""
         return [await self.emit(event) for event in events]
+
+    async def resolve_interaction(self, key: str) -> None:
+        """Resume proactive tasks waiting on this plugin's key."""
+        if self._resolve_interaction is None:
+            raise RuntimeError("interaction resolver is not configured")
+        await self._resolve_interaction(f"{self.id}:{key}")
 
     def register_tool(
         self,
@@ -50,6 +58,7 @@ class PluginContext:
         risk: str,
         timeout: int = 60,
         chat: bool = False,
+        interactive: bool = False,
     ) -> None:
         if risk not in {"safe", "normal", "sensitive", "dangerous"}:
             raise ValueError("tool risk must be safe, normal, sensitive or dangerous")
@@ -63,6 +72,7 @@ class PluginContext:
                 chat=chat,
                 timeout=timeout,
                 plugin=self.id,
+                interactive=interactive,
             )
         )
 
@@ -129,6 +139,7 @@ __all__ = [
     "Context",
     "ExternalEvent",
     "PublicError",
+    "InteractionRequired",
     "Tool",
     "TEXT",
     "schema",

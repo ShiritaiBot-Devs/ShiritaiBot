@@ -107,6 +107,7 @@ class Tool:
     plugin: str = "builtin"
     # Runtime availability (for example a disabled feature); None means always.
     available: Callable[[Context], bool] | None = None
+    interactive: bool = False
 
     @property
     def safe(self) -> bool:
@@ -162,6 +163,16 @@ class EventBus:
             if queue.full():
                 queue.get_nowait()
             queue.put_nowait(event)
+
+
+class InteractionRequired(Exception):
+    """A plugin tool needs the owner to complete an interaction in private."""
+
+    def __init__(self, key: str, reason: str, ttl: int = 86400):
+        super().__init__(reason)
+        if not key.strip() or not reason.strip() or ttl < 0:
+            raise ValueError("interaction requires a key, reason and non-negative TTL")
+        self.key, self.reason, self.ttl = key, reason, ttl
 
 
 class PublicError(Exception):

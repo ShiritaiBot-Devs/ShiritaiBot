@@ -2,10 +2,33 @@ import asyncio
 import hashlib
 import json
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
-from shiritaibot.plugin_api.base import ExternalEvent, Plugin, PublicError, run_process, schema
+from shiritaibot.plugin_api.base import (
+    ExternalEvent,
+    InteractionRequired,
+    Plugin,
+    PublicError,
+    run_process,
+    schema,
+)
 
 from .protocol import LearnRequest, LearnResponse
+
+AUTH_FAILURES = {
+    "auth_required",
+    "login_required",
+    "session_expired",
+    "login_failed",
+    "not_configured",
+    "verification_required",
+    "verification_expired",
+    "verification_failed",
+    "verification_pending_elsewhere",
+    "captcha_required",
+    "manual_verification_required",
+}
 
 
 class OneLearnPlugin(Plugin):
@@ -77,7 +100,7 @@ class OneLearnPlugin(Plugin):
             else None
         )
 
-    async def invoke(self, operation, params, owner="owner"):
+    async def invoke(self, operation, params, owner="owner", *, background=False):
         async with self.lock:
             command = self.context.settings.get("command", [])
             if not command:
@@ -92,6 +115,7 @@ class OneLearnPlugin(Plugin):
                     "config": {
                         "username": self.context.settings.get("username", ""),
                         "password": password,
+                        **({"interactive": False} if background else {}),
                     },
                     "data_dir": str(self.context.data_dir),
                 }
@@ -113,27 +137,31 @@ class OneLearnPlugin(Plugin):
                 if result["exit_code"]:
                     detail = result["stderr"].strip()[-500:] or "无 stderr 输出"
                     raise PublicError(
-                        "网络学堂适配端进程异常退出"
-                        f"（exit code {result['exit_code']}）：{detail}"
+                        f"网络学堂适配端进程异常退出（exit code {result['exit_code']}）：{detail}"
                     ) from None
                 if result["truncated"]:
                     raise PublicError("网络学堂适配端输出超过 1MB 上限被截断") from None
                 raise PublicError("OneLearn 适配端没有返回有效 JSON") from None
 
     async def query(self, ctx, args):
-        return await self.invoke(
-            args["operation"], {k: v for k, v in args.items() if k != "operation"}
+        result = await self.invoke(
+            args["operation"],
+            {k: v for k, v in args.items() if k != "operation"},
+            background=ctx.background,
         )
+        if ctx.background and not result.get("ok") and result.get("status") in AUTH_FAILURES:
+            raise InteractionRequired("auth", "请在主人私聊中登录网络学堂并完成所需验证。")
+        return result
 
     async def sync_once(self):
-        result = await self.invoke("homework", {})
+        result = await self.invoke("homework", {}, background=True)
         if not result.get("ok"):
             self.context.logger.warning(f"网络学堂登录状态异常：{result.get('status', 'unknown')}")
             await self.context.emit(
                 ExternalEvent(
                     source="learn",
                     kind="learn.auth.expired",
-                    dedup_key="auth:" + result.get("status", "unknown"),
+                    dedup_key=f"{self.context.id}:auth:{datetime.now(ZoneInfo('Asia/Shanghai')).date()}",
                     title="网络学堂需要检查登录状态",
                     payload={"status": result.get("status", "unknown")},
                 )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from functools import partial
 from pathlib import Path
 
 from shiritaibot.adapters.onebot11 import AdapterHub
@@ -129,6 +130,9 @@ class Application:
         self.runtime.hooks = self.plugins.hooks
         self.adapters.runtime, self.adapters.permissions = self.runtime, self.permissions
         self.permissions.notify = self.notify_approval
+        self.proactive.notify_interaction = partial(self.adapters.notify_owner, handoff=False)
+        self.runtime.wait_for_interaction = self.proactive.wait_for_interaction
+        self.plugins.resolve_interaction = self.proactive.resolve_interaction
         self.proactive.runtime = self.runtime
         self.proactive.channels = self.plugins.notifiers
         self.plugins.get_event = self.proactive.get_event

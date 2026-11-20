@@ -143,7 +143,7 @@ class LLMResponse:
 
 @dataclass(frozen=True)
 class AgentResult:
-    status: str  # "completed" | "failed" | "cancelled"
+    status: str  # "completed" | "failed" | "cancelled" | "waiting"
     steps: int
     text: str  # Final reply (or error message) delivered to the session.
 

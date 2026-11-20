@@ -179,6 +179,13 @@ poll_seconds = 900
 
 `learn_query` 支持课程、公告、未交作业、课件和作业附件列表；`learn_download` 支持下载课件/附件到插件私有目录。没有作业提交功能。
 
+后台工具遇到需要主人处理的条件时，可以抛出 `InteractionRequired(key, reason, ttl=86400)`。
+宿主按插件 ID 隔离 key，并将对应主动事件保存为 `waiting`。同一等待期间只通知一次。
+主人私聊操作成功后，插件调用 `await self.context.resolve_interaction(key)`，所有仍有效的等待事件会自动重跑。
+超时的事件转为 `processed`。注册登录、验证码等工具时传入 `interactive=True`，后台任务会自动隐藏这些工具并拒绝直接调用。
+
+独立维护的清华插件可在仓库根目录执行 `git apply examples/plugins/thu-learn-interaction.patch` 接入此协议。
+
 轮询默认关闭。启用后首次成功同步只建立基线；后续按作业 ID 和内容指纹生成 created / updated 事件，交给 Proactive Engine。同步失败生成诊断事件。当前只轮询作业，不轮询公告和课件。
 
 `client.py` 由用户服务器的 AstrBot 网络学堂插件移植，保留学校相关登录、课程分页、附件归属检查和下载限额。该兼容客户端仍使用同步 requests，但运行在单独子进程中；主程序通过 asyncio 调用、设置时限并取消子进程，不会阻塞主事件循环。

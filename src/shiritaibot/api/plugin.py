@@ -63,6 +63,7 @@ class Context(PluginContext):
                 risk=tool.risk,
                 timeout=int(tool.timeout),
                 chat=tool.chat,
+                interactive=tool.interactive,
             )
 
     async def send_message(self, session: str, text: str) -> None:

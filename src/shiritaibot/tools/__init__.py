@@ -6,7 +6,7 @@ import json
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
-from shiritaibot.core import Context, PublicError, Tool, canonical, uid
+from shiritaibot.core import Context, InteractionRequired, PublicError, Tool, canonical, uid
 from shiritaibot.core.logs import describe_session, get_logger
 from shiritaibot.core.text import redact_secrets
 
@@ -51,7 +51,15 @@ class ToolRegistry:
             Draft202012Validator(tool.schema).validate(args)
             await self.permissions.check(ctx, tool, args)
             async with asyncio.timeout(tool.timeout):
-                value = await tool.handler(ctx, args)
+                try:
+                    value = await tool.handler(ctx, args)
+                except InteractionRequired as request:
+                    reason = redact_secrets(request.reason, self.secrets)
+                    if not ctx.background:
+                        raise PublicError(reason) from None
+                    raise InteractionRequired(
+                        f"{tool.plugin}:{request.key}", reason, request.ttl
+                    ) from None
             result = redact_secrets(canonical(value), self.secrets)
             if len(result) > 16000:
                 key = uid()
@@ -64,6 +72,8 @@ class ToolRegistry:
                 result = canonical({"preview": result[:12000], "artifact": key, "truncated": True})
             await self.store.activity("tool.completed", name, ctx.session)
             return result
+        except InteractionRequired:
+            raise
         except (ValidationError, json.JSONDecodeError):
             return canonical({"error": "工具参数不符合 JSON Schema"})
         except PublicError as exc:

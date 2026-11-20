@@ -1,0 +1,37 @@
+--- a/src/shiritaibot/plugin/thu_learn/main.py
++++ b/src/shiritaibot/plugin/thu_learn/main.py
+@@ -25,3 +25,4 @@
+             timeout=240,
++            interactive=True,
+         )
+         self.context.register_tool(
+@@ -34,3 +35,4 @@
+             timeout=240,
++            interactive=True,
+         )
+
+@@ -42,7 +44,13 @@
+     async def login(self, ctx, args):
+         self.require_private_owner(ctx)
+-        return await self.invoke("login", {"resend": args.get("resend_sms", False)})
++        return await self.authenticate("login", {"resend": args.get("resend_sms", False)})
+
+     async def verify_sms(self, ctx, args):
+         self.require_private_owner(ctx)
+-        return await self.invoke("verify_sms", {"code": args["code"]})
++        return await self.authenticate("verify_sms", {"code": args["code"]})
++
++    async def authenticate(self, operation, params):
++        result = await self.invoke(operation, params)
++        if result.get("ok") and result.get("data", {}).get("status") == "authenticated":
++            await self.context.resolve_interaction("auth")
++        return result
+--- a/src/shiritaibot/plugin/thu_learn/client.py
++++ b/src/shiritaibot/plugin/thu_learn/client.py
+@@ -201,4 +201,6 @@
+                 self.save()
+                 return {"status": "authenticated", "session_reused": True}
++        if self.config.get("interactive") is False:
++            raise LearnError("session_expired", "请在私聊中登录网络学堂。")
+         if time.time() < self.state.get("login_after", 0):
+             raise LearnError("cooldown", "登录失败后的冷却期尚未结束，请稍后再试。")

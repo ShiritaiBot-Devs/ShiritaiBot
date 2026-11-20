@@ -47,6 +47,7 @@ class PluginManager:
         self.source_root = Path(__file__).parent.parent
         # Proactive notification channels per plugin; the engine reads this mapping directly.
         self.notifiers: dict[str, list] = {}
+        self.resolve_interaction: Callable[[str], Awaitable[None]] | None = None
         self.get_event: Callable[[str], Awaitable[dict | None]] | None = None
         # Non-secret environment variables each plugin adds to shell / subagent processes.
         self.process_env: dict[str, dict[str, str]] = {}
@@ -421,6 +422,7 @@ class PluginManager:
                     context = PluginContext(
                         key, plugin_settings, data_dir, self.vault.resolve, self.emit
                     )
+                context._resolve_interaction = self.resolve_interaction
                 context.get_event = self.get_event
                 context.workspaces = self.home / "workspaces"
                 if isinstance(context, Context):

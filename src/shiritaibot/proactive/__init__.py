@@ -12,7 +12,16 @@ from zoneinfo import ZoneInfo
 from pydantic import Field, model_validator
 
 from shiritaibot.api.event import ProactiveOutcome
-from shiritaibot.core import Context, ExternalEvent, Model, RuntimePort, canonical, fingerprint, now
+from shiritaibot.core import (
+    Context,
+    ExternalEvent,
+    InteractionRequired,
+    Model,
+    RuntimePort,
+    canonical,
+    fingerprint,
+    now,
+)
 from shiritaibot.core.logs import brief, get_logger
 from shiritaibot.memory.judge import remember_question
 
@@ -242,6 +251,8 @@ class ProactiveEngine:
     def __init__(self, config, store, llm, notify, short_term):
         self.config, self.store, self.llm, self.notify = config, store, llm, notify
         self.short_term = short_term
+        self.notify_interaction = notify
+        self.interaction_lock = asyncio.Lock()
         self.runtime: RuntimePort | None = None
         # Long-term memory reads each handled event afterwards (memory/extract.py).
         self.memory_sink: Callable[[dict], Awaitable[None]] | None = None
@@ -531,6 +542,73 @@ class ProactiveEngine:
             },
         )
 
+    async def wait_for_interaction(
+        self, session: str, request: InteractionRequired, requested_at: float
+    ) -> None:
+        async with self.lock:
+            row = await self.get_event(session.removeprefix(PREPARE_SESSION))
+            if row is None or row["status"] != "running":
+                return
+            row.update(
+                status="waiting",
+                wait_key=request.key,
+                reason=request.reason,
+                wait_started=requested_at,
+                expires_at=now().timestamp() + request.ttl,
+            )
+            await self.store.put("event", row["id"], row)
+            await self.short_term.record(row["id"], "waiting", request.reason)
+            self.wake.set()
+
+    async def resolve_interaction(self, key: str) -> None:
+        # The owner may finish while a failing tool call is still returning.
+        # Persist the resolution so even that late waiter is retried after a restart.
+        async with self.interaction_lock:
+            await self.store.put("interaction", key, {"resolved_at": now().timestamp()})
+            await self.refresh_waiters(key)
+            self.wake.set()
+
+    async def refresh_waiters(self, resolved_key: str | None = None) -> None:
+        """Called under interaction_lock. Notify once per overlapping set of waiters."""
+        waits: dict[str, list[dict]] = {}
+        for row in await self.store.with_status("event", ("waiting",), limit=-1):
+            key = row["wait_key"]
+            if resolved_key is None or key == resolved_key:
+                waits.setdefault(key, []).append(row)
+        for key, rows in waits.items():
+            state = await self.store.get("interaction", key) or {}
+            stamp = now()
+            active = []
+            for row in rows:
+                if row["expires_at"] <= stamp.timestamp():
+                    row.update(
+                        status="processed",
+                        reason="等待主人处理已超期",
+                        processed_at=stamp.isoformat(),
+                    )
+                elif state.get("resolved_at", 0) >= row["wait_started"]:
+                    row.update(status="filtered", reason="主人已处理，重新运行")
+                else:
+                    active.append(row)
+                    continue
+                for field in ("wait_key", "wait_started", "expires_at"):
+                    row.pop(field)
+                await self.store.put("event", row["id"], row)
+                await self.short_term.record(row["id"], row["status"], row["reason"])
+            if active and resolved_key is None:
+                until = state.get("notified_until", 0)
+                if until <= stamp.timestamp():
+                    try:
+                        await self.notify_interaction(
+                            f"后台任务需要你在私聊中处理：{active[0]['reason']}"
+                        )
+                    except Exception as exc:
+                        log.warning(f"交互提醒发送失败，下轮重试（{type(exc).__name__}）")
+                        continue
+                expires = max(row["expires_at"] for row in active)
+                if expires != until:
+                    await self.store.put("interaction", key, {**state, "notified_until": expires})
+
     async def prepared(self, session: str, text: str) -> None:
         """Accept a full Proactive Turn result (retaining the old callback name)."""
         async with self.lock:
@@ -615,6 +693,8 @@ class ProactiveEngine:
         async with self.lock:
             for row in await self.store.with_status("event", ("pending",)):
                 await self.handle(row)
+            async with self.interaction_lock:
+                await self.refresh_waiters()
             filtered = await self.store.with_status("event", ("filtered",))
             for row in sorted(filtered, key=lambda r: r["decision"]["importance"], reverse=True):
                 await self.act(row)

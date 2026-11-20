@@ -9,14 +9,23 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
 from functools import partial
-from typing import Any
+from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
 
 from shiritaibot.agent.commands import command
 from shiritaibot.agent.context import ContextManager, context_chars
 from shiritaibot.api.event import AgentResult, LLMRequest, LLMResponse, Turn
 from shiritaibot.config import is_feishu_session
-from shiritaibot.core import Context, PublicError, canonical, current_reply, fingerprint, now, uid
+from shiritaibot.core import (
+    Context,
+    InteractionRequired,
+    PublicError,
+    canonical,
+    current_reply,
+    fingerprint,
+    now,
+    uid,
+)
 from shiritaibot.core.logs import Logger, brief, describe_session, get_logger
 from shiritaibot.meme.inject import meme_prompt
 from shiritaibot.memory.judge import recall_question
@@ -208,6 +217,7 @@ class SessionActor:
             self.current
             and not self.current.done()
             and self.context
+            and not ctx.background
             and ctx.actor == self.context.actor
             and ctx.memory_profile == self.context.memory_profile
             and ctx.mode == "agent"
@@ -349,6 +359,9 @@ class AgentRuntime:
     ):
         self.config, self.store, self.llm = config, store, llm
         self.registry, self.memory_for, self.deliver = registry, memory_for, deliver
+        self.wait_for_interaction: (
+            Callable[[str, InteractionRequired, float], Awaitable[None]] | None
+        ) = None
         # Turn -> P(the message relies on the past), from the router's decision model.
         self.recall_hints: dict[str, float] = {}
         self.short_term = short_term
@@ -816,9 +829,26 @@ class AgentRuntime:
                                 await hooks.call(
                                     "tool_call", info, function["name"], _arguments(shown)
                                 )
-                            output = await self.registry.execute(
-                                ctx, function["name"], function["arguments"]
-                            )
+                            requested_at = now().timestamp()
+                            try:
+                                output = await self.registry.execute(
+                                    ctx, function["name"], function["arguments"]
+                                )
+                            except InteractionRequired as interaction:
+                                if not proactive or self.wait_for_interaction is None:
+                                    raise PublicError(interaction.reason) from None
+                                await self.wait_for_interaction(
+                                    ctx.session, interaction, requested_at
+                                )
+                                body["status"] = "waiting"
+                                await append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": call["id"],
+                                        "content": canonical({"waiting": interaction.reason}),
+                                    }
+                                )
+                                return
                             if hooks is not None and hooks.has("tool_result"):
                                 await hooks.call(
                                     "tool_result",
