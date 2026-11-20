@@ -663,12 +663,6 @@ export const POLICY_FIELDS: FieldSpec[] = [
     min: 4000,
     max: 1000000,
   },
-  {
-    key: "denied_tools",
-    label: "禁用工具",
-    kind: "list",
-    help: "每行一个工具名，支持通配符，例如 shell 或 web_*。",
-  },
 ];
 
 export const MESSAGE_MERGE_FIELDS: FieldSpec[] = [

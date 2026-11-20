@@ -756,23 +756,6 @@
   overflow-wrap: anywhere;
 }
 
-.scope-row {
-  margin: 12px 0;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-
-.scope-row code {
-  display: block;
-  margin-bottom: 8px;
-  color: var(--accent);
-}
-
-.scope-row button {
-  margin-top: 8px;
-}
-
 @media (max-width: 1100px) {
   .config-workspace {
     grid-template-columns: 185px minmax(0, 1fr);

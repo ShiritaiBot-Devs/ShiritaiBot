@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import { LoadingBar } from "../components/LoadingBar";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -6,7 +7,6 @@ import { Pagination, PAGE_SIZE } from "../components/Pagination";
 import { EmptyState } from "../components/EmptyState";
 import { Field } from "../components/FieldForm";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
-import { ScopeToolsField } from "../components/ScopeToolsField";
 import { POLICY_FIELDS } from "../config/schema";
 import { CONFIG_SNAPSHOT_KEY } from "../hooks/useConfigDraft";
 import { adapterSessionId, sessionGroups, sessionRole } from "../lib/sessions";
@@ -40,7 +40,8 @@ type Target =
   | "group_default"
   | "proactive_default";
 
-function effectivePermission(tool: ToolInfo) {
+function effectivePermission(tool?: ToolInfo) {
+  if (!tool) return "不可用";
   if (tool.decision === "approve") return PERMISSIONS.manual;
   if (tool.decision === "deny" && tool.permission !== "deny") return "不可用";
   return PERMISSIONS[tool.decision as ToolPermission] ?? "未知";
@@ -58,7 +59,6 @@ export function ApprovalsPage({
   const [session, setSession] = useState(
     MAIN_SESSION.test(initialSession) ? initialSession : "web:owner",
   );
-  const [sessionInput, setSessionInput] = useState(session);
   const [search, setSearch] = useState("");
   const [riskFilter, setRiskFilter] = useState<ToolRisk | "all">("all");
   const [onlyCustom, setOnlyCustom] = useState(false);
@@ -202,10 +202,10 @@ export function ApprovalsPage({
     });
   }
 
-  function selectSession(id: string) {
-    setSession(id);
-    setSessionInput(id);
-    setToolPage(1);
+  function restoreSessionDefaults() {
+    const sessions = { ...policy.sessions };
+    delete sessions[session];
+    setConfig({ ...config, policy: { ...policy, sessions } });
   }
 
   async function resolve(id: string, allow: boolean) {
@@ -243,23 +243,34 @@ export function ApprovalsPage({
             </select>
           </label>
           {target === "session" && (
-            <label className="field">
-              会话
-              <select
-                value={session}
-                onChange={(event) => selectSession(event.target.value)}
-              >
-                {knownSessions.map((group) => (
-                  <optgroup key={group.key} label={group.label}>
-                    {group.items.map(({ id, title }) => (
-                      <option key={id} value={id}>
-                        {title}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </label>
+            <div className="field">
+              <label htmlFor="approval-session">会话</label>
+              <div className="inline">
+                <select
+                  id="approval-session"
+                  value={session}
+                  onChange={(event) => {
+                    setSession(event.target.value);
+                    setToolPage(1);
+                  }}
+                >
+                  {knownSessions.map((group) => (
+                    <optgroup key={group.key} label={group.label}>
+                      {group.items.map(({ id, title }) => (
+                        <option key={id} value={id}>
+                          {title}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                {policy.sessions[session] && (
+                  <button type="button" onClick={restoreSessionDefaults}>
+                    恢复默认配置
+                  </button>
+                )}
+              </div>
+            </div>
           )}
           {target !== "proactive_default" && (
             <label className="field">
@@ -348,59 +359,6 @@ export function ApprovalsPage({
             权限修改待保存
           </p>
         )}
-        {target === "session" && (
-          <>
-            <div className="actions">
-              {effective && (
-                <span className="muted">
-                  {effective.active === false
-                    ? "历史飞书会话 · 当前未启用"
-                    : `已生效：${effective.policy.mode === "agent" ? "Agent" : "Chat"} · ${
-                        effective.source === "session"
-                          ? "会话单独配置"
-                          : "继承默认策略"
-                      }`}
-                </span>
-              )}
-              {policy.sessions[session] && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = { ...policy.sessions };
-                    delete next[session];
-                    setConfig({
-                      ...config,
-                      policy: { ...policy, sessions: next },
-                    });
-                  }}
-                >
-                  恢复继承默认
-                </button>
-              )}
-            </div>
-            <details>
-              <summary>按会话 ID 查找</summary>
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const id = sessionInput.trim();
-                  if (MAIN_SESSION.test(id)) selectSession(id);
-                }}
-              >
-                <label className="field">
-                  Main 会话 ID
-                  <input
-                    value={sessionInput}
-                    pattern="(web|private|group):[^\s]{1,200}"
-                    required
-                    onChange={(event) => setSessionInput(event.target.value)}
-                  />
-                </label>
-                <button type="submit">选择会话</button>
-              </form>
-            </details>
-          </>
-        )}
         {target === "proactive_default" && (
           <p className="muted">
             仅新建的 Proactive Loop
@@ -454,77 +412,113 @@ export function ApprovalsPage({
             </select>
           </label>
           <label className="field risk-filter-toggle">
-            <span>
-              <input
-                type="checkbox"
-                checked={onlyCustom}
-                onChange={(event) => {
-                  setOnlyCustom(event.target.checked);
-                  setToolPage(1);
-                }}
-              />{" "}
-              仅看已自定义覆盖（{customToolCount}）
-            </span>
+            <input
+              type="checkbox"
+              checked={onlyCustom}
+              onChange={(event) => {
+                setOnlyCustom(event.target.checked);
+                setToolPage(1);
+              }}
+            />
+            <span>仅看已自定义覆盖（{customToolCount}）</span>
           </label>
         </div>
         <div className="tool-permission-list">
-          {visibleTools.map((name) => {
-            const tool = tools.find((tool) => tool.name === name);
-            const level = toolRisk(tool);
-            const fallbackPerm = inheritedPermission(profile, tool);
-            const permission = profile.tools[name] ?? fallbackPerm;
-            return (
-              <article className="tool-permission-row" key={name}>
-                <div>
-                  <strong>{name}</strong>
-                  <span className="badge">{tool?.plugin ?? "未加载"}</span>
-                  <span className="badge">
-                    {tool
-                      ? `${RISK_META[level].label} · ${level}`
-                      : "安全性未知"}
-                  </span>
-                  <p className="muted">
-                    {tool?.description ??
-                      "插件未加载，保留的权限配置将在工具重新注册后使用。"}
-                  </p>
-                  {target === "session" ? (
-                    effective && (
-                      <small className="muted">
-                        已生效：{tool ? effectivePermission(tool) : "不可用"}
-                      </small>
-                    )
-                  ) : (
-                    <small className="muted">
-                      {!tool || (mode === "chat" && !tool.chat)
-                        ? "此模式下不可用"
-                        : `配置权限：${PERMISSIONS[permission]}`}
-                    </small>
-                  )}
-                </div>
-                <label className="field">
-                  {name} 权限
-                  <select
-                    value={profile.tools[name] ?? "inherit"}
-                    onChange={(event) => {
-                      const next = { ...profile.tools };
-                      if (event.target.value === "inherit") delete next[name];
-                      else next[name] = event.target.value as ToolPermission;
-                      update({ ...profile, tools: next });
-                    }}
-                  >
-                    <option value="inherit">
-                      跟随{RISK_META[level].label} · {PERMISSIONS[fallbackPerm]}
-                    </option>
-                    {Object.entries(PERMISSIONS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </article>
-            );
-          })}
+          {visibleTools.length > 0 && (
+            <div className="table-scroll">
+              <table className="tool-table" aria-label="工具权限">
+                <colgroup>
+                  <col className="tool-name-col" />
+                  <col className="tool-risk-col" />
+                  <col />
+                  <col className="tool-permission-col" />
+                  <col className="tool-status-col" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th scope="col">工具名</th>
+                    <th scope="col">风险等级</th>
+                    <th scope="col">详细信息</th>
+                    <th scope="col">权限</th>
+                    <th scope="col">当前状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleTools.map((name) => {
+                    const tool = tools.find((tool) => tool.name === name);
+                    const level = toolRisk(tool);
+                    const fallbackPerm = inheritedPermission(profile, tool);
+                    const permission = profile.tools[name] ?? fallbackPerm;
+                    const description = tool
+                      ? tool.description?.trim() || "暂无工具说明。"
+                      : "插件未加载，保留的权限配置将在工具重新注册后使用。";
+                    return (
+                      <tr key={name}>
+                        <th scope="row">{name}</th>
+                        <td>
+                          <span
+                            className="tool-risk-pill"
+                            data-risk={tool ? level : "unknown"}
+                          >
+                            {tool ? RISK_META[level].label : "未知"}
+                          </span>
+                        </td>
+                        <td>
+                          <details className="tool-details">
+                            <summary>
+                              <span className="tool-description-preview">
+                                {description}
+                              </span>
+                              <span className="tool-description-source">
+                                来源插件 · {tool?.plugin ?? "未加载"}
+                              </span>
+                              <ChevronDown size={14} aria-hidden="true" />
+                            </summary>
+                            <p>{description}</p>
+                          </details>
+                        </td>
+                        <td>
+                          <select
+                            aria-label={`${name} 权限`}
+                            value={profile.tools[name] ?? "inherit"}
+                            onChange={(event) => {
+                              const next = { ...profile.tools };
+                              if (event.target.value === "inherit")
+                                delete next[name];
+                              else
+                                next[name] = event.target
+                                  .value as ToolPermission;
+                              update({ ...profile, tools: next });
+                            }}
+                          >
+                            <option value="inherit">
+                              跟随预设 · {PERMISSIONS[fallbackPerm]}
+                            </option>
+                            {Object.entries(PERMISSIONS).map(
+                              ([value, label]) => (
+                                <option key={value} value={value}>
+                                  {label}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                        </td>
+                        <td>
+                          {target === "session"
+                            ? effective
+                              ? effectivePermission(tool)
+                              : "—"
+                            : !tool || (mode === "chat" && !tool.chat)
+                              ? "此模式下不可用"
+                              : PERMISSIONS[permission]}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
           {(catalog.isPending || refreshingConfig) && (
             <LoadingBar label="读取工具权限" />
           )}
@@ -552,49 +546,20 @@ export function ApprovalsPage({
           超时或返回无效时均不执行。
         </p>
         <div className="field-grid">
-          {POLICY_FIELDS.filter((spec) => spec.key !== "denied_tools").map(
-            (spec) => (
-              <Field
-                key={spec.key}
-                spec={spec}
-                value={policy[spec.key as keyof typeof policy]}
-                onChange={(next) =>
-                  setConfig({
-                    ...config,
-                    policy: { ...policy, [spec.key]: next },
-                  })
-                }
-              />
-            ),
-          )}
+          {POLICY_FIELDS.map((spec) => (
+            <Field
+              key={spec.key}
+              spec={spec}
+              value={policy[spec.key as keyof typeof policy]}
+              onChange={(next) =>
+                setConfig({
+                  ...config,
+                  policy: { ...policy, [spec.key]: next },
+                })
+              }
+            />
+          ))}
         </div>
-        <details>
-          <summary>全局限制（兼容已有配置）</summary>
-          <p className="muted">
-            全局禁用与作用域白名单仍是额外限制；命中时会阻止工具调用。
-          </p>
-          {POLICY_FIELDS.filter((spec) => spec.key === "denied_tools").map(
-            (spec) => (
-              <Field
-                key={spec.key}
-                spec={spec}
-                value={policy.denied_tools}
-                onChange={(next) =>
-                  setConfig({
-                    ...config,
-                    policy: { ...policy, denied_tools: next as string[] },
-                  })
-                }
-              />
-            ),
-          )}
-          <ScopeToolsField
-            value={policy.scope_tools}
-            onChange={(scope_tools) =>
-              setConfig({ ...config, policy: { ...policy, scope_tools } })
-            }
-          />
-        </details>
       </section>
       <section className="panel">
         <h2>待人工审批 · {approvals.data?.total ?? 0}</h2>
