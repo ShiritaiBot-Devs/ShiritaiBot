@@ -226,6 +226,119 @@
   line-height: 1.8;
 }
 
+.model-performance {
+  margin-bottom: 20px;
+  container-type: inline-size;
+}
+
+.performance-head,
+.performance-card-head,
+.performance-card h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.performance-head,
+.performance-card-head {
+  justify-content: space-between;
+}
+
+.performance-head {
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.performance-head h3,
+.performance-card h4 {
+  margin: 0;
+}
+.performance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.performance-card {
+  margin: 0;
+  padding: 16px;
+}
+.performance-card-head {
+  margin-bottom: 12px;
+}
+.performance-card h4 {
+  font-size: 14px;
+}
+.performance-card-head > span,
+.performance-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+.performance-empty {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 316/154;
+}
+.performance-plot {
+  position: relative;
+}
+.performance-plot svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+.performance-plot svg:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.performance-plot text {
+  font-size: 10px;
+  fill: var(--muted);
+}
+.performance-gridline {
+  stroke: var(--border);
+  stroke-dasharray: 3 4;
+}
+.performance-cursor {
+  stroke: var(--muted);
+  stroke-dasharray: 3 3;
+}
+.performance-tooltip {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 4px;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 11px;
+  pointer-events: none;
+}
+.performance-tooltip span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow-wrap: anywhere;
+}
+.performance-tooltip i {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 2px;
+}
+.performance-tooltip b {
+  margin-left: auto;
+  white-space: nowrap;
+}
+@container (max-width: 740px) {
+  .performance-grid {
+    grid-template-columns: 1fr;
+  }
+  .performance-head .chart-legend {
+    justify-content: flex-start;
+  }
+}
+
 /* Chat */
 
 .chat-toolbar {

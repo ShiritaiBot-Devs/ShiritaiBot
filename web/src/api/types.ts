@@ -533,6 +533,13 @@ export interface TokenBucket {
   failed_turns: number;
   // Total tokens per model in this hour.
   models: Record<string, number>;
+  model_performance?: Record<string, ModelPerformance>;
+}
+
+export interface ModelPerformance {
+  error_rate: number;
+  tps: number | null;
+  ttft_ms: number | null;
 }
 
 export interface ExchangeRate {
@@ -547,7 +554,7 @@ export interface Statistics {
   buckets: TokenBucket[];
   start: string;
   end: string;
-  totals: Omit<TokenBucket, "hour" | "models">;
+  totals: Omit<TokenBucket, "hour" | "models" | "model_performance">;
   models: ModelUsage[];
   // Estimated spend of priced models, summed per currency.
   costs: Partial<Record<Currency, number>>;

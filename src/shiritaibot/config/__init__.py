@@ -130,8 +130,8 @@ class ModelConfig(Instance):
         if not isinstance(value, dict):
             raise ValueError("custom request parameters must be a JSON object")
         json.dumps(value, allow_nan=False)
-        if "stream" in value and value["stream"] is not False:
-            raise ValueError("streaming responses are not supported")
+        if "stream" in value and not isinstance(value["stream"], bool):
+            raise ValueError("stream must be a boolean")
         if value.keys() & {
             "model",
             "messages",
@@ -149,6 +149,8 @@ class ModelConfig(Instance):
 
     @model_validator(mode="after")
     def context_valid(self) -> ModelConfig:
+        if self.kind == "embedding" and self.extra_body.get("stream"):
+            raise ValueError("embedding requests do not support streaming")
         if self.max_context and self.max_context <= self.max_output:
             raise ValueError("max_context must exceed max_output, or be 0 for unspecified")
         return self

@@ -1,11 +1,43 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from shiritaibot.core import now
 
 TOKEN_FIELDS = ("input_tokens", "output_tokens", "cached_tokens", "total_tokens")
+
+
+@dataclass
+class ModelPerformance:
+    calls: int = 0
+    failures: int = 0
+    timed_calls: int = 0
+    ttft_ms: float = 0
+    generation_tokens: int = 0
+    generation_seconds: float = 0
+
+    def add(self, data: dict, output_tokens: int):
+        self.calls += 1
+        if data["status"] == "failed":
+            self.failures += 1
+            return
+        if data.get("ttft_ms") is not None:
+            self.timed_calls += 1
+            self.ttft_ms += data["ttft_ms"]
+        if data.get("generation_seconds", 0) > 0 and output_tokens > 1:
+            self.generation_seconds += data["generation_seconds"]
+            self.generation_tokens += output_tokens - 1
+
+    def metrics(self):
+        return {
+            "error_rate": self.failures / self.calls,
+            "ttft_ms": self.ttft_ms / self.timed_calls if self.timed_calls else None,
+            "tps": self.generation_tokens / self.generation_seconds
+            if self.generation_seconds
+            else None,
+        }
 
 
 def tokens(usage: dict, protocol: str = "") -> dict:
@@ -76,6 +108,7 @@ async def statistics(store, hours: int, end: datetime | None = None, models=()):
             "hour": datetime.fromtimestamp(hour * 3600, timezone.utc).isoformat(),
             **dict.fromkeys(fields, 0),
             "models": {},
+            "model_performance": {},
         }
         for hour in range(first, last + 1)
     ]
@@ -96,12 +129,20 @@ async def statistics(store, hours: int, end: datetime | None = None, models=()):
             )
             entry["llm_calls"] += 1
             counted = tokens(data.get("usage") or {}, data.get("protocol", ""))
+            # Legacy success-only records cannot establish the historical error rate.
+            if data.get("status") in {"ok", "failed"}:
+                performance = bucket["model_performance"].setdefault(name, ModelPerformance())
+                performance.add(data, counted["output_tokens"])
             for key, value in counted.items():
                 bucket[key] += value
                 entry[key] += value
             bucket["models"][name] = bucket["models"].get(name, 0) + counted["total_tokens"]
         elif data.get("status") == "failed":
             bucket["failed_turns"] += 1
+    for bucket in buckets:
+        bucket["model_performance"] = {
+            name: performance.metrics() for name, performance in bucket["model_performance"].items()
+        }
     rows = await store.query(
         "SELECT data,created FROM messages WHERE turn!='handoff' AND created>=? AND created<=?",
         (start, end_stamp),

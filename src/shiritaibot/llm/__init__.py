@@ -13,6 +13,7 @@ import httpx
 from shiritaibot.core import PublicError, Reply, canonical, uid
 from shiritaibot.core.logs import get_logger
 from shiritaibot.llm.media import ImageResolver
+from shiritaibot.llm.streaming import collect_stream
 
 log = get_logger("模型")
 
@@ -281,6 +282,8 @@ def request_payload(
 
 
 def parse_reply(protocol: str, model: str, data: dict) -> Reply:
+    if data.get("error") or data.get("status") in ("failed", "cancelled"):
+        raise ValueError("provider returned an unsuccessful completion")
     key = f"{protocol}:{model}"
     calls, text = [], ""
     if protocol == "chat_completions":
@@ -376,12 +379,31 @@ class ProviderManager:
     async def close(self) -> None:
         await self.client.aclose()
 
-    async def _request(self, provider, method: str, url: str, **kwargs) -> httpx.Response:
+    async def _request(
+        self, provider, method: str, url: str, *, stream_protocol=None, **kwargs
+    ) -> httpx.Response:
         async def send(client):
             for attempt in range(provider.max_retries + 1):
                 delay = min(20, 2**attempt)
                 try:
-                    response = await client.request(method, url, timeout=provider.timeout, **kwargs)
+                    started = time.monotonic()
+                    async with client.stream(
+                        method, url, timeout=provider.timeout, **kwargs
+                    ) as response:
+                        if (
+                            stream_protocol
+                            and response.is_success
+                            and "text/event-stream"
+                            in response.headers.get("content-type", "").lower()
+                        ):
+                            data, timing = await collect_stream(stream_protocol, response, started)
+                            return httpx.Response(
+                                response.status_code,
+                                json=data,
+                                request=response.request,
+                                extensions={"model_timing": timing},
+                            )
+                        await response.aread()
                 except httpx.TimeoutException:
                     if attempt == provider.max_retries:
                         raise
@@ -396,7 +418,6 @@ class ProviderManager:
                         delay = min(20, max(0, float(response.headers.get("retry-after", delay))))
                     except ValueError:
                         pass
-                    await response.aclose()
                 await asyncio.sleep(delay)
             raise AssertionError("unreachable retry state")
 
@@ -407,6 +428,60 @@ class ProviderManager:
             ) as client:
                 return await send(client)
         return await send(self.client)
+
+    async def _generate(self, provider, path, body, headers, stream):
+        base = provider.base_url.rstrip("/")
+        if provider.protocol == "gemini":
+            body.pop("stream", None)  # Gemini selects the mode in the URL.
+        if stream:
+            protocol = provider.protocol
+            if protocol == "gemini":
+                stream_path = (
+                    path.replace(":generateContent", ":streamGenerateContent") + "?alt=sse"
+                )
+                stream_body = body
+            else:
+                stream_path = path
+                stream_body = {**body, "stream": True}
+                if protocol == "chat_completions":
+                    stream_body["stream_options"] = {
+                        "include_usage": True,
+                        **(body.get("stream_options") or {}),
+                    }
+            try:
+                return await self._request(
+                    provider,
+                    "POST",
+                    base + stream_path,
+                    json=stream_body,
+                    headers=headers,
+                    stream_protocol=protocol,
+                )
+            except httpx.HTTPStatusError as exc:
+                # Compatibility gateways may implement only the buffered endpoint.
+                status = exc.response.status_code
+                if not (
+                    (status in {400, 422, 501} and "stream" in exc.response.text.lower())
+                    or (protocol == "gemini" and status in {404, 405, 501})
+                ):
+                    raise
+                if protocol != "gemini":
+                    body = {**body, "stream": False}
+                    body.pop("stream_options", None)
+        return await self._request(provider, "POST", base + path, json=body, headers=headers)
+
+    async def _record_call(self, model, protocol, status, usage=None, timing=None):
+        await self.store.put(
+            "usage",
+            uid(),
+            {
+                "model": model.id,
+                "protocol": protocol,
+                "status": status,
+                "usage": usage or {},
+                **(timing or {}),
+            },
+        )
 
     async def discover(self, provider) -> list[dict]:
         ref = provider.api_key
@@ -546,18 +621,16 @@ class ProviderManager:
             started = time.monotonic()
             try:
                 async with self.semaphore:
-                    response = await self._request(
-                        provider,
-                        "POST",
-                        provider.base_url.rstrip("/") + path,
-                        json=body,
-                        headers=headers,
+                    response = await self._generate(
+                        provider, path, body, headers, model.extra_body.get("stream") is not False
                     )
                 reply = parse_reply(provider.protocol, model.model, response.json())
-                await self.store.put(
-                    "usage",
-                    uid(),
-                    {"model": model.id, "protocol": provider.protocol, "usage": reply.usage},
+                await self._record_call(
+                    model,
+                    provider.protocol,
+                    "ok",
+                    reply.usage,
+                    response.extensions.get("model_timing"),
                 )
                 log.debug(
                     f"{model.id} 应答，用时 {time.monotonic() - started:.1f}s"
@@ -565,7 +638,15 @@ class ProviderManager:
                     route,
                 )
                 return reply
-            except (httpx.HTTPError, ValueError, KeyError, IndexError) as exc:
+            except (
+                httpx.HTTPError,
+                ValueError,
+                KeyError,
+                IndexError,
+                TypeError,
+                AttributeError,
+            ) as exc:
+                await self._record_call(model, provider.protocol, "failed")
                 log.warning(
                     f"{model.id} 调用失败（{failure(provider.id, exc)}），尝试下一个候选模型",
                     route,
@@ -650,15 +731,12 @@ class ProviderManager:
             ):
                 raise ValueError("embedding count or dimensions mismatch")
         except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+            await self._record_call(model, "embedding", "failed")
             log.warning(f"Embedding 模型 {model.id} 调用失败（{failure(provider.id, exc)}）", route)
             await self.store.activity("provider.failed", failure(provider.id, exc))
             self.record_failure(provider.id)
             raise PublicError("Embedding 调用失败，请检查 Provider 地址、凭据与模型名称") from None
-        await self.store.put(
-            "usage",
-            uid(),
-            {"model": model.id, "protocol": "embedding", "usage": data.get("usage", {})},
-        )
+        await self._record_call(model, "embedding", "ok", data.get("usage"))
         return self.embedding_key(model), vectors
 
     async def decide(
@@ -696,13 +774,10 @@ class ProviderManager:
                 answers = data["answers"]
                 if not isinstance(answers, dict) or answers.keys() != questions.keys():
                     raise ValueError("incomplete answers")
-                await self.store.put(
-                    "usage",
-                    uid(),
-                    {"model": model.id, "protocol": "systemone", "usage": data.get("usage", {})},
-                )
+                await self._record_call(model, "systemone", "ok", data.get("usage"))
                 return answers
             except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+                await self._record_call(model, "systemone", "failed")
                 log.warning(f"决策模型 {model.id} 调用失败（{failure(provider.id, exc)}）", route)
                 await self.store.activity("provider.failed", failure(provider.id, exc))
                 self.record_failure(provider.id)

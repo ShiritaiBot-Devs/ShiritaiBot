@@ -166,7 +166,7 @@ export const MODEL_FIELDS: FieldSpec[] = [
     kind: "json",
     full: true,
     placeholder: '{"temperature": 0.7}',
-    help: '按接口原生格式填写 JSON 对象，嵌套对象递归合并；Gemini 示例：{"generationConfig":{"temperature":0.7}}。参数覆盖默认值，但不能替换模型、对话或工具定义，也不能开启流式响应。',
+    help: '按接口原生格式填写 JSON 对象，嵌套对象递归合并。Gemini 示例 {"generationConfig":{"temperature":0.7}}。文本模型默认流式采集性能指标，设置 {"stream":false} 可关闭。模型、对话和工具定义由系统提供。',
   },
   ...PRICE_FIELDS,
 ];

@@ -1,3 +1,5 @@
+import { ModelPerformanceCharts } from "../components/ModelPerformanceCharts";
+import { smoothLine, MODEL_COLORS } from "../lib/charts";
 import { LoadingBar } from "../components/LoadingBar";
 import { MetricIcon } from "../components/MetricIcon";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
@@ -144,17 +146,6 @@ interface Series {
   value: (row: TokenBucket) => number;
 }
 
-// Validated categorical order (dataviz palette); a 9th model folds into "其他".
-const MODEL_COLORS = [
-  "#2a78d6",
-  "#eb6834",
-  "#1baf7a",
-  "#eda100",
-  "#e87ba4",
-  "#008300",
-  "#6250d6",
-  "#e34948",
-];
 const OTHER_COLOR = "#9aa3b2";
 
 /**
@@ -192,30 +183,8 @@ function modelSeries(rows: TokenBucket[], configured: string[]): Series[] {
   return series;
 }
 
-function field(key: keyof Omit<TokenBucket, "hour" | "models">) {
+function field(key: keyof Statistics["totals"]) {
   return (row: TokenBucket) => row[key];
-}
-
-/** Monotone cubic interpolation keeps curves within each pair of hourly values. */
-function smoothLine(points: { x: number; y: number }[]): string {
-  if (!points.length) return "";
-  const slopes = points.slice(1).map((point, index) => {
-    const previous = points[index];
-    return (point.y - previous.y) / (point.x - previous.x);
-  });
-  const tangents = points.map((_, index) => {
-    if (index === 0) return slopes[0] ?? 0;
-    if (index === points.length - 1) return slopes[index - 1];
-    const left = slopes[index - 1];
-    const right = slopes[index];
-    return left * right <= 0 ? 0 : (2 * left * right) / (left + right);
-  });
-  return points.reduce((path, point, index) => {
-    if (index === 0) return `M ${point.x},${point.y}`;
-    const previous = points[index - 1];
-    const third = (point.x - previous.x) / 3;
-    return `${path} C ${previous.x + third},${previous.y + tangents[index - 1] * third} ${point.x - third},${point.y - tangents[index] * third} ${point.x},${point.y}`;
-  }, "");
 }
 
 function HourlyChart({
@@ -663,6 +632,7 @@ export function Dashboard({ client }: { client: ApiClient }) {
               </div>
             ))}
           </div>
+          <ModelPerformanceCharts rows={data.buckets} configured={configured} />
           <HourlyChart
             title="Token 用量（按模型）"
             type="line"
