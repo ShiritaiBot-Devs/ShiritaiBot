@@ -100,7 +100,7 @@ async def run_process(
         *argv,
         cwd=cwd,
         env=env,
-        stdin=asyncio.subprocess.PIPE,
+        stdin=asyncio.subprocess.PIPE if stdin else asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         creationflags=0x00000200 if os.name == "nt" else 0,
@@ -135,7 +135,8 @@ async def run_process(
                     read(proc.stdout, line_splitter(on_line) if on_line else None)
                 )
                 stderr = group.create_task(read(proc.stderr))
-                group.create_task(feed())
+                if stdin:
+                    group.create_task(feed())
                 await proc.wait()
         return {
             "exit_code": proc.returncode,
