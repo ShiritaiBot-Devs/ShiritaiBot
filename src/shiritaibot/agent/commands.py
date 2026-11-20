@@ -71,7 +71,7 @@ async def command(runtime, ctx, text):
             providers = {p.id for p in cfg.providers if p.enabled}
             answer = "可用模型：\n" + (
                 "\n".join(
-                    f"{m.id} · {m.provider} / {m.model}"
+                    f"{m.display_name}（标识：{m.id}）"
                     for m in cfg.models
                     if m.enabled and m.provider in providers
                 )
@@ -115,16 +115,21 @@ async def command(runtime, ctx, text):
                 )
             selected = await runtime.store.get("session_model", ctx.session)
             model = selected.get("model") if selected else None
+            model_names = {m.id: m.display_name for m in cfg.models}
+
+            def display(ref):
+                return model_names.get(ref, f"未知提供商/{ref}")
+
             if model:
-                models = model
+                models = display(model)
             elif ctx.mode != "agent":
-                models = " → ".join(cfg.routes.get("chat", [])) or "未配置"
+                models = " → ".join(map(display, cfg.routes.get("chat", []))) or "未配置"
             else:
-                models = " → ".join(cfg.routes.get("agent", [])) or "未配置"
+                models = " → ".join(map(display, cfg.routes.get("agent", []))) or "未配置"
                 if cfg.agent_split and cfg.routes.get("agent_chat"):
                     models = (
                         f"Work {models}；Chat "
-                        + " → ".join(cfg.routes["agent_chat"])
+                        + " → ".join(map(display, cfg.routes["agent_chat"]))
                         + "（按消息自动分流）"
                     )
             answer = f"会话：{ctx.session}\n模式：{ctx.mode}\n模型：{models}"

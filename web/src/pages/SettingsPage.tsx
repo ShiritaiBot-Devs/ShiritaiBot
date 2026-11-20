@@ -1,4 +1,5 @@
 import { LoadingBar } from "../components/LoadingBar";
+import { ModelOptions } from "../components/ModelOptions";
 import { useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import type { ApiClient } from "../api/client";
@@ -213,20 +214,16 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
                 }
               >
                 <option value="">使用 light 路由</option>
-                {config.models
-                  .filter(
+                <ModelOptions
+                  models={config.models.filter(
                     (item) =>
                       item.enabled &&
                       config.providers.some(
                         (provider) =>
                           provider.id === item.provider && provider.enabled,
                       ),
-                  )
-                  .map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.id}
-                    </option>
-                  ))}
+                  )}
+                />
               </select>
             </label>
           </div>

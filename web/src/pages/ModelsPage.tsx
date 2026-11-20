@@ -17,6 +17,8 @@ import type {
 } from "../api/types";
 import { Field, FieldForm, jsonObjectError } from "../components/FieldForm";
 import { ModelTestButton } from "../components/ModelTestButton";
+import { ModelOptions } from "../components/ModelOptions";
+import { configuredModelName, modelName, modelNameById } from "../lib/models";
 import { EmptyState } from "../components/EmptyState";
 import { ProviderPresetMenu } from "../components/ProviderPresetMenu";
 import {
@@ -281,7 +283,8 @@ export function ModelsPage({
       setRemote({ source: JSON.stringify(target), rows });
     }
     const found = rows.find((row) => row.id === model.model);
-    if (!found) throw new Error(`提供商的模型列表中没有 ${model.model}`);
+    if (!found)
+      throw new Error(`提供商的模型列表中没有 ${configuredModelName(model)}`);
     const price = found.pricing;
     if (!price)
       throw new Error("提供商没有公开此模型的单价，请按官网价格手动填写");
@@ -391,7 +394,7 @@ export function ModelsPage({
                 <p className="muted" aria-label="记忆向量状态">
                   {status.data ? (
                     status.data.model ? (
-                      `当前向量模型 ${status.data.model}：已索引 ${status.data.indexed} 条，待计算 ${status.data.pending} 条`
+                      `当前向量模型 ${status.data.model.replace(":", "/")}：已索引 ${status.data.indexed} 条，待计算 ${status.data.pending} 条`
                     ) : (
                       `未配置 Embedding：${status.data.pending} 条记忆只用名称链接和关键词检索`
                     )
@@ -440,11 +443,13 @@ export function ModelsPage({
                       {route.map((id, position) => (
                         <div className="inline" key={id + position}>
                           <span>
-                            {position + 1}. {id}
+                            {position + 1}. {modelNameById(config.models, id)}
                           </span>
                           <button
                             type="button"
-                            aria-label={"上移 " + id}
+                            aria-label={
+                              "上移 " + modelNameById(config.models, id)
+                            }
                             disabled={position === 0}
                             onClick={() => {
                               const next = [...route];
@@ -462,7 +467,9 @@ export function ModelsPage({
                           </button>
                           <button
                             type="button"
-                            aria-label={"移除路由 " + id}
+                            aria-label={
+                              "移除路由 " + modelNameById(config.models, id)
+                            }
                             onClick={() =>
                               setConfig({
                                 ...config,
@@ -494,12 +501,13 @@ export function ModelsPage({
                         }}
                       >
                         <option value="">＋ 添加模型</option>
-                        {config.models
-                          .filter((model) => !route.includes(model.id))
-                          .filter((model) => routeAccepts(key, model))
-                          .map((model) => (
-                            <option key={model.id}>{model.id}</option>
-                          ))}
+                        <ModelOptions
+                          models={config.models.filter(
+                            (model) =>
+                              !route.includes(model.id) &&
+                              routeAccepts(key, model),
+                          )}
+                        />
                       </select>
                       {key === "vision" && (
                         <FieldForm
@@ -615,7 +623,7 @@ export function ModelsPage({
                     <div className="remote-list">
                       {results
                         .filter((row) =>
-                          (row.id + " " + row.name)
+                          (modelName(provider.id, row.id) + " " + row.name)
                             .toLowerCase()
                             .includes(query.toLowerCase()),
                         )
@@ -628,7 +636,9 @@ export function ModelsPage({
                           return (
                             <div className="list-row" key={row.id}>
                               <div>
-                                <strong>{row.id}</strong>
+                                <strong>
+                                  {modelName(provider.id, row.id)}
+                                </strong>
                                 <small>
                                   {row.name !== row.id ? row.name : ""}
                                   {row.pricing &&
@@ -638,7 +648,9 @@ export function ModelsPage({
                               <button
                                 type="button"
                                 disabled={added}
-                                aria-label={"添加模型 " + row.id}
+                                aria-label={
+                                  "添加模型 " + modelName(provider.id, row.id)
+                                }
                                 onClick={() => addModel(row)}
                               >
                                 {added ? (
@@ -663,10 +675,10 @@ export function ModelsPage({
                   modelFits(model, category) ? (
                     <div className="model-card" key={position}>
                       <div className="panel-head">
-                        <h3>{model.id}</h3>
+                        <h3>{configuredModelName(model)}</h3>
                         <button
                           type="button"
-                          aria-label={"删除模型 " + model.id}
+                          aria-label={"删除模型 " + configuredModelName(model)}
                           onClick={() =>
                             setConfig({
                               ...config,

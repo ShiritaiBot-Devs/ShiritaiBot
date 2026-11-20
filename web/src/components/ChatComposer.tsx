@@ -4,6 +4,7 @@ import { Send, Square, X } from "lucide-react";
 import type { ApiClient } from "../api/client";
 import type { Action } from "../pages/common";
 import { ComposerSelect } from "./ComposerSelect";
+import { configuredModelName, groupModels, modelNameById } from "../lib/models";
 import {
   composerHeight,
   draftKey,
@@ -15,7 +16,6 @@ import {
   stepIndex,
   writeSendMode,
   writeValue,
-  type ComposerOption,
   type Preset,
   type SendMode,
 } from "../lib/composer";
@@ -106,15 +106,17 @@ export function ChatComposer({
   const models = (config.data?.models ?? []).filter(
     (row) => row.enabled && row.kind === "text" && providers.has(row.provider),
   );
-  const modelOptions: ComposerOption<string>[] = [
-    { value: "", label: "默认路由", hint: "按配置的模型路由自动选择" },
-    ...models.map((row) => ({
+  const modelGroups = [...groupModels(models)].map(([provider, group]) => ({
+    label: provider,
+    options: group.map((row) => ({
       value: row.id,
-      label: row.id,
-      hint: `${row.provider} / ${row.model}`,
+      label: configuredModelName(row),
+      hint: row.id,
     })),
-  ];
-  const modelLabel = model || "模型";
+  }));
+  const modelLabel = model
+    ? modelNameById(config.data?.models ?? [], model)
+    : "模型";
   const currentPreset = (preset ||
     tools.data?.policy?.preset ||
     "safe_manual") as Preset;
@@ -284,7 +286,14 @@ export function ChatComposer({
             label="模型"
             value={model}
             display={modelLabel}
-            options={modelOptions}
+            options={[
+              {
+                value: "",
+                label: "默认路由",
+                hint: "按配置的模型路由自动选择",
+              },
+            ]}
+            groups={modelGroups}
             onSelect={chooseModel}
           />
           <ComposerSelect

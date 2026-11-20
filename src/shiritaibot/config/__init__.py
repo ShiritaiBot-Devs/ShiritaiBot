@@ -121,6 +121,10 @@ class ModelConfig(Instance):
     price_cached: float = Field(default=0, ge=0, le=100000)
     price_output: float = Field(default=0, ge=0, le=100000)
 
+    @property
+    def display_name(self) -> str:
+        return f"{self.provider}/{self.model or self.id}"
+
     @field_validator("extra_body", mode="before")
     @classmethod
     def parse_extra_body(cls, value):

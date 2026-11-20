@@ -113,6 +113,8 @@
 
 .chart-legend {
   display: flex;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 14px;
@@ -134,6 +136,7 @@
 }
 
 .chart-legend .chart-legend-button {
+  max-width: 100%;
   gap: 6px;
   min-height: 28px;
   padding: 3px 6px;
@@ -214,6 +217,7 @@
 
 .chart-detail {
   display: flex;
+  overflow-wrap: anywhere;
   flex-wrap: wrap;
   gap: 18px;
   min-height: 20px;
@@ -536,6 +540,7 @@
 
 .composer-select {
   position: relative;
+  max-width: 100%;
 }
 
 .provider-preset-picker {
@@ -584,6 +589,7 @@
 }
 
 .composer-chip {
+  max-width: 100%;
   min-height: 26px;
   padding: 2px 7px;
   border: 0;
@@ -591,6 +597,12 @@
   background: transparent;
   color: var(--muted);
   font-size: 12px;
+}
+
+.composer-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composer-chip:hover:not(:disabled),
@@ -607,6 +619,9 @@
   z-index: 20;
   min-width: 220px;
   max-width: 300px;
+  max-height: min(420px, 50dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   margin: 0;
   padding: 5px;
   list-style: none;
@@ -614,6 +629,25 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow);
+}
+
+.composer-popover:has(.composer-group-label) {
+  width: min(320px, calc(100vw - 64px));
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.composer-popover ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.composer-group-label {
+  padding: 9px 9px 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
 }
 
 .composer-popover button {

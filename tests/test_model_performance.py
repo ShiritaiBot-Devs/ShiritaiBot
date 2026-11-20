@@ -68,6 +68,8 @@ def test_route_failure_and_buffered_fallback(tmp_path):
                     },
                 )
             data = await statistics(store, 2)
+            labels = {row["model"]: row.get("model_label") for row in data["models"]}
+            assert labels == {"a": "p/a", "b": "p/b", "legacy": None}
             measured = next(
                 b["model_performance"] for b in data["buckets"] if "a" in b["model_performance"]
             )

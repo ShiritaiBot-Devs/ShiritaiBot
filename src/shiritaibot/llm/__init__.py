@@ -476,6 +476,7 @@ class ProviderManager:
             uid(),
             {
                 "model": model.id,
+                "model_label": model.display_name,
                 "protocol": protocol,
                 "status": status,
                 "usage": usage or {},
@@ -606,8 +607,10 @@ class ProviderManager:
             )
             if model.max_context and estimated_tokens(body) + reserved_output > model.max_context:
                 context_skipped = True
-                log.warning(f"{model.id} 的估算上下文超过上限 {model.max_context}，跳过", route)
-                await self.store.activity("provider.context_limit", model.id)
+                log.warning(
+                    f"{model.display_name} 的估算上下文超过上限 {model.max_context}，跳过", route
+                )
+                await self.store.activity("provider.context_limit", model.display_name)
                 continue
             ref = provider.api_key
             token = await self.vault.resolve(ref) if ref.startswith(("env:", "secret:")) else ref
@@ -633,7 +636,7 @@ class ProviderManager:
                     response.extensions.get("model_timing"),
                 )
                 log.debug(
-                    f"{model.id} 应答，用时 {time.monotonic() - started:.1f}s"
+                    f"{model.display_name} 应答，用时 {time.monotonic() - started:.1f}s"
                     + (f"，请求调用 {len(reply.calls)} 个工具" if reply.calls else ""),
                     route,
                 )
@@ -648,7 +651,7 @@ class ProviderManager:
             ) as exc:
                 await self._record_call(model, provider.protocol, "failed")
                 log.warning(
-                    f"{model.id} 调用失败（{failure(provider.id, exc)}），尝试下一个候选模型",
+                    f"{model.display_name} 调用失败（{failure(provider.id, exc)}），尝试下一个候选模型",
                     route,
                 )
                 await self.store.activity("provider.failed", failure(provider.id, exc))
@@ -732,7 +735,10 @@ class ProviderManager:
                 raise ValueError("embedding count or dimensions mismatch")
         except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
             await self._record_call(model, "embedding", "failed")
-            log.warning(f"Embedding 模型 {model.id} 调用失败（{failure(provider.id, exc)}）", route)
+            log.warning(
+                f"Embedding 模型 {model.display_name} 调用失败（{failure(provider.id, exc)}）",
+                route,
+            )
             await self.store.activity("provider.failed", failure(provider.id, exc))
             self.record_failure(provider.id)
             raise PublicError("Embedding 调用失败，请检查 Provider 地址、凭据与模型名称") from None
@@ -778,7 +784,9 @@ class ProviderManager:
                 return answers
             except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
                 await self._record_call(model, "systemone", "failed")
-                log.warning(f"决策模型 {model.id} 调用失败（{failure(provider.id, exc)}）", route)
+                log.warning(
+                    f"决策模型 {model.display_name} 调用失败（{failure(provider.id, exc)}）", route
+                )
                 await self.store.activity("provider.failed", failure(provider.id, exc))
                 self.record_failure(provider.id)
         return None

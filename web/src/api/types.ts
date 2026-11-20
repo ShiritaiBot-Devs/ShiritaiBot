@@ -564,6 +564,7 @@ export interface Statistics {
 
 export interface ModelUsage {
   model: string;
+  model_label?: string;
   llm_calls: number;
   input_tokens: number;
   output_tokens: number;

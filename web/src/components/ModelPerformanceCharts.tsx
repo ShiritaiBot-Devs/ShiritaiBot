@@ -1,7 +1,7 @@
 import { Activity, Timer, Zap } from "lucide-react";
 import { useId, useState } from "react";
 import type { ModelPerformance, TokenBucket } from "../api/types";
-import { MODEL_COLORS, smoothLine } from "../lib/charts";
+import { smoothLine, type ChartModel } from "../lib/charts";
 import { formatHour } from "../lib/utils";
 
 const metrics = [
@@ -33,7 +33,6 @@ const left = 34,
   top = 10,
   bottom = 130;
 type Point = { x: number; y: number };
-type Model = { name: string; color: string };
 const hourLabel = new Intl.DateTimeFormat("zh-CN", {
   timeZone: "Asia/Shanghai",
   hour: "2-digit",
@@ -81,14 +80,14 @@ function PerformanceCard({
 }: {
   metric: (typeof metrics)[number];
   rows: TokenBucket[];
-  models: Model[];
+  models: ChartModel[];
 }) {
   const id = useId();
   const [hover, setHover] = useState<number | null>(null);
   const series = models.map((model) => ({
     ...model,
     values: rows.map((row) => {
-      const v = row.model_performance?.[model.name]?.[metric.key];
+      const v = row.model_performance?.[model.id]?.[metric.key];
       return v == null ? null : metric.key === "error_rate" ? v * 100 : v;
     }),
   }));
@@ -197,7 +196,7 @@ function PerformanceCard({
               </text>
             ))}
             {series.map((s, index) => (
-              <g key={s.name}>
+              <g key={s.id}>
                 <defs>
                   <linearGradient id={id + index} x1="0" y1="0" x2="0" y2="1">
                     <stop stopColor={s.color} stopOpacity=".22" />
@@ -264,9 +263,9 @@ function PerformanceCard({
             <div className="performance-tooltip" role="status">
               <strong>{formatHour(rows[active].hour)}</strong>
               {series.map((s) => (
-                <span key={s.name}>
+                <span key={s.id}>
                   <i style={{ background: s.color }} />
-                  {s.name}
+                  {s.label}
                   <b>
                     {s.values[active] === null
                       ? "—"
@@ -294,23 +293,17 @@ function PerformanceCard({
 
 export function ModelPerformanceCharts({
   rows,
-  configured,
+  models: catalog,
 }: {
   rows: TokenBucket[];
-  configured: string[];
+  models: Map<string, ChartModel>;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const present = new Set(
-    rows.flatMap((r) => Object.keys(r.model_performance ?? {})),
+    rows.flatMap((row) => Object.keys(row.model_performance ?? {})),
   );
-  const ordered = [...new Set([...configured, ...[...present].sort()])];
-  const models = ordered
-    .map((name, i) => ({
-      name,
-      color: MODEL_COLORS[i] ?? `hsl(${(i * 137.5) % 360} 60% 42%)`,
-    }))
-    .filter((model) => present.has(model.name));
-  const focused = models.find((model) => model.name === selected);
+  const models = [...catalog.values()].filter((model) => present.has(model.id));
+  const focused = models.find((model) => model.id === selected);
   return (
     <section className="model-performance" aria-label="模型调用表现">
       <div className="performance-head">
@@ -319,27 +312,27 @@ export function ModelPerformanceCharts({
           {models.map((model) => (
             <button
               type="button"
-              key={model.name}
-              aria-pressed={focused?.name === model.name}
+              key={model.id}
+              aria-pressed={focused?.id === model.id}
               title={
-                focused?.name === model.name
+                focused?.id === model.id
                   ? "显示全部模型"
-                  : "仅查看 " + model.name
+                  : "仅查看 " + model.label
               }
               className={
                 "chart-legend-button" +
-                (focused?.name === model.name
+                (focused?.id === model.id
                   ? " is-selected"
                   : focused
                     ? " is-dimmed"
                     : "")
               }
               onClick={() =>
-                setSelected(focused?.name === model.name ? null : model.name)
+                setSelected(focused?.id === model.id ? null : model.id)
               }
             >
               <i style={{ background: model.color }} />
-              {model.name}
+              {model.label}
             </button>
           ))}
         </div>

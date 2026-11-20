@@ -128,6 +128,8 @@ async def statistics(store, hours: int, end: datetime | None = None, models=()):
                 {"model": name, "llm_calls": 0, **dict.fromkeys(TOKEN_FIELDS, 0)},
             )
             entry["llm_calls"] += 1
+            if data.get("model_label"):
+                entry["model_label"] = data["model_label"]
             counted = tokens(data.get("usage") or {}, data.get("protocol", ""))
             # Legacy success-only records cannot establish the historical error rate.
             if data.get("status") in {"ok", "failed"}:

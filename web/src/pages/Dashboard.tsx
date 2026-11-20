@@ -1,5 +1,6 @@
 import { ModelPerformanceCharts } from "../components/ModelPerformanceCharts";
-import { smoothLine, MODEL_COLORS } from "../lib/charts";
+import { modelColor, smoothLine, type ChartModel } from "../lib/charts";
+import { configuredModelName, modelName } from "../lib/models";
 import { LoadingBar } from "../components/LoadingBar";
 import { MetricIcon } from "../components/MetricIcon";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
@@ -66,10 +67,12 @@ function ModelTable({
   rows,
   currency,
   rate,
+  models,
 }: {
   rows: ModelUsage[];
   currency: Currency;
   rate: number | null;
+  models: Map<string, ChartModel>;
 }) {
   return (
     <section className="panel">
@@ -93,7 +96,7 @@ function ModelTable({
             <tbody>
               {rows.map((row) => (
                 <tr key={row.model}>
-                  <th scope="row">{row.model || "（未知模型）"}</th>
+                  <th scope="row">{models.get(row.model)?.label}</th>
                   <td>{formatNumber(row.llm_calls)}</td>
                   <td>{formatNumber(row.input_tokens)}</td>
                   <td>{formatNumber(row.cached_tokens)}</td>
@@ -148,29 +151,21 @@ interface Series {
 
 const OTHER_COLOR = "#9aa3b2";
 
-/**
- * One series per model. Slots follow the configured model order, not
- * token rank, so a model keeps its color as usage shifts.
- */
-function modelSeries(rows: TokenBucket[], configured: string[]): Series[] {
+function modelSeries(
+  rows: TokenBucket[],
+  models: Map<string, ChartModel>,
+): Series[] {
   const present = new Set(rows.flatMap((row) => Object.keys(row.models ?? {})));
-  const position = (name: string) => {
-    const index = configured.indexOf(name);
-    return index < 0 ? configured.length : index;
-  };
-  const names = [...present].sort(
-    (a, b) => position(a) - position(b) || a.localeCompare(b),
-  );
+  const visible = [...models.values()].filter((model) => present.has(model.id));
+  const maxSeries = 8;
   const own =
-    names.length > MODEL_COLORS.length
-      ? names.slice(0, MODEL_COLORS.length - 1)
-      : names;
-  const rest = names.slice(own.length);
-  const series: Series[] = own.map((name, index) => ({
-    key: "model:" + name,
-    label: name || "（未知模型）",
-    color: MODEL_COLORS[index],
-    value: (row) => row.models?.[name] ?? 0,
+    visible.length > maxSeries ? visible.slice(0, maxSeries - 1) : visible;
+  const rest = visible.slice(own.length);
+  const series: Series[] = own.map(({ id, label, color }) => ({
+    key: "model:" + id,
+    label,
+    color,
+    value: (row) => row.models?.[id] ?? 0,
   }));
   if (rest.length)
     series.push({
@@ -178,7 +173,7 @@ function modelSeries(rows: TokenBucket[], configured: string[]): Series[] {
       label: `其他（${rest.length} 个）`,
       color: OTHER_COLOR,
       value: (row) =>
-        rest.reduce((sum, name) => sum + (row.models?.[name] ?? 0), 0),
+        rest.reduce((sum, model) => sum + (row.models?.[model.id] ?? 0), 0),
     });
   return series;
 }
@@ -191,12 +186,10 @@ function HourlyChart({
   title,
   rows,
   series,
-  type = "bar",
 }: {
   title: string;
   rows: TokenBucket[];
   series: Series[];
-  type?: "bar" | "line";
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const [focusedSeries, setFocusedSeries] = useState<string | null>(null);
@@ -251,11 +244,7 @@ function HourlyChart({
     `chart-series${highlighted !== null && highlighted !== key ? " is-dimmed" : ""}`;
   const maximum = Math.max(
     1,
-    ...rows.map((row) =>
-      type === "line"
-        ? Math.max(0, ...series.map((item) => item.value(row)))
-        : series.reduce((sum, item) => sum + item.value(row), 0),
-    ),
+    ...rows.map((row) => Math.max(0, ...series.map((item) => item.value(row)))),
   );
   const width = 900;
   const height = 280;
@@ -278,32 +267,25 @@ function HourlyChart({
         <h3>{title}</h3>
         <div className="chart-controls">
           <div className="chart-legend">
-            {series.map((item) =>
-              type === "line" ? (
-                <button
-                  type="button"
-                  key={item.key}
-                  className={`chart-legend-button${highlighted === item.key ? " is-selected" : ""}${highlighted !== null && highlighted !== item.key ? " is-dimmed" : ""}`}
-                  aria-pressed={highlighted === item.key}
-                  title={
-                    highlighted === item.key
-                      ? "再次点击显示全部曲线"
-                      : `高亮 ${item.label}`
-                  }
-                  onClick={() =>
-                    setFocusedSeries(highlighted === item.key ? null : item.key)
-                  }
-                >
-                  <i style={{ background: item.color }} aria-hidden="true" />
-                  <span>{item.label}</span>
-                </button>
-              ) : (
-                <span key={item.key}>
-                  <i style={{ background: item.color }} aria-hidden="true" />
-                  {item.label}
-                </span>
-              ),
-            )}
+            {series.map((item) => (
+              <button
+                type="button"
+                key={item.key}
+                className={`chart-legend-button${highlighted === item.key ? " is-selected" : ""}${highlighted !== null && highlighted !== item.key ? " is-dimmed" : ""}`}
+                aria-pressed={highlighted === item.key}
+                title={
+                  highlighted === item.key
+                    ? "再次点击显示全部曲线"
+                    : `高亮 ${item.label}`
+                }
+                onClick={() =>
+                  setFocusedSeries(highlighted === item.key ? null : item.key)
+                }
+              >
+                <i style={{ background: item.color }} aria-hidden="true" />
+                <span>{item.label}</span>
+              </button>
+            ))}
           </div>
           <button
             type="button"
@@ -343,106 +325,79 @@ function HourlyChart({
               opacity=".12"
             />
           ))}
-          {rows.map((row, index) => {
-            let cumulative = 0;
-            return (
-              <g
-                key={row.hour}
-                tabIndex={0}
-                role="img"
-                aria-label={`${formatHour(row.hour)} ${series
-                  .map((item) => `${item.label} ${item.value(row)}`)
-                  .join("，")}`}
-                onMouseEnter={() => setHover(index)}
-                onFocus={() => setHover(index)}
-                onBlur={() => setHover(null)}
-              >
-                <rect
-                  x={index * step}
-                  y={0}
-                  width={step}
-                  height={height}
-                  fill={index === hover ? "var(--accent-soft)" : "transparent"}
-                />
-                {series.map((item) => {
-                  const raw = item.value(row);
-                  if (type === "line") {
-                    const value = scaleY(raw);
-                    return (
-                      <circle
-                        key={item.key}
-                        className={seriesClass(item.key)}
-                        cx={(index + 0.5) * step}
-                        cy={height - value}
-                        r={index === hover ? 4 : rows.length === 1 ? 3 : 0}
-                        fill={item.color}
-                        stroke="var(--panel)"
-                        strokeWidth={1}
-                        pointerEvents="none"
-                      />
-                    );
-                  }
-                  const prevScaled = scaleY(cumulative);
-                  cumulative += raw;
-                  const nextScaled = scaleY(cumulative);
-                  const barHeight = nextScaled - prevScaled;
-                  return (
-                    <rect
-                      key={item.key}
-                      x={index * step + step * 0.15}
-                      y={height - nextScaled}
-                      width={step * 0.7}
-                      height={barHeight}
-                      rx={1}
-                      fill={item.color}
-                      stroke="var(--panel)"
-                      strokeWidth={1}
-                    />
-                  );
-                })}
-                {(index === 0 ||
-                  index === rows.length - 1 ||
-                  index % Math.ceil(rows.length / 5) === 0) && (
-                  <text
-                    x={index * step + step / 2}
-                    y={height + 22}
-                    textAnchor={
-                      index === 0
-                        ? "start"
-                        : index === rows.length - 1
-                          ? "end"
-                          : "middle"
-                    }
-                    fill="currentColor"
-                    fontSize={12}
-                  >
-                    {formatHour(row.hour)}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-          {type === "line" &&
-            lineSeries.map((item) => (
-              <path
-                key={item.key}
-                className={seriesClass(item.key)}
-                d={smoothLine(
-                  rows.map((row, index) => ({
-                    x: (index + 0.5) * step,
-                    y: height - scaleY(item.value(row)),
-                  })),
-                )}
-                fill="none"
-                stroke={item.color}
-                strokeWidth={
-                  highlighted === null || highlighted === item.key ? 3 : 2
-                }
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-                pointerEvents="none"
+          {rows.map((row, index) => (
+            <g
+              key={row.hour}
+              tabIndex={0}
+              role="img"
+              aria-label={`${formatHour(row.hour)} ${series
+                .map((item) => `${item.label} ${item.value(row)}`)
+                .join("，")}`}
+              onMouseEnter={() => setHover(index)}
+              onFocus={() => setHover(index)}
+              onBlur={() => setHover(null)}
+            >
+              <rect
+                x={index * step}
+                y={0}
+                width={step}
+                height={height}
+                fill={index === hover ? "var(--accent-soft)" : "transparent"}
               />
-            ))}
+              {series.map((item) => (
+                <circle
+                  key={item.key}
+                  className={seriesClass(item.key)}
+                  cx={(index + 0.5) * step}
+                  cy={height - scaleY(item.value(row))}
+                  r={index === hover ? 4 : rows.length === 1 ? 3 : 0}
+                  fill={item.color}
+                  stroke="var(--panel)"
+                  strokeWidth={1}
+                  pointerEvents="none"
+                />
+              ))}
+              {(index === 0 ||
+                index === rows.length - 1 ||
+                index % Math.ceil(rows.length / 5) === 0) && (
+                <text
+                  x={index * step + step / 2}
+                  y={height + 22}
+                  textAnchor={
+                    index === 0
+                      ? "start"
+                      : index === rows.length - 1
+                        ? "end"
+                        : "middle"
+                  }
+                  fill="currentColor"
+                  fontSize={12}
+                >
+                  {formatHour(row.hour)}
+                </text>
+              )}
+            </g>
+          ))}
+          {lineSeries.map((item) => (
+            <path
+              key={item.key}
+              className={seriesClass(item.key)}
+              d={smoothLine(
+                rows.map((row, index) => ({
+                  x: (index + 0.5) * step,
+                  y: height - scaleY(item.value(row)),
+                })),
+              )}
+              fill="none"
+              stroke={item.color}
+              strokeWidth={
+                highlighted === null || highlighted === item.key ? 3 : 2
+              }
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />
+          ))}
         </svg>
       </div>
       <div className="chart-detail" aria-live="polite">
@@ -452,12 +407,7 @@ function HourlyChart({
             {series
               .filter((item) => item.value(selected) > 0)
               .map((item) => (
-                <span
-                  key={item.key}
-                  className={
-                    type === "line" ? seriesClass(item.key) : undefined
-                  }
-                >
+                <span key={item.key} className={seriesClass(item.key)}>
                   <i style={{ background: item.color }} aria-hidden="true" />
                   {item.label} {formatNumber(item.value(selected))}
                 </span>
@@ -465,9 +415,8 @@ function HourlyChart({
           </>
         ) : (
           <span className="muted">
-            {type === "line"
-              ? "默认高亮全部曲线；点击图例突出某条曲线，再次点击恢复全部。悬停或用 Tab 查看每小时数据。"
-              : "悬停或用 Tab 选中柱形，查看该小时数据。"}
+            默认高亮全部曲线；点击图例突出某条曲线，再次点击恢复全部。悬停或用
+            Tab 查看每小时数据。
           </span>
         )}
       </div>
@@ -513,7 +462,32 @@ export function Dashboard({ client }: { client: ApiClient }) {
     retry: false,
   });
   const warnings = diagnostics.data?.warnings ?? [];
-  const configured = (config.data?.models ?? []).map((model) => model.id);
+  const configured = config.data?.models ?? [];
+  const recorded = (data?.buckets ?? []).flatMap((row) => [
+    ...Object.keys(row.models ?? {}),
+    ...Object.keys(row.model_performance ?? {}),
+  ]);
+  const models = new Map<string, ChartModel>();
+  configured.forEach((model, index) => {
+    models.set(model.id, {
+      id: model.id,
+      label: configuredModelName(model),
+      color: modelColor(model.id, index),
+    });
+  });
+  const recordedLabels = new Map(
+    (data?.models ?? []).map((row) => [row.model, row.model_label]),
+  );
+  for (const id of [
+    ...new Set([...recorded, ...(data?.models ?? []).map((row) => row.model)]),
+  ].sort()) {
+    if (!models.has(id))
+      models.set(id, {
+        id,
+        label: recordedLabels.get(id) || modelName("", id),
+        color: modelColor(id, -1),
+      });
+  }
 
   return (
     <section className="dashboard">
@@ -632,10 +606,9 @@ export function Dashboard({ client }: { client: ApiClient }) {
               </div>
             ))}
           </div>
-          <ModelPerformanceCharts rows={data.buckets} configured={configured} />
+          <ModelPerformanceCharts rows={data.buckets} models={models} />
           <HourlyChart
             title="Token 用量（按模型）"
-            type="line"
             rows={data.buckets}
             series={[
               {
@@ -644,11 +617,12 @@ export function Dashboard({ client }: { client: ApiClient }) {
                 color: "var(--text)",
                 value: field("total_tokens"),
               },
-              ...modelSeries(data.buckets, configured),
+              ...modelSeries(data.buckets, models),
             ]}
           />
           <ModelTable
             rows={data.models ?? []}
+            models={models}
             currency={currency}
             rate={rate}
           />
