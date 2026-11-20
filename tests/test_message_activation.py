@@ -7,6 +7,7 @@ import pytest
 from shiritaibot.adapters.feishu import Feishu
 from shiritaibot.adapters.feishu_transport import FeishuInbound
 from shiritaibot.adapters.onebot11 import AdapterHub
+from shiritaibot.adapters.qq_official import QQMessage
 from shiritaibot.api import hook
 from shiritaibot.config import AdapterConfig, Settings
 from shiritaibot.plugin.core.hooks import HookBus, collect
@@ -23,7 +24,7 @@ class Commands:
         return value
 
 
-@pytest.fixture(params=["qq", "feishu"])
+@pytest.fixture(params=["qq", "feishu", "official"])
 def chat(request):
     platform = request.param
     config = SimpleNamespace(value=Settings(wake_keywords=["小知"]))
@@ -47,15 +48,18 @@ def chat(request):
     menu.reply = AsyncMock(return_value=False)
     permissions = SimpleNamespace(menu=menu)
     owner, friend, group_id, bot_id = "ou_owner", "ou_friend", "oc_group", "ou_bot"
+    if platform == "official":
+        owner, friend, group_id = "OwnerId", "FriendId", "GroupId"
     cfg = AdapterConfig(
         id=platform,
-        type="feishu" if platform == "feishu" else "onebot11",
-        app_id="cli_demo",
+        type={"qq": "onebot11", "feishu": "feishu", "official": "qq_official"}[platform],
+        app_id="12345" if platform == "official" else "cli_demo",
         owner_id=owner,
         friends=[friend],
         groups=[group_id],
     )
-    if platform == "qq":
+    if platform != "feishu":
+        config.value.adapters = [cfg]
         bot = SimpleNamespace(config=cfg, self_id=bot_id, log=Mock())
         hub = AdapterHub(config, None, store)
         hub.hooks, hub.runtime, hub.permissions = bus, runtime, permissions
@@ -76,6 +80,13 @@ def chat(request):
                     "message_id": message_id,
                     "message": (f"[CQ:at,qq={bot_id}] " if mention else "") + text,
                 },
+            )
+        elif platform == "official":
+            await hub.receive_qq_official(
+                bot,
+                QQMessage(
+                    message_id, sender, group_id if group else sender, group, mention, text, 0, {}
+                ),
             )
         else:
             await fs.accept(
@@ -119,7 +130,11 @@ def test_group_commands(chat):
         await chat.send("/unknown")
         await chat.send("/help")
         await chat.send("聊天")
+        assert [c.args[1] for c in chat.runtime.submit.await_args_list] == ["/help"]
         chat.settings.group_command_require_wake = True
+        await chat.send("/help")
+        await chat.send("/status", mention=True)
+        await chat.send("小知，/models")
         await chat.send("/d echo ignored")
         assert chat.replies.await_count == 2
         await chat.send("/d echo mentioned", mention=True)
@@ -128,7 +143,11 @@ def test_group_commands(chat):
             "mentioned",
             "keyword",
         ]
-        chat.runtime.submit.assert_not_awaited()
+        assert [c.args[1] for c in chat.runtime.submit.await_args_list] == [
+            "/help",
+            "/status",
+            "/models",
+        ]
 
     asyncio.run(run())
 

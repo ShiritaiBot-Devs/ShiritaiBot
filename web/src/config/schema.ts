@@ -720,9 +720,9 @@ export const IDENTITY_FIELDS: FieldSpec[] = [
   },
   {
     key: "group_command_require_wake",
-    label: "群聊插件指令需要唤醒",
+    label: "群聊 / 指令需要唤醒",
     kind: "boolean",
-    help: "默认可直接发送 /指令。开启后，在 QQ 群或飞书群使用插件指令时，需要 @ 机器人或使用群聊唤醒词。",
+    help: "默认可直接发送内置或插件 / 指令。开启后，两类指令都需要 @ 机器人或使用群聊唤醒词。",
   },
   {
     key: "private_require_keyword",

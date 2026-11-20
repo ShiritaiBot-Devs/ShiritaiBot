@@ -5,6 +5,7 @@ import re
 from collections.abc import Awaitable, Callable
 
 from shiritaibot.adapters.feishu_transport import FeishuInbound, FeishuSendError, FeishuTransport
+from shiritaibot.agent.commands import builtin_slash
 from shiritaibot.api.event import MessageEvent
 from shiritaibot.config import AdapterConfig, ConfigService
 from shiritaibot.core import ApprovalPort, Context, PublicError, RuntimePort, now
@@ -117,13 +118,8 @@ class Feishu:
             self.log.warning("飞书事件队列已满，未处理一条消息。")
 
     def group_command_allowed(self, message: FeishuInbound) -> bool:
-        return (
-            self.hooks is not None
-            and message.text.lstrip().startswith("/")
-            and (
-                not self.settings.value.group_command_require_wake
-                or self.self_id in message.mentions
-            )
+        return message.text.lstrip().startswith("/") and (
+            not self.settings.value.group_command_require_wake or self.self_id in message.mentions
         )
 
     def wake_prefix(self, text: str) -> str:
@@ -154,6 +150,7 @@ class Feishu:
         )
         text = message.text.strip()
         prefix = self.wake_prefix(text) if group else ""
+        mentioned_command = text.startswith("/") and self.self_id in message.mentions
         ctx = Context(
             session,
             message.sender_id,
@@ -178,7 +175,7 @@ class Feishu:
                 message.sender_id,
                 "",
                 text,
-                bool(prefix),
+                bool(prefix or mentioned_command),
                 memory_profile=ctx.memory_profile,
             )
         if prefix:
@@ -222,9 +219,13 @@ class Feishu:
             message_id=message.message_id,
             is_owner=not group,
         )
-        if group and not prefix:
-            if self.hooks is not None and self.group_command_allowed(message):
-                await self.hooks.dispatch_command(event)
+        if group and not (prefix or mentioned_command):
+            if not self.group_command_allowed(message):
+                return
+            if self.hooks is not None and await self.hooks.dispatch_command(event):
+                return
+            if builtin_slash(text):
+                await self.runtime.submit(ctx, text)
             return
         if self.hooks is not None and await self.hooks.dispatch(event):
             return

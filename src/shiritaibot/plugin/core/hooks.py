@@ -16,7 +16,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-from shiritaibot.agent.commands import COMMANDS
+from shiritaibot.agent.commands import BUILTIN_COMMANDS, builtin_slash
 from shiritaibot.api.event import (
     MessageEvent,
     MessageResult,
@@ -35,7 +35,6 @@ HOOK_TIMEOUT = 10
 LISTENER_TIMEOUT = 30
 PROACTIVE_TIMEOUT = 30
 COMMAND_TIMEOUT = 600
-BUILTIN_COMMANDS = frozenset({*COMMANDS, "cancel", "reset"})
 CONTROL = re.compile(r"(停|取消|(同意|拒绝)\s+[a-f0-9]{10})")
 
 
@@ -68,12 +67,7 @@ class Handler:
 def builtin_control(text: str) -> bool:
     """Built-in commands and approval words always reach the host untouched."""
     text = text.strip()
-    if CONTROL.fullmatch(text):
-        return True
-    if text.startswith("/"):
-        name = text[1:].split(maxsplit=1)
-        return bool(name) and name[0].lower() in BUILTIN_COMMANDS
-    return False
+    return bool(CONTROL.fullmatch(text)) or builtin_slash(text)
 
 
 def _hints(func: Callable) -> dict:
@@ -291,9 +285,12 @@ class HookBus:
 
     def matches(self, handler: Handler, event: MessageEvent) -> bool:
         kind = MessageType.GROUP if event.is_group else MessageType.PRIVATE
-        platform = {"qq": Platform.QQ, "web": Platform.WEB, "feishu": Platform.FEISHU}.get(
-            event.platform, Platform(0)
-        )
+        platform = {
+            "qq": Platform.QQ,
+            "qq_official": Platform.QQ,
+            "web": Platform.WEB,
+            "feishu": Platform.FEISHU,
+        }.get(event.platform, Platform(0))
         return bool(kind & handler.types) and bool(platform & handler.platforms)
 
     def match_command(self, text: str) -> tuple[Handler, str] | None:

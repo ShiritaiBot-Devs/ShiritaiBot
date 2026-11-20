@@ -18,6 +18,7 @@ from websockets.asyncio.client import connect
 from shiritaibot.adapters.feishu import Feishu
 from shiritaibot.adapters.feishu_transport import FeishuSendError
 from shiritaibot.adapters.qq_official import QQMessage, QQOfficial, QQOfficialSendError
+from shiritaibot.agent.commands import builtin_slash
 from shiritaibot.api.event import MessageEvent
 from shiritaibot.config import is_feishu_session, is_qq_official_session
 from shiritaibot.core import (
@@ -380,13 +381,8 @@ class AdapterHub:
             or self.permissions.menu.accepts(session, rest)
         ):
             text = rest
-        if (
-            group
-            and not wake
-            and not (
-                not settings.group_command_require_wake and text.startswith("/") and self.hooks
-            )
-        ):
+        direct_command = group and not settings.group_command_require_wake and text.startswith("/")
+        if group and not (wake or direct_command):
             return
         anchor = ReplyAnchor(session, incoming.message_id, incoming.at + incoming.reply_limit[0])
         ctx = Context(
@@ -423,17 +419,17 @@ class AdapterHub:
                 group_id=target if group else "",
                 message_id=incoming.message_id,
                 is_owner=owner,
-                is_wake=not group or wake or text.startswith("/"),
+                is_wake=not group or wake or direct_command,
                 raw=incoming.raw,
             )
-            if self.hooks is not None:
-                if group and not wake:
-                    await self.hooks.dispatch_command(event)
+            if group and not wake:
+                if self.hooks is not None and await self.hooks.dispatch_command(event):
                     return
-                if await self.hooks.dispatch(event):
+                if not builtin_slash(text):
                     return
-            if not group or wake:
-                await self.runtime.submit(ctx, text)
+            elif self.hooks is not None and await self.hooks.dispatch(event):
+                return
+            await self.runtime.submit(ctx, text)
         finally:
             current_reply.reset(token)
 
@@ -517,10 +513,7 @@ class AdapterHub:
                 return
         passive_group = group and not (mentioned or keyword)
         direct_command = (
-            passive_group
-            and not settings.group_command_require_wake
-            and self.hooks is not None
-            and text.startswith("/")
+            passive_group and not settings.group_command_require_wake and text.startswith("/")
         )
         if (not passive_group or direct_command) and not await self.store.execute(
             "INSERT OR IGNORE INTO seen_messages VALUES(?,?)", (message_id, now().timestamp())
@@ -528,11 +521,14 @@ class AdapterHub:
             bot.log.debug("重复消息，已跳过", speaker)
             return
         if passive_group:
-            if (
-                direct_command
-                and self.hooks is not None
-                and await self.hooks.dispatch_command(message(True))
-            ):
+            if text.startswith("/"):
+                if direct_command:
+                    if self.hooks is not None and await self.hooks.dispatch_command(message(True)):
+                        return
+                    if builtin_slash(text):
+                        await self.runtime.submit(
+                            Context(session, user, owner=user == cfg.owner_id, group=True), text
+                        )
                 return
             if self.hooks is not None and await self.hooks.dispatch(message(False)):
                 return

@@ -28,6 +28,16 @@ COMMANDS = {
 }
 
 
+BUILTIN_COMMANDS = frozenset({*COMMANDS, "cancel", "reset"})
+
+
+def builtin_slash(text: str) -> bool:
+    if not text.startswith("/"):
+        return False
+    parts = text[1:].split(maxsplit=1)
+    return bool(parts) and parts[0].lower() in BUILTIN_COMMANDS
+
+
 async def command(runtime, ctx, text):
     parts = text.strip()[1:].split(maxsplit=1)
     name, argument = parts[0] if parts else "help", parts[1] if len(parts) > 1 else ""
