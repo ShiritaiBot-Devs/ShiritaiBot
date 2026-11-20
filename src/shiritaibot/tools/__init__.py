@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from itertools import islice
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
@@ -48,7 +49,15 @@ class ToolRegistry:
             if not tool:
                 raise PublicError("工具不存在或未启用")
             args = json.loads(arguments) if isinstance(arguments, str) else arguments
-            Draft202012Validator(tool.schema).validate(args)
+            errors = Draft202012Validator(tool.schema).iter_errors(args)
+            details = []
+            for error in islice(errors, 3):
+                path = "arguments" + error.json_path.removeprefix("$")
+                detail = f"{path} [{error.validator or 'false schema'}]: {error.message}"
+                detail = redact_secrets(detail, self.secrets)
+                details.append(detail if len(detail) <= 512 else detail[:511] + "…")
+            if details:
+                return canonical({"error": "工具参数不符合 JSON Schema：" + "\n".join(details)})
             await self.permissions.check(ctx, tool, args)
             async with asyncio.timeout(tool.timeout):
                 try:
