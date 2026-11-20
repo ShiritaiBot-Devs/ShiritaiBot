@@ -17,7 +17,7 @@ ShiritaiBot 可以作为 MCP（Model Context Protocol）客户端接入 MCP 服�
 
 ## 配置
 
-在 WebUI「MCP 服务」页面添加，或直接写入 `config.toml`：
+在 WebUI「能力与权限 → MCP」中添加，或直接写入 `config.toml`：
 
 ```toml
 [[mcp_servers]]

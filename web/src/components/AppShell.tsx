@@ -6,7 +6,7 @@ import {
   MessageSquare,
   RotateCw,
 } from "lucide-react";
-import { PAGES, pageMeta } from "../navigation";
+import { NAV_GROUPS, pageMeta } from "../navigation";
 import type { PageId } from "../navigation";
 
 export function AppShell({
@@ -60,21 +60,33 @@ export function AppShell({
           </span>
         </a>
         <nav aria-label="主导航">
-          {PAGES.map(({ id, label, icon: Icon }) => (
-            <button
-              type="button"
-              key={id}
-              title={label}
-              className={page === id ? "active" : ""}
-              aria-current={page === id ? "page" : undefined}
-              onClick={() => onNavigate(id)}
+          {NAV_GROUPS.map((group) => (
+            <div
+              className="nav-group"
+              key={group.label}
+              role="group"
+              aria-label={group.label}
             >
-              <Icon size={18} aria-hidden="true" />
-              <span>{label}</span>
-              {id === "approvals" && pendingApprovals > 0 && (
-                <b>{pendingApprovals}</b>
-              )}
-            </button>
+              <div className="nav-group-title" aria-hidden="true">
+                {group.label}
+              </div>
+              {group.pages.map(({ id, label, icon: Icon }) => (
+                <button
+                  type="button"
+                  key={id}
+                  title={label}
+                  className={meta.id === id ? "active" : ""}
+                  aria-current={meta.id === id ? "page" : undefined}
+                  onClick={() => onNavigate(id)}
+                >
+                  <Icon size={18} aria-hidden="true" />
+                  <span>{label}</span>
+                  {id === "approvals" && pendingApprovals > 0 && (
+                    <b>{pendingApprovals}</b>
+                  )}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
         <div className="sidebar-bottom">

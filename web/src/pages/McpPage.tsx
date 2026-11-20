@@ -32,7 +32,7 @@ export function McpPage({ client, config, setConfig, act }: ConfigPageProps) {
         onChange={(mcp_servers) => setConfig({ ...config, mcp_servers })}
         fields={mcpFields}
         subtitle={mcpSummary}
-        emptyText="添加 stdio 本地进程或 Streamable HTTP 远程 MCP 服务，保存后其工具会出现在工具与权限中。"
+        emptyText="添加 stdio 本地进程或 Streamable HTTP 远程 MCP 服务，保存后可在「工具」中管理其权限。"
         renderActions={(item) => (
           <button
             type="button"

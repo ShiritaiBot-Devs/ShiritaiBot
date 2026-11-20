@@ -10,6 +10,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "./api/client";
 import type { ApiClient } from "./api/client";
 import { AppShell } from "./components/AppShell";
+import { PageTabs } from "./components/PageTabs";
+import { CAPABILITY_TABS } from "./navigation";
 import { ChatWorkspace } from "./components/ChatWorkspace";
 import { LoginView } from "./components/LoginView";
 import { SaveBar } from "./components/SaveBar";
@@ -59,6 +61,7 @@ function ConsoleApp() {
     linkToken ? null : sessionStorage.getItem(TOKEN_KEY),
   );
   const [page, navigate] = useHashRoute();
+  const capability = CAPABILITY_TABS.find((tab) => tab.id === page);
   const { succeed, fail, warn, dismiss } = useNotice();
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -416,7 +419,30 @@ function ConsoleApp() {
       }}
     >
       {busy && <LoadingBar label="正在执行操作" />}
-      {content(client)}
+      {capability ? (
+        <>
+          <PageTabs
+            tabs={CAPABILITY_TABS}
+            active={capability.id}
+            onSelect={navigate}
+            prefix="capability"
+            label="能力与权限"
+          />
+          {CAPABILITY_TABS.map(({ id }) => (
+            <div
+              key={id}
+              role="tabpanel"
+              id={`capability-panel-${id}`}
+              aria-labelledby={`capability-tab-${id}`}
+              hidden={page !== id}
+            >
+              {page === id && content(client)}
+            </div>
+          ))}
+        </>
+      ) : (
+        content(client)
+      )}
       {updateOpen && (
         <UpdateDialog
           client={client}

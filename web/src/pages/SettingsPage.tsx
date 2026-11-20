@@ -1,3 +1,4 @@
+import { PageTabs } from "../components/PageTabs";
 import { LoadingBar } from "../components/LoadingBar";
 import { ModelOptions } from "../components/ModelOptions";
 import { useState } from "react";
@@ -85,38 +86,13 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
     useState<(typeof SETTINGS_TABS)[number]["id"]>("general");
   return (
     <div className="settings-page">
-      <div className="settings-tabs" role="tablist" aria-label="配置分类">
-        {SETTINGS_TABS.map(({ id, label }, index) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            id={`settings-tab-${id}`}
-            aria-controls={`settings-panel-${id}`}
-            aria-selected={tab === id}
-            tabIndex={tab === id ? 0 : -1}
-            onClick={() => setTab(id)}
-            onKeyDown={(event) => {
-              let next = index;
-              if (event.key === "ArrowRight")
-                next = (index + 1) % SETTINGS_TABS.length;
-              else if (event.key === "ArrowLeft")
-                next =
-                  (index + SETTINGS_TABS.length - 1) % SETTINGS_TABS.length;
-              else if (event.key === "Home") next = 0;
-              else if (event.key === "End") next = SETTINGS_TABS.length - 1;
-              else return;
-              event.preventDefault();
-              setTab(SETTINGS_TABS[next].id);
-              document
-                .getElementById(`settings-tab-${SETTINGS_TABS[next].id}`)
-                ?.focus();
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <PageTabs
+        tabs={SETTINGS_TABS}
+        active={tab}
+        onSelect={setTab}
+        prefix="settings"
+        label="配置分类"
+      />
       <div
         className="panel settings-card"
         role="tabpanel"
