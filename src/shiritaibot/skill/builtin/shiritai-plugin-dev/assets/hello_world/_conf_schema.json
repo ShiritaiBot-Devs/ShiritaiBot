@@ -1,0 +1,19 @@
+{
+  "default_city": {
+    "type": "string",
+    "description": "默认城市",
+    "default": "北京"
+  },
+  "api_key": {
+    "type": "string",
+    "description": "天气服务 API Key",
+    "hint": "可选，加密保存",
+    "secret": true
+  },
+  "interval": {
+    "type": "int",
+    "description": "刷新间隔（秒）",
+    "slider": { "min": 60, "max": 3600, "step": 60 },
+    "default": 600
+  }
+}

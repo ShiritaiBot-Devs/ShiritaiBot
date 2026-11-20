@@ -1,0 +1,7 @@
+name: hello_world
+display_name: Hello World
+desc: 最小示例插件：指令 + LLM 工具 + 配置
+short_desc: 打个招呼
+version: 1.0.0
+author: your-name
+repo: https://github.com/your-name/hello_world
