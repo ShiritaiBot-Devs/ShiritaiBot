@@ -247,9 +247,19 @@ DSH_PRESET = re.compile(r"^[A-Za-z][\w.-]*$")
 
 
 class SubagentConfig(Instance):
-    kind: Literal["codex", "claude_code", "deepseek_harness", "antigravity", "generic"] = "codex"
+    kind: Literal[
+        "shiritaibot", "codex", "claude_code", "deepseek_harness", "antigravity", "generic"
+    ] = "codex"
+    native_tools: list[str] = Field(default_factory=list)
+    native_skills: list[str] = Field(default_factory=list)
+    native_manual_approval: bool = False
+    instructions: str = Field(default="", max_length=16000)
     command: list[str] = Field(
-        default_factory=lambda data: ["agy" if data["kind"] == "antigravity" else "codex"]
+        default_factory=lambda data: (
+            []
+            if data.get("kind") == "shiritaibot"
+            else ["agy" if data.get("kind") == "antigravity" else "codex"]
+        )
     )
     timeout: int = Field(default=900, ge=5, le=7200)
     model: str = ""
@@ -961,6 +971,17 @@ class Settings(Model):
                 "判定类模型（systemone，如 jev）只能放在 router、light、memory、approval 和 meme 路由"
             )
         embedding = {m.id for m in self.models if m.kind == "embedding"}
+        for instance in self.subagents:
+            if instance.kind != "shiritaibot" or not instance.model:
+                continue
+            if instance.model not in models - decision - embedding:
+                raise ValueError(f"子代理 {instance.id} 需要已配置的文本生成模型")
+            if instance.enabled and not any(
+                m.id == instance.model and m.enabled and p.enabled and p.id == m.provider
+                for m in self.models
+                for p in self.providers
+            ):
+                raise ValueError(f"子代理 {instance.id} 选择的模型或提供商未启用")
         if any(
             (m in embedding) != (key == "embedding")
             for key, route in self.routes.items()

@@ -32,7 +32,15 @@ def fingerprint(value: Any) -> str:
     return hashlib.sha256(canonical(value).encode()).hexdigest()
 
 
+delegated_workspace: ContextVar[tuple[str, Path] | None] = ContextVar(
+    "delegated_workspace", default=None
+)
+
+
 def session_dir(home: Path, kind: str, session: str) -> Path:
+    delegated = delegated_workspace.get()
+    if delegated and kind == "workspaces" and delegated[0] == session:
+        return delegated[1]
     return home / kind / hashlib.sha256(session.encode()).hexdigest()[:24]
 
 
@@ -94,6 +102,9 @@ class Context:
     reply_anchor: ReplyAnchor | None = None
     web_message_ids: tuple[str, ...] = ()
     tool_call_id: str = ""
+    subagent_run: str = ""
+    allowed_skills: tuple[str, ...] | None = None
+    require_manual_approval: bool = False
 
 
 @dataclass(slots=True)

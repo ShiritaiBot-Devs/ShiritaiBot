@@ -8,7 +8,12 @@ export type CodexSandbox =
 export type ClaudePermissionMode =
   "default" | "acceptEdits" | "auto" | "dontAsk" | "plan" | "bypassPermissions";
 export type SubagentKind =
-  "codex" | "claude_code" | "deepseek_harness" | "antigravity" | "generic";
+  | "shiritaibot"
+  | "codex"
+  | "claude_code"
+  | "deepseek_harness"
+  | "antigravity"
+  | "generic";
 export type ApprovalPolicy = "ask" | "never";
 export type RoutineKind = "todo" | "event" | "course" | "reminder" | "job";
 export type Urgency = "low" | "normal" | "high" | "critical";
@@ -94,6 +99,10 @@ export interface FeishuQrAdapter {
 
 export interface SubagentConfig extends Instance {
   kind: SubagentKind;
+  native_tools: string[];
+  native_skills: string[];
+  native_manual_approval: boolean;
+  instructions: string;
   command: string[];
   timeout: number;
   model: string;

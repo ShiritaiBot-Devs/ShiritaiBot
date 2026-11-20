@@ -323,9 +323,9 @@ async def register_builtin(app) -> None:
         ),
         Tool(
             "subagent_instances",
-            "查询当前已启用、可供 subagent_start 委派的子代理实例（Codex、Claude Code、DeepSeek Harness、Google Antigravity CLI 等），"
-            "返回 id、kind、model、permissions。需要用外部 Agent 写代码、查资料或做多步任务时，先调用本工具。"
-            "model 为空表示使用 CLI 默认模型；permissions 是该实例的权限配置："
+            "查询当前已启用、可供 subagent_start 委派的内置和外部子代理实例，返回 id、kind、model、permissions。"
+            "shiritaibot 是内置 Agent，可使用列出的工具和技能，受来源会话权限限制。"
+            "内置实例的 model 为空时使用 Agent Work 路由，外部实例留空使用 CLI 默认模型。"
             "Codex 为 sandbox（read-only / workspace-write / danger-full-access）与 network_access，"
             "Claude Code 为 permission_mode、tools、allowed_tools、disallowed_tools；"
             "DeepSeek Harness（kind=deepseek_harness，模型由 dsh 配置决定）为 permission_preset"
@@ -338,7 +338,7 @@ async def register_builtin(app) -> None:
         ),
         Tool(
             "subagent_start",
-            "在后台启动已配置的外部 Agent 实例（Codex、Claude Code、DeepSeek Harness、Google Antigravity CLI 等），立即返回任务 ID。"
+            "在后台启动已配置的 ShiritaiBot 内置子代理或外部 Agent 实例，立即返回任务 ID。"
             "委派给外部 Agent 时必须优先用本工具，不要用 shell 直接运行 codex / claude / dsh / agy："
             "本工具会使用配置好的模型与权限、隔离工作目录、限制并发与超时，并自动回报结果，"
             "shell 直接启动则可能卡在交互界面或残留进程。"

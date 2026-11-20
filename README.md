@@ -50,7 +50,7 @@ ShiritaiBot践行“一切皆工具(和Skill，未来方向)”的理念，希�
 - 📅 **日程管理**：待办、日程、课程、提醒和定时任务，可以根据对话自动整理；课程默认不提醒、不触发 Proactive Loop，月历点击日期后可在浮窗查看
 - 💬 **情感陪伴**：高度自定义的人格配置，Chat / Work 模式分流，群聊上下文感知与可选的被动插话（水群）；协议端进程消失时可配置自动拉起
 - 🔍 **网页搜索**：支持 Tavily、SerpAPI、DeepSeek Search 等多种网页搜索提供商
-- 🤖 **子代理**：调用本机 Codex / Claude Code / DeepSeek Harness / Google Antigravity CLI（`agy`）/ 通用 CLI，可在 WebUI「子代理」中为每个实例单独指定网络代理，任务完成后由主动循环接手汇报
+- 🤖 **子代理**：在 WebUI「子代理」中添加 ShiritaiBot 内置实例，可选择已配置的文本模型、工具和 Skill，按需开启人工审批。主 Agent 委派后，子代理在独立工作目录运行，完成或需要补充输入时由主动循环汇报。也支持本机 Codex / Claude Code / DeepSeek Harness / Google Antigravity CLI（`agy`）/ 通用 CLI，并可为 CLI 实例单独指定网络代理。
 - 🧩 **插件系统**：用插件添加工具或事件源，支持 ZIP / GitHub 安装和热重载
 - 📖 **知识库**：在 WebUI 上传或在私聊里发给 Bot，支持 txt、md、pdf、doc(x)、csv、xls(x)、ppt(x)，关键词与 Embedding 混合检索
 - 📚 **技能系统**：安装 `.skill` 技能包（WebUI 上传或直接在聊天里发给 Bot），内置 skill-creator，助手可自己编写和改进技能

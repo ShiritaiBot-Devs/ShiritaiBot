@@ -30,10 +30,14 @@ def skill_tools(app) -> list[Tool]:
                     **({"error": row["error"]} if row["error"] else {}),
                 }
                 for row in rows
+                if ctx.allowed_skills is None
+                or (row["enabled"] and row["name"] in ctx.allowed_skills)
             ]
         }
 
     async def skill_read(ctx, args):
+        if ctx.allowed_skills is not None and args["name"] not in ctx.allowed_skills:
+            raise PublicError("此子代理未获准使用该技能")
         return await skills.read(args["name"], args.get("path", "SKILL.md"), args.get("offset", 0))
 
     async def skill_write(ctx, args):

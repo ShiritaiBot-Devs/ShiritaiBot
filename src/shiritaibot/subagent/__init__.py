@@ -4,8 +4,12 @@ import asyncio
 import json
 import os
 from collections import deque
+from dataclasses import replace
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from shiritaibot.subagent.native import NativeRunner
 
 from shiritaibot.core import Context, ExternalEvent, PublicError, uid
 from shiritaibot.core.logs import brief, get_logger
@@ -119,6 +123,12 @@ def command_for(config, workspace: Path, resume: str | None = None) -> list[str]
 
 def permissions(config) -> dict:
     """The effective permission settings of an instance, as the agent should see them."""
+    if config.kind == "shiritaibot":
+        return {
+            "tools": config.native_tools,
+            "skills": config.native_skills,
+            "manual_approval": config.native_manual_approval,
+        }
     if config.kind == "codex":
         return {
             "sandbox": config.sandbox,
@@ -338,7 +348,9 @@ def question_in(text: str) -> str | None:
 
 
 class SubagentManager:
-    def __init__(self, config, store, home: Path, emit):
+    def __init__(self, config, store, home: Path, emit, native: NativeRunner | None = None):
+        self.native = native
+        self.resume_lock = asyncio.Lock()
         self.config, self.store, self.home, self.emit = config, store, home, emit
         self.tasks: dict[str, asyncio.Task] = {}
         self.semaphore = asyncio.Semaphore(3)
@@ -355,6 +367,11 @@ class SubagentManager:
                 "kind": instance.kind,
                 "model": instance.model,
                 "permissions": permissions(instance),
+                **(
+                    {"instructions": instance.instructions}
+                    if instance.kind == "shiritaibot"
+                    else {}
+                ),
             }
             for instance in self.config.value.subagents
             if instance.enabled
@@ -375,8 +392,9 @@ class SubagentManager:
             raise PublicError("子代理实例不存在或未启用")
         return config.model_copy(deep=True)
 
-    def launch(self, key: str, ctx: Context, config, workspace: Path, prompt: str, resume=None):
-        task = asyncio.create_task(self.run(key, ctx, config, workspace, prompt, resume))
+    def launch(self, row, ctx: Context, config, workspace: Path, prompt: str, resume=None):
+        key = row["id"]
+        task = asyncio.create_task(self.run(dict(row), ctx, config, workspace, prompt, resume))
         self.tasks[key] = task
         task.add_done_callback(lambda _: self.tasks.pop(key, None))
 
@@ -387,24 +405,37 @@ class SubagentManager:
         key = uid()
         workspace = self.home / "workspaces" / key
         await asyncio.to_thread(workspace.mkdir, parents=True, exist_ok=True)
-        row = await self.store.put(
-            "subagent_run",
-            key,
-            {
-                "instance": instance,
-                "status": "queued",
-                "workspace": str(workspace),
-                "task": prompt[:16000],
-                "round": 0,
-            },
-            ctx.session,
-        )
-        self.launch(key, ctx, config, workspace, prompt)
+        body = {
+            "instance": instance,
+            "kind": config.kind,
+            "status": "queued",
+            "workspace": str(workspace),
+            "task": prompt[:16000],
+            "round": 0,
+        }
+        if config.kind == "shiritaibot":
+            body["native_session_id"] = key
+            body["origin"] = {
+                "actor": ctx.actor,
+                "mode": ctx.mode,
+                "owner": ctx.owner,
+                "group": ctx.group,
+                "background": ctx.background,
+                "memory_profile": ctx.memory_profile,
+                "allowed_tools": ctx.allowed_tools,
+                "tool_policy": ctx.tool_policy,
+            }
+        row = await self.store.put("subagent_run", key, body, ctx.session)
+        self.launch(row, ctx, config, workspace, prompt)
         log.log(f"已排队 {instance}（{config.kind}）：{brief(prompt, 80)}", key[:8])
         return row
 
     async def send(self, ctx: Context, key: str, message: str) -> dict:
-        """Continue a finished or waiting run in its native CLI session."""
+        """Continue a finished or waiting run once, even with concurrent replies."""
+        async with self.resume_lock:
+            return await self._send(ctx, key, message)
+
+    async def _send(self, ctx: Context, key: str, message: str) -> dict:
         row = await self.store.get("subagent_run", key)
         # Owner contexts include the Proactive loop that received the needs_input event.
         if not row or (row.get("scope") != ctx.session and not ctx.owner):
@@ -416,79 +447,54 @@ class SubagentManager:
         if len(self.tasks) >= 20:
             raise PublicError("子代理队列已满")
         config = self.instance(row["instance"])
+        if ("kind" in row and row["kind"] != config.kind) or (
+            config.kind == "shiritaibot" and "origin" not in row
+        ):
+            raise PublicError("子代理实例类型已变更，请新建任务")
+        if config.kind == "shiritaibot":
+            origin = Context(row["scope"], **row["origin"])
+            if not ctx.owner and (origin.owner or ctx.actor != origin.actor):
+                raise PublicError("仅任务发起人或主人可以续接此子代理")
+            if ctx.allowed_tools is not None:
+                allowed = set(ctx.allowed_tools)
+                if origin.allowed_tools is not None:
+                    allowed.intersection_update(origin.allowed_tools)
+                origin = replace(origin, allowed_tools=tuple(sorted(allowed)))
+        else:
+            origin = Context(row["scope"], ctx.actor, ctx.mode, ctx.owner, ctx.group)
         if config.kind == "generic":
             raise PublicError("generic 类型的子代理不支持续接")
         row.update(status="queued", round=row.get("round", 0) + 1, reply=message[:4000])
+        row.pop("result", None)
         row.pop("question", None)
         row.pop("error", None)
         row = await self.store.put("subagent_run", key, row, row["scope"])
-        origin = Context(row["scope"], ctx.actor, ctx.mode, ctx.owner, ctx.group)
-        self.launch(key, origin, config, Path(row["workspace"]), message, row["native_session_id"])
+        self.launch(row, origin, config, Path(row["workspace"]), message, row["native_session_id"])
         log.log(f"续接 {config.id}（第 {row['round']} 轮）：{brief(message, 80)}", key[:8])
         return row
 
     async def run(
-        self, key: str, ctx: Context, config, workspace: Path, prompt: str, resume=None
+        self, row: dict, ctx: Context, config, workspace: Path, prompt: str, resume=None
     ) -> None:
-        row = await self.store.get("subagent_run", key)
+        key = row["id"]
         try:
             async with self.semaphore:
                 row["status"] = "running"
                 await self.store.put("subagent_run", key, row, ctx.session)
                 log.log(f"{config.id} 开始运行", key[:8])
-                if config.kind == "generic":
-                    stdin = prompt
+                if config.kind == "shiritaibot":
+                    if self.native is None:
+                        raise PublicError("内置子代理运行器未初始化")
+                    async with asyncio.timeout(config.timeout):
+                        summary = await self.native.run(
+                            key, ctx, config, workspace, prompt, self.notes() + UNATTENDED
+                        )
+                    question = question_in(summary)
+                    row.update(
+                        status="needs_input" if question else "completed", result=clip(summary)
+                    )
                 else:
-                    # Resumed runs already saw the plugin notes in their native session.
-                    stdin = prompt + ("" if resume else self.notes()) + UNATTENDED
-                if config.kind == "antigravity":
-                    stdin = json.dumps({"event": "user", "message": {"content": stdin}}) + "\n"
-                parser = OutputParser(config.kind)
-                limit = OUTPUT_LIMITS.get(config.kind, OUTPUT_LIMIT)
-                result = await run_process(
-                    command_for(config, workspace, resume),
-                    workspace,
-                    stdin,
-                    config.timeout,
-                    env=self.child_env(config),
-                    limit=limit,
-                    on_line=parser.feed if config.kind in STREAMED else None,
-                )
-                parsed = parser.finish(result["stdout"])
-                notice = ""
-                if result["truncated"]:
-                    notice = f"\n\n[输出截断] 子进程输出超过 {limit} 字节，超出部分已丢弃，以上结果可能不完整。"
-                    if not parser.complete:
-                        # A raw prefix of events is not a result, and exit code 0 proves nothing.
-                        parsed.update(error=True, result="子进程输出过长，未能取得最终结果。")
-                failed = result["exit_code"] != 0 or parsed["error"]
-                summary = parsed["result"]
-                question = (
-                    None
-                    if config.kind == "generic"
-                    else parsed.get("question") or question_in(summary)
-                )
-                if parsed["denied"]:
-                    denied = "、".join(dict.fromkeys(parsed["denied"]))
-                    summary += f"\n\n[被拒绝的权限请求] {denied}"
-                    # A denial the agent could not work around means it is stuck, not done.
-                    question = question or f"运行中以下操作因权限不足被拒绝：{denied}"
-                row.update(
-                    status="needs_input"
-                    if question
-                    and parsed["native"]
-                    and (not failed or parsed["denied"] or parsed.get("question"))
-                    else "failed"
-                    if failed
-                    else "completed",
-                    # After question_in, and clipped so that the notice cannot be cut off.
-                    result=clip(summary, RESULT_LIMIT - len(notice)) + notice,
-                    native_session_id=parsed["native"] or row.get("native_session_id"),
-                    exit_code=1
-                    if parsed["error"] and not result["exit_code"]
-                    else result["exit_code"],
-                    truncated=result["truncated"],
-                )
+                    question = await self.run_cli(row, config, workspace, prompt, resume)
                 if row["status"] == "needs_input" and question:
                     row["question"] = question[:2000]
                 # Raw stderr is deliberately not written into the activity feed.
@@ -505,14 +511,16 @@ class SubagentManager:
             log.warning(f"{config.id} 运行超时", key[:8])
         except Exception as exc:
             row.update(status="failed", error=type(exc).__name__)
+            if isinstance(exc, PublicError):
+                row["result"] = str(exc)
             log.error(f"{config.id} 运行失败（{type(exc).__name__}）", key[:8])
         finally:
             status = row["status"]
             if status in {"completed", "failed", "needs_input"} and "error" not in row:
                 label = {"completed": "完成", "failed": "失败", "needs_input": "等待输入"}[status]
+                exit_detail = f"（退出码 {row['exit_code']}）" if "exit_code" in row else ""
                 (log.log if status == "completed" else log.warning)(
-                    f"{config.id} {label}"
-                    f"（退出码 {row.get('exit_code')}）：{brief(row.get('result', ''), 100)}",
+                    f"{config.id} {label}{exit_detail}：{brief(row.get('result', ''), 100)}",
                     key[:8],
                 )
             await self.store.put("subagent_run", key, row, ctx.session)
@@ -540,13 +548,67 @@ class SubagentManager:
                 )
             )
 
+    async def run_cli(self, row, config, workspace, prompt, resume):
+        if config.kind == "generic":
+            stdin = prompt
+        else:
+            # Resumed runs already saw the plugin notes in their native session.
+            stdin = prompt + ("" if resume else self.notes()) + UNATTENDED
+        if config.kind == "antigravity":
+            stdin = json.dumps({"event": "user", "message": {"content": stdin}}) + "\n"
+        parser = OutputParser(config.kind)
+        limit = OUTPUT_LIMITS.get(config.kind, OUTPUT_LIMIT)
+        result = await run_process(
+            command_for(config, workspace, resume),
+            workspace,
+            stdin,
+            config.timeout,
+            env=self.child_env(config),
+            limit=limit,
+            on_line=parser.feed if config.kind in STREAMED else None,
+        )
+        parsed = parser.finish(result["stdout"])
+        notice = ""
+        if result["truncated"]:
+            notice = (
+                f"\n\n[输出截断] 子进程输出超过 {limit} 字节，超出部分已丢弃，以上结果可能不完整。"
+            )
+            if not parser.complete:
+                # A raw prefix of events is not a result, and exit code 0 proves nothing.
+                parsed.update(error=True, result="子进程输出过长，未能取得最终结果。")
+        failed = result["exit_code"] != 0 or parsed["error"]
+        summary = parsed["result"]
+        question = (
+            None if config.kind == "generic" else parsed.get("question") or question_in(summary)
+        )
+        if parsed["denied"]:
+            denied = "、".join(dict.fromkeys(parsed["denied"]))
+            summary += f"\n\n[被拒绝的权限请求] {denied}"
+            # A denial the agent could not work around means it is stuck, not done.
+            question = question or f"运行中以下操作因权限不足被拒绝：{denied}"
+        row.update(
+            status="needs_input"
+            if question
+            and parsed["native"]
+            and (not failed or parsed["denied"] or parsed.get("question"))
+            else "failed"
+            if failed
+            else "completed",
+            # After question_in, and clipped so that the notice cannot be cut off.
+            result=clip(summary, RESULT_LIMIT - len(notice)) + notice,
+            native_session_id=parsed["native"] or row.get("native_session_id"),
+            exit_code=1 if parsed["error"] and not result["exit_code"] else result["exit_code"],
+            truncated=result["truncated"],
+        )
+        return question
+
     async def cancel(self, key: str) -> None:
-        if key in self.tasks:
-            self.tasks[key].cancel()
-            await asyncio.gather(self.tasks[key], return_exceptions=True)
+        task = self.tasks.get(key)
+        if task:
+            # A just-scheduled run must enter its finally block to persist cancellation.
+            await asyncio.sleep(0)
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     async def close(self) -> None:
-        tasks = list(self.tasks.values())
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.gather(*(self.cancel(key) for key in list(self.tasks)))

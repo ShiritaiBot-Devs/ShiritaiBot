@@ -373,6 +373,7 @@ const SUBAGENT_COMMON_FIELDS: FieldSpec[] = [
     label: "类型",
     kind: "select",
     options: [
+      "shiritaibot",
       "codex",
       "claude_code",
       "deepseek_harness",
@@ -380,6 +381,7 @@ const SUBAGENT_COMMON_FIELDS: FieldSpec[] = [
       "generic",
     ],
     optionLabels: {
+      shiritaibot: "ShiritaiBot 内置子代理",
       codex: "Codex",
       claude_code: "Claude Code",
       deepseek_harness: "DeepSeek Harness",
@@ -510,7 +512,54 @@ const DSH_FIELDS: FieldSpec[] = [
   },
 ];
 
-export function subagentFields(item: SubagentConfig): FieldSpec[] {
+export function subagentFields(
+  item: SubagentConfig,
+  models: string[],
+  tools: string[],
+  skills: string[],
+): FieldSpec[] {
+  if (item.kind === "shiritaibot")
+    return [
+      ...SUBAGENT_COMMON_FIELDS.filter(
+        (f) => !["command", "proxy", "model"].includes(f.key),
+      ),
+      {
+        key: "model",
+        label: "模型",
+        kind: "select",
+        options: [...new Set(["", ...models, item.model])],
+        optionLabels: { "": "跟随 Agent Work 路由" },
+      },
+      {
+        key: "instructions",
+        label: "任务说明",
+        kind: "textarea",
+        full: true,
+        help: "主 Agent 选择实例时可看到这段说明，子代理也会按此执行。",
+      },
+      {
+        key: "native_tools",
+        label: "允许使用的工具",
+        kind: "multiselect",
+        full: true,
+        options: [...new Set([...tools, ...item.native_tools])],
+        help: "按工具名授权。每次调用仍需通过来源会话的权限检查。",
+      },
+      {
+        key: "native_skills",
+        label: "允许使用的 Skill",
+        kind: "multiselect",
+        full: true,
+        options: [...new Set([...skills, ...item.native_skills])],
+        help: "勾选后可通过 skill_list 和 skill_read 使用。执行技能所需的其他工具也要单独勾选。",
+      },
+      {
+        key: "native_manual_approval",
+        label: "工具调用需人工审批",
+        kind: "boolean",
+        help: "关闭时沿用来源会话的审批策略。",
+      },
+    ];
   if (item.kind === "codex")
     return [...SUBAGENT_COMMON_FIELDS, ...CODEX_FIELDS];
   if (item.kind === "claude_code")
@@ -542,6 +591,8 @@ export function subagentFields(item: SubagentConfig): FieldSpec[] {
 }
 
 export function subagentSummary(item: SubagentConfig): string {
+  if (item.kind === "shiritaibot")
+    return "ShiritaiBot · " + (item.model || "Agent Work");
   if (item.kind === "codex")
     return "codex · " + item.sandbox + (item.network_access ? " · 联网" : "");
   if (item.kind === "claude_code")
@@ -1156,6 +1207,10 @@ export function createSubagent(rows: SubagentConfig[]): SubagentConfig {
     enabled: false,
     kind: "codex",
     command: ["codex"],
+    instructions: "",
+    native_tools: [],
+    native_skills: [],
+    native_manual_approval: false,
     timeout: 900,
     model: "",
     proxy: "",

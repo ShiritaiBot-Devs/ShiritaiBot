@@ -481,7 +481,11 @@ class _ChatMenu:
         )
 
     def _can_grant(self, req: Request) -> bool:
-        if req.ctx.background or is_feishu_session(req.ctx.session):
+        if (
+            req.ctx.background
+            or req.ctx.require_manual_approval
+            or is_feishu_session(req.ctx.session)
+        ):
             return False
         return not (
             req.tool.name == "shell"
@@ -501,6 +505,8 @@ class _ChatMenu:
             lines.append(f"3 五分钟内 {req.tool.name} 都同意")
             warning = "（⚠ 高危，慎重）" if req.tool.risk in {"sensitive", "dangerous"} else ""
             lines.append(f"4 以后 {req.tool.name} 都同意，不再问{warning}")
+        elif req.ctx.require_manual_approval:
+            lines.append("此子代理要求逐次审批")
         elif not is_feishu_session(req.ctx.session):
             lines.append("（本次命令涉及密钥文件或来自后台会话，只提供 1/2）")
         return "\n".join(lines)

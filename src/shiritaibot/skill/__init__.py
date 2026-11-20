@@ -160,12 +160,14 @@ class SkillManager:
             raise PublicError(f"技能 {name} 已停用")
         return row
 
-    async def prompt(self) -> str:
+    async def prompt(self, allowed: tuple[str, ...] | None = None) -> str:
         """System-prompt block listing usable skills (progressive disclosure, level 1)."""
         cfg = self.config.value.skills
         if not cfg.enabled or not cfg.inject:
             return ""
         rows = await self.active()
+        if allowed is not None:
+            rows = [row for row in rows if row["name"] in allowed]
         if not rows:
             return ""
         lines = "\n".join(f"- {row['name']}：{row['description']}" for row in rows)

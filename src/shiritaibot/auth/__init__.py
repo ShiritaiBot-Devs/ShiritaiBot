@@ -216,6 +216,12 @@ class Permissions:
     def decision(self, ctx: Context, tool: Tool) -> str:
         if not self.config.value.adapter_context_valid(ctx):
             return "deny"
+        if (
+            ctx.subagent_run
+            and not ctx.background
+            and (self.config.value.session_memory(ctx.session) != ctx.memory_profile)
+        ):
+            return "deny"
         policy = self.config.value.policy
         if not ctx.background and self.session_policy(ctx).mode != "agent" and not tool.chat:
             return "deny"
@@ -240,7 +246,10 @@ class Permissions:
         body = {
             "tool": tool.name,
             "args": args,
-            "hash": fingerprint([ctx.session, ctx.memory_profile, tool.name, args]),
+            "hash": fingerprint(
+                [ctx.session, ctx.memory_profile, ctx.subagent_run, tool.name, args]
+            ),
+            **({"subagent_run": ctx.subagent_run} if ctx.subagent_run else {}),
             "status": "pending",
             "reviewer": "model",
             "turn": ctx.turn,
@@ -267,6 +276,7 @@ class Permissions:
                 )
                 request = {
                     "session": ctx.session,
+                    **({"subagent_run": ctx.subagent_run} if ctx.subagent_run else {}),
                     "background": ctx.background,
                     "tool": tool.name,
                     "description": tool.description,
@@ -390,7 +400,7 @@ class Permissions:
         # Credential-bearing files are never auto-approved or exempted, however the shell
         # policy is set: reading config.toml keeps leaking keys into the conversation.
         sensitive = tool.name == "shell" and SENSITIVE_FILE.search(str(args.get("command", "")))
-        if decision == "allow" and not sensitive:
+        if decision == "allow" and not sensitive and not ctx.require_manual_approval:
             return
         if decision in {"auto", "allow"} and sensitive:
             log.log("命令涉及含密钥的文件，改为人工审批", describe_session(ctx.session))
@@ -399,7 +409,8 @@ class Permissions:
             await self.auto_review(ctx, tool, args)
             if self.decision(ctx, tool) not in {"auto", "allow"}:
                 raise PublicError("审批期间权限已变更，未执行")
-            return
+            if not ctx.require_manual_approval:
+                return
         if self.quick_granted(ctx, tool, args):
             log.log(f"五分钟免问生效，直接放行 {tool.name}", describe_session(ctx.session))
             return
@@ -417,6 +428,8 @@ class Permissions:
             "risk": tool.risk,
             "reason": "",
             "batch": "",
+            **({"subagent_run": ctx.subagent_run} if ctx.subagent_run else {}),
+            **({"require_manual_approval": True} if ctx.require_manual_approval else {}),
         }
         where = describe_session(ctx.session)
         try:
@@ -429,7 +442,10 @@ class Permissions:
                 log.log(f"主人拒绝了 {tool.name}", where)
                 raise PublicError("主人拒绝了本次调用")
             log.log(f"主人批准了 {tool.name}", where)
-            if self.decision(ctx, tool) not in {"approve", "allow"}:
+            accepted = {"approve", "allow"}
+            if decision == "auto":
+                accepted.add("auto")  # The model review already passed above.
+            if self.decision(ctx, tool) not in accepted:
                 raise PublicError("审批期间权限已变更，未执行")
         except TimeoutError:
             log.warning(f"审批 {key} 超时，{tool.name} 未执行", where)
@@ -442,7 +458,7 @@ class Permissions:
             self.pending.pop(key, None)
 
     def quick_granted(self, ctx: Context, tool: Tool, args: dict) -> bool:
-        if ctx.background:
+        if ctx.background or ctx.require_manual_approval:
             return False
         if tool.name == "shell" and SENSITIVE_FILE.search(str(args.get("command", ""))):
             return False
@@ -459,6 +475,8 @@ class Permissions:
             self.quick[(session, tool)] = time.monotonic() + QUICK_SECONDS
         for row in await self.store.list("approval", scope=session):
             if row.get("status") != "pending" or row.get("tool") != tool:
+                continue
+            if row.get("require_manual_approval"):
                 continue
             command = str((row.get("args") or {}).get("command", ""))
             if tool == "shell" and SENSITIVE_FILE.search(command):
@@ -501,6 +519,8 @@ class Permissions:
         )
         for row in await self.store.list("approval", scope=session):
             if row.get("status") != "pending" or row.get("tool") != tool:
+                continue
+            if row.get("require_manual_approval"):
                 continue
             try:
                 await self.resolve(row["id"], True)

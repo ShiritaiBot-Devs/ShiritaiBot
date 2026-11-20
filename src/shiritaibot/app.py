@@ -30,6 +30,7 @@ from shiritaibot.routine import RoutineManager
 from shiritaibot.skill import SkillManager
 from shiritaibot.store import Store
 from shiritaibot.subagent import SubagentManager
+from shiritaibot.subagent.native import NativeRunner
 from shiritaibot.tools import ToolRegistry
 from shiritaibot.tools.builtin import register_builtin
 
@@ -104,7 +105,14 @@ class Application:
         self.adapters.emit = self.proactive.emit
         self.maintenance = MemoryMaintenance(self.memory, self.store, self.proactive.emit)
         self.routine = RoutineManager(self.store, self.proactive.emit)
-        self.subagents = SubagentManager(self.config, self.store, self.home, self.proactive.emit)
+        self.skills = SkillManager(self.home, self.config)
+        self.subagents = SubagentManager(
+            self.config,
+            self.store,
+            self.home,
+            self.proactive.emit,
+            NativeRunner(self.config, self.store, self.llm, self.registry, self.skills),
+        )
         self.plugins = PluginManager(
             self.home, self.config, self.registry, self.vault, self.store, self.proactive.emit
         )
@@ -112,7 +120,6 @@ class Application:
         self.plugins.hooks.send = self.adapters.enqueue
         self.adapters.hooks = self.proactive.hooks = self.plugins.hooks
         self.subagents.env = self.plugins.child_env
-        self.skills = SkillManager(self.home, self.config)
         self.mcp = McpManager(self.config, self.registry, self.vault, self.store)
         self.subagents.notes = self.plugins.subagent_notes
         await register_builtin(self)

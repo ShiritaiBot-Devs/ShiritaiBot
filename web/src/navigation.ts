@@ -101,7 +101,7 @@ export const NAV_GROUPS: { label: string; pages: PageMeta[] }[] = [
       {
         id: "subagents",
         label: "子代理",
-        subtitle: "外部 Agent CLI 实例与任务记录。",
+        subtitle: "内置子代理、外部 CLI 实例与任务记录。",
         icon: Workflow,
       },
       {

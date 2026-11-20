@@ -11,6 +11,7 @@ import {
 import type { ConfigPageProps } from "./common";
 
 const commands = {
+  shiritaibot: "",
   codex: "codex",
   claude_code: "claude",
   deepseek_harness: "dsh",
@@ -29,16 +30,47 @@ export function SubagentsPage({
     queryFn: () => client.records("subagent_run"),
     refetchInterval: 4000,
   });
+  const hasNative = config.subagents.some(
+    (item) => item.kind === "shiritaibot",
+  );
+  const tools = useQuery({
+    queryKey: ["tools", "web:owner"],
+    queryFn: () => client.tools("web:owner"),
+    enabled: hasNative,
+  });
+  const skills = useQuery({
+    queryKey: ["skills"],
+    queryFn: () => client.skills(),
+    enabled: hasNative,
+  });
+  const models = config.models.filter(
+    (m) =>
+      m.enabled &&
+      m.kind !== "embedding" &&
+      config.providers.some(
+        (p) => p.id === m.provider && p.enabled && p.protocol !== "systemone",
+      ),
+  );
 
   return (
     <>
       <InstanceCollection
-        title="外部 Agent 实例"
+        title="子代理实例"
         items={config.subagents}
         create={() => createSubagent(config.subagents)}
         onChange={(items) => {
           const subagents = items.map((item) => {
             const previous = config.subagents.find((row) => row.id === item.id);
+            if (
+              previous &&
+              previous.kind !== item.kind &&
+              (item.kind === "shiritaibot" || previous.kind === "shiritaibot")
+            )
+              return {
+                ...item,
+                model: "",
+                command: commands[item.kind] ? [commands[item.kind]] : [],
+              };
             if (
               previous &&
               previous.kind !== item.kind &&
@@ -52,19 +84,48 @@ export function SubagentsPage({
           });
           setConfig({ ...config, subagents });
         }}
-        fields={subagentFields}
+        fields={(item) =>
+          subagentFields(
+            item,
+            models.map((m) => m.id),
+            (tools.data?.tools ?? [])
+              .map((t) => t.name)
+              .filter((name) => !/^(subagent_|skill_)/.test(name)),
+            (skills.data ?? [])
+              .filter((s) => config.skills.enabled && s.enabled && !s.error)
+              .map((s) => s.name),
+          )
+        }
         subtitle={subagentSummary}
-        emptyText="添加 Codex、Claude Code、DeepSeek Harness、Google Antigravity CLI 或自定义 CLI 实例。"
-        renderActions={(item) => (
-          <button
-            type="button"
-            onClick={() =>
-              void act(() => client.detectSubagent(item.id), "已检测到 CLI")
-            }
-          >
-            检测 CLI
-          </button>
-        )}
+        emptyText="添加 ShiritaiBot 内置子代理或外部 CLI 实例。"
+        renderExtra={(item) =>
+          item.kind === "shiritaibot" && (
+            <>
+              {tools.error && (
+                <QueryErrorNotice
+                  message={`读取工具失败：${tools.error.message}`}
+                />
+              )}
+              {skills.error && (
+                <QueryErrorNotice
+                  message={`读取技能失败：${skills.error.message}`}
+                />
+              )}
+            </>
+          )
+        }
+        renderActions={(item) =>
+          item.kind !== "shiritaibot" && (
+            <button
+              type="button"
+              onClick={() =>
+                void act(() => client.detectSubagent(item.id), "已检测到 CLI")
+              }
+            >
+              检测 CLI
+            </button>
+          )
+        }
       />
       <section className="panel">
         <h2>任务记录</h2>
