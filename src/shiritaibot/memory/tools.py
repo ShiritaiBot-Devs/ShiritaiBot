@@ -120,7 +120,7 @@ def memory_tools(memory_for) -> list[Tool]:
         ),
         Tool(
             "memory_save",
-            "写入或更正长期记忆。kind=entity 建立/更新人物或事物（名字、别名、简介，merge 合并重复实体）；"
+            "写入或更正长期记忆。kind=entity 建立/更新人物或事物（名字、别名、简介，merge 合并重复实体），新建实体时 entity_kind 必填（person/thing），仅更新已有实体时可省略；"
             "kind=fact 记录关于某个实体的事实（会过时的状态也可以，例如年级、职位）；"
             "kind=event 记录发生过或计划中的事，time 必须是绝对时间，按对话中的日期换算“昨天”等说法，"
             "实在不确定时用 time_text 保留原话。content 用第三人称、不含相对时间词。"
@@ -133,7 +133,7 @@ def memory_tools(memory_for) -> list[Tool]:
                     "kind": {"type": "string", "enum": ["entity", "fact", "event"]},
                     "name": SHORT,
                     "entity": SHORT,
-                    "entity_kind": {"type": "string", "enum": ["person", "thing"]},
+                    "entity_kind": {"type": "string", "enum": ["person", "thing"], "description": "新建实体时必填（person 人物 / thing 事物）；仅更新已有实体时可省略"},
                     "aliases": NAMES,
                     "summary": {"type": "string", "maxLength": 500},
                     "merge": NAMES,
