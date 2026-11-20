@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from shiritaibot.core import PublicError, canonical
+from shiritaibot.core import PublicError, canonical, fingerprint
 from shiritaibot.core.logs import describe_session, get_logger
 from shiritaibot.store import MEMORY_PROFILE_FILTER, memory_context_key
 
@@ -93,19 +93,30 @@ class ContextManager:
                 while split < len(groups) and size(groups[split:]) + summary_limit > budget:
                     split += 1
                 if split or len(summary) > summary_limit:
-                    material = canonical(
-                        {
-                            "previous_summary": summary,
-                            "messages": transcript(
-                                [m for group in groups[:split] for m in group],
-                                cfg.assistant_name,
-                                cfg.owner_name if owner else "用户",
-                            ),
-                        }
+                    records = transcript(
+                        [m for group in groups[:split] for m in group],
+                        cfg.assistant_name,
+                        cfg.owner_name if owner else "用户",
                     )
+                    limit = cfg.context.compression_tool_chars
+                    for record in records:
+                        if record["role"] == "tool" and limit:
+                            content = record["content"]
+                            if not isinstance(content, str):
+                                content = canonical(content)
+                            if len(content) > limit:
+                                marker = "…"
+                                tail = (limit - len(marker)) // 2
+                                record["content"] = (
+                                    content[: limit - tail - 1]
+                                    + marker
+                                    + (content[-tail:] if tail else "")
+                                )
+                    material = canonical({"previous_summary": summary, "messages": records})
                     settings = cfg.model_copy(deep=True)
-                    if cfg.context.compression_model:
-                        settings.routes["light"] = [cfg.context.compression_model]
+                    candidates = list(
+                        dict.fromkeys([cfg.context.compression_model, *cfg.routes.get("light", [])])
+                    )
                     system = (
                         f"压缩对话上下文。助手称呼为 {cfg.assistant_name}，"
                         f"用户称呼为 {cfg.owner_name if owner else '用户'}。"
@@ -114,31 +125,56 @@ class ContextManager:
                     )
 
                     async def summarize(content):
-                        reply = await self.llm.complete(
-                            "light",
-                            system,
-                            [{"role": "user", "content": content}],
-                            [],
-                            settings=settings,
-                        )
-                        if not reply.text.strip() or reply.calls:
-                            raise PublicError(
-                                "上下文压缩失败：模型未返回有效摘要，原始记录已保留。"
-                            )
-                        return reply.text.strip()[:summary_limit]
+                        for model_id in filter(None, candidates):
+                            settings.routes["light"] = [model_id]
+                            for _ in range(2):
+                                try:
+                                    reply = await self.llm.complete(
+                                        "light",
+                                        system,
+                                        [{"role": "user", "content": content}],
+                                        [],
+                                        settings=settings,
+                                    )
+                                except PublicError:
+                                    # Transport retries have already run inside the provider.
+                                    break
+                                if reply.text.strip() and not reply.calls:
+                                    return reply.text.strip()[:summary_limit]
+                        raise PublicError("上下文压缩失败：所有候选模型均未返回有效摘要。")
 
-                    while len(material) > 16000:
-                        material = "\n".join(
-                            [
-                                await summarize(material[offset : offset + 16000])
-                                for offset in range(0, len(material), 16000)
-                            ]
+                    cache = state.setdefault("chunks", {})
+                    try:
+                        while len(material) > 16000:
+                            chunks = []
+                            for offset in range(0, len(material), 16000):
+                                chunk = material[offset : offset + 16000]
+                                digest = fingerprint([system, summary_limit, chunk])
+                                if digest not in cache:
+                                    cache[digest] = await summarize(chunk)
+                                    await self.store.put(
+                                        "context_state",
+                                        key,
+                                        {
+                                            **state,
+                                            "epoch_seq": epoch_seq,
+                                        },
+                                    )
+                                chunks.append(cache[digest])
+                            material = "\n".join(chunks)
+                        summary = await summarize(material)
+                    except PublicError:
+                        if cfg.context.compression_failure == "error":
+                            raise
+                        summary = ""
+                        log.warning(
+                            "上下文压缩失败，按丢弃策略推进旧轮次", describe_session(session)
                         )
-                    summary = await summarize(material)
-                    log.log(
-                        f"上下文已压缩：{split} 轮旧对话合并为 {len(summary)} 字摘要",
-                        describe_session(session),
-                    )
+                    if summary:
+                        log.log(
+                            f"上下文已压缩：{split} 轮旧对话合并为 {len(summary)} 字摘要",
+                            describe_session(session),
+                        )
             else:
                 summary = ""
                 split = max(0, len(groups) + 1 - cfg.context.max_turns)

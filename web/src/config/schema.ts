@@ -757,6 +757,21 @@ export const PERSONA_FIELDS: FieldSpec[] = [
 
 export const CONTEXT_FIELDS: FieldSpec[] = [
   {
+    key: "compression_tool_chars",
+    label: "摘要材料中单条工具结果的字符上限",
+    kind: "number",
+    min: 0,
+    max: 1000000,
+    help: "超长结果保留首尾。设为 0 可关闭截断。",
+  },
+  {
+    key: "compression_failure",
+    label: "所有压缩模型失败时",
+    kind: "select",
+    options: ["discard", "error"],
+    optionLabels: { discard: "丢弃旧轮次并继续", error: "报错并保留压缩进度" },
+  },
+  {
     key: "max_turns",
     label: "最大保留上下文轮数",
     kind: "number",

@@ -235,6 +235,8 @@ export interface ContextConfig {
   strategy: "compress" | "discard";
   max_turns: number;
   compression_model: string;
+  compression_tool_chars: number;
+  compression_failure: "discard" | "error";
   keep_recent_turns: number;
 }
 

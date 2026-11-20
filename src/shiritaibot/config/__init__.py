@@ -409,6 +409,8 @@ class ContextConfig(Model):
     strategy: Literal["compress", "discard"] = "discard"
     max_turns: int = Field(default=50, ge=1, le=10000)
     compression_model: str = ""
+    compression_tool_chars: int = Field(default=4000, ge=0, le=1000000)
+    compression_failure: Literal["discard", "error"] = "discard"
     keep_recent_turns: int = Field(default=10, ge=0, le=9999)
 
     @model_validator(mode="after")
