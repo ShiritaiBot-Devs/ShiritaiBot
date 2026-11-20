@@ -8,7 +8,7 @@ export type CodexSandbox =
 export type ClaudePermissionMode =
   "default" | "acceptEdits" | "auto" | "dontAsk" | "plan" | "bypassPermissions";
 export type SubagentKind =
-  "codex" | "claude_code" | "deepseek_harness" | "generic";
+  "codex" | "claude_code" | "deepseek_harness" | "antigravity" | "generic";
 export type ApprovalPolicy = "ask" | "never";
 export type RoutineKind = "todo" | "event" | "course" | "reminder" | "job";
 export type Urgency = "low" | "normal" | "high" | "critical";
@@ -97,6 +97,8 @@ export interface SubagentConfig extends Instance {
   command: string[];
   timeout: number;
   model: string;
+  proxy: string;
+  antigravity_mode: "" | "accept-edits" | "auto" | "plan";
   sandbox: CodexSandbox;
   network_access: boolean;
   permission_mode: ClaudePermissionMode;

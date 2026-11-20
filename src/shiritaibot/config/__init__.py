@@ -243,10 +243,14 @@ DSH_PRESET = re.compile(r"^[A-Za-z][\w.-]*$")
 
 
 class SubagentConfig(Instance):
-    kind: Literal["codex", "claude_code", "deepseek_harness", "generic"] = "codex"
-    command: list[str] = Field(default_factory=lambda: ["codex"])
+    kind: Literal["codex", "claude_code", "deepseek_harness", "antigravity", "generic"] = "codex"
+    command: list[str] = Field(
+        default_factory=lambda data: ["agy" if data["kind"] == "antigravity" else "codex"]
+    )
     timeout: int = Field(default=900, ge=5, le=7200)
     model: str = ""
+    proxy: str = ""
+    antigravity_mode: Literal["", "accept-edits", "auto", "plan"] = ""
     # Codex (codex exec) mirrors config.toml: sandbox_mode and
     # sandbox_workspace_write.network_access. Exec mode never asks for approval.
     sandbox: Literal["read-only", "workspace-write", "danger-full-access"] = "workspace-write"
@@ -267,6 +271,11 @@ class SubagentConfig(Instance):
     approval_policy: Literal["ask", "never"] = "never"
     # All: extra directories the agent may use (writable for Codex / dsh workspace-write).
     add_dirs: list[str] = Field(default_factory=list)
+
+    @field_validator("proxy")
+    @classmethod
+    def proxy_valid(cls, value: str) -> str:
+        return check_proxy(value)
 
     @model_validator(mode="before")
     @classmethod

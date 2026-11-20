@@ -762,7 +762,9 @@ def create_app(
         cfg = next((x for x in runtime.config.value.subagents if x.id == key), None)
         if not cfg:
             raise HTTPException(404)
-        return await run_process([*cfg.command, "--version"], home, timeout=10)
+        return await run_process(
+            [*cfg.command, "--version"], home, timeout=10, env=runtime.subagents.child_env(cfg)
+        )
 
     async def run_model_test(provider: ProviderConfig, model: ModelConfig):
         if model.provider != provider.id:

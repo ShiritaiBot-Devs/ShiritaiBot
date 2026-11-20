@@ -372,11 +372,18 @@ const SUBAGENT_COMMON_FIELDS: FieldSpec[] = [
     key: "kind",
     label: "类型",
     kind: "select",
-    options: ["codex", "claude_code", "deepseek_harness", "generic"],
+    options: [
+      "codex",
+      "claude_code",
+      "deepseek_harness",
+      "antigravity",
+      "generic",
+    ],
     optionLabels: {
       codex: "Codex",
       claude_code: "Claude Code",
       deepseek_harness: "DeepSeek Harness",
+      antigravity: "Google Antigravity CLI",
       generic: "自定义 CLI",
     },
   },
@@ -384,9 +391,16 @@ const SUBAGENT_COMMON_FIELDS: FieldSpec[] = [
     key: "command",
     label: "启动命令",
     kind: "list",
-    help: "每行一个参数，只填可执行程序（如 codex、claude、dsh）；权限参数由下方配置生成。",
+    help: "首行填写可执行程序（如 codex、claude、dsh 或 agy），其余启动参数每行一个。",
   },
   { key: "timeout", label: "超时（秒）", kind: "number", min: 5, max: 7200 },
+  {
+    key: "proxy",
+    label: "网络代理",
+    kind: "text",
+    placeholder: "http://127.0.0.1:7890",
+    help: "仅作用于此实例。留空继承运行环境。可填 HTTP、HTTPS 或 SOCKS5 地址，实际支持的协议取决于 CLI。",
+  },
   {
     key: "model",
     label: "模型",
@@ -501,6 +515,23 @@ export function subagentFields(item: SubagentConfig): FieldSpec[] {
     return [...SUBAGENT_COMMON_FIELDS, ...CODEX_FIELDS];
   if (item.kind === "claude_code")
     return [...SUBAGENT_COMMON_FIELDS, ...CLAUDE_FIELDS];
+  if (item.kind === "antigravity")
+    return [
+      ...SUBAGENT_COMMON_FIELDS,
+      {
+        key: "antigravity_mode",
+        label: "执行模式",
+        kind: "select",
+        options: ["", "plan", "accept-edits", "auto"],
+        optionLabels: {
+          "": "使用 CLI 设置",
+          plan: "规划（plan）",
+          "accept-edits": "接受文件编辑（accept-edits）",
+          auto: "自动（auto）",
+        },
+      },
+      ADD_DIRS_FIELD,
+    ];
   if (item.kind === "deepseek_harness")
     // dsh has no model flag: the route comes from its own profile.
     return [
@@ -1112,6 +1143,8 @@ export function createSubagent(rows: SubagentConfig[]): SubagentConfig {
     command: ["codex"],
     timeout: 900,
     model: "",
+    proxy: "",
+    antigravity_mode: "",
     sandbox: "workspace-write",
     network_access: false,
     permission_mode: "acceptEdits",

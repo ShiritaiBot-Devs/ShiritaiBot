@@ -10,6 +10,14 @@ import {
 } from "../config/schema";
 import type { ConfigPageProps } from "./common";
 
+const commands = {
+  codex: "codex",
+  claude_code: "claude",
+  deepseek_harness: "dsh",
+  antigravity: "agy",
+  generic: "",
+};
+
 export function SubagentsPage({
   client,
   config,
@@ -28,10 +36,25 @@ export function SubagentsPage({
         title="外部 Agent 实例"
         items={config.subagents}
         create={() => createSubagent(config.subagents)}
-        onChange={(subagents) => setConfig({ ...config, subagents })}
+        onChange={(items) => {
+          const subagents = items.map((item) => {
+            const previous = config.subagents.find((row) => row.id === item.id);
+            if (
+              previous &&
+              previous.kind !== item.kind &&
+              commands[item.kind] &&
+              (item.command.length === 0 ||
+                (item.command.length === 1 &&
+                  item.command[0] === commands[previous.kind]))
+            )
+              return { ...item, command: [commands[item.kind]] };
+            return item;
+          });
+          setConfig({ ...config, subagents });
+        }}
         fields={subagentFields}
         subtitle={subagentSummary}
-        emptyText="添加 Codex、Claude Code、DeepSeek Harness 或自定义 CLI 实例。"
+        emptyText="添加 Codex、Claude Code、DeepSeek Harness、Google Antigravity CLI 或自定义 CLI 实例。"
         renderActions={(item) => (
           <button
             type="button"

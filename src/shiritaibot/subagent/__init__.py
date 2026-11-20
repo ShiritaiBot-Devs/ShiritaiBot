@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from collections import deque
 from pathlib import Path
 from typing import Callable
@@ -30,7 +31,7 @@ UNATTENDED = (
 # prefix or suffix of it is parseable: it gets a limit far above any realistic reply instead.
 OUTPUT_LIMIT = 256000
 OUTPUT_LIMITS = {"claude_code": 16 * 1024 * 1024}
-STREAMED = {"codex", "deepseek_harness"}
+STREAMED = {"codex", "deepseek_harness", "antigravity"}
 RESULT_LIMIT = 16000
 TEXT_LIMIT = 256000
 
@@ -84,6 +85,16 @@ def command_for(config, workspace: Path, resume: str | None = None) -> list[str]
             args += ["--model", config.model]
         if resume:
             args += ["--resume", resume]
+    elif config.kind == "antigravity":
+        args += ["--input-format", "stream-json", "--output-format", "stream-json"]
+        if config.model:
+            args += ["--model", config.model]
+        if config.antigravity_mode:
+            args += ["--mode", config.antigravity_mode]
+        for directory in config.add_dirs:
+            args += ["--add-dir", directory]
+        if resume:
+            args += ["--conversation", resume]
     elif config.kind == "deepseek_harness":
         # `--profile headless` is a launcher flag and must precede the app arguments. Policy
         # options apply per invocation (they are not saved), so resumes repeat them; resuming
@@ -123,6 +134,8 @@ def permissions(config) -> dict:
             "disallowed_tools": config.disallowed_tools,
             "add_dirs": config.add_dirs,
         }
+    if config.kind == "antigravity":
+        return {"mode": config.antigravity_mode or "CLI default", "add_dirs": config.add_dirs}
     if config.kind == "deepseek_harness":
         return {
             "permission_preset": config.permission_preset,
@@ -189,6 +202,12 @@ class OutputParser:
             self.feed_codex(obj)
         elif self.kind == "deepseek_harness":
             self.feed_deepseek(obj)
+        elif self.kind == "antigravity":
+            if obj.get("event") == "init":
+                self.out["native"] = obj.get("conversation_id")
+            elif obj.get("event") == "result" and isinstance(final := obj.get("result"), dict):
+                self.final = final
+                self.out["native"] = final.get("conversation_id") or self.out["native"]
 
     def feed_codex(self, obj: dict) -> None:
         out = self.out
@@ -230,6 +249,8 @@ class OutputParser:
         out["result"] = stdout
         if self.kind == "claude_code":
             self.finish_claude(stdout)
+        elif self.kind == "antigravity":
+            self.finish_antigravity()
         elif self.kind == "codex":
             self.finish_text("\n".join(self.texts) or self.failure, stdout)
         elif self.kind == "deepseek_harness":
@@ -240,6 +261,30 @@ class OutputParser:
             texts = "\n".join(t for t in self.texts if t)
             self.finish_text(final.get("text") or texts, stdout)
         return out
+
+    def finish_antigravity(self) -> None:
+        final = self.final or {}
+        status = final.get("status")
+        response = final.get("response")
+        response = response.strip() if isinstance(response, str) else ""
+        reason = final.get("finished_reason")
+        if status == "WAITING" and self.out["native"]:
+            self.out["question"] = question_in(response) or response or "子代理请求补充输入"
+        else:
+            self.out["error"] = (
+                status != "SUCCESS"
+                or not response
+                or reason in ("print_timeout", "interrupted", "error")
+            )
+        detail = (final.get("error") or reason) if self.out["error"] else None
+        if self.out["error"] and not detail:
+            detail = (
+                f"Antigravity CLI 状态为 {status}。"
+                if status
+                else "Antigravity CLI 未返回最终结果。"
+            )
+        self.out["result"] = "\n".join(str(part) for part in (response, detail) if part)
+        self.complete = self.final is not None
 
     def finish_text(self, text: str, stdout: str) -> None:
         self.out["result"] = text or stdout
@@ -315,6 +360,15 @@ class SubagentManager:
             if instance.enabled
         ]
 
+    def child_env(self, config) -> dict[str, str] | None:
+        base = self.env()
+        if not config.proxy:
+            return base
+        env = dict(os.environ if base is None else base)
+        for key in ("http_proxy", "https_proxy", "all_proxy"):
+            env[key] = env[key.upper()] = config.proxy
+        return env
+
     def instance(self, name: str):
         config = next((x for x in self.config.value.subagents if x.id == name and x.enabled), None)
         if not config:
@@ -387,6 +441,8 @@ class SubagentManager:
                 else:
                     # Resumed runs already saw the plugin notes in their native session.
                     stdin = prompt + ("" if resume else self.notes()) + UNATTENDED
+                if config.kind == "antigravity":
+                    stdin = json.dumps({"event": "user", "message": {"content": stdin}}) + "\n"
                 parser = OutputParser(config.kind)
                 limit = OUTPUT_LIMITS.get(config.kind, OUTPUT_LIMIT)
                 result = await run_process(
@@ -394,7 +450,7 @@ class SubagentManager:
                     workspace,
                     stdin,
                     config.timeout,
-                    env=self.env(),
+                    env=self.child_env(config),
                     limit=limit,
                     on_line=parser.feed if config.kind in STREAMED else None,
                 )
@@ -407,7 +463,11 @@ class SubagentManager:
                         parsed.update(error=True, result="子进程输出过长，未能取得最终结果。")
                 failed = result["exit_code"] != 0 or parsed["error"]
                 summary = parsed["result"]
-                question = None if config.kind == "generic" else question_in(summary)
+                question = (
+                    None
+                    if config.kind == "generic"
+                    else parsed.get("question") or question_in(summary)
+                )
                 if parsed["denied"]:
                     denied = "、".join(dict.fromkeys(parsed["denied"]))
                     summary += f"\n\n[被拒绝的权限请求] {denied}"
@@ -415,7 +475,9 @@ class SubagentManager:
                     question = question or f"运行中以下操作因权限不足被拒绝：{denied}"
                 row.update(
                     status="needs_input"
-                    if question and parsed["native"] and not (failed and not parsed["denied"])
+                    if question
+                    and parsed["native"]
+                    and (not failed or parsed["denied"] or parsed.get("question"))
                     else "failed"
                     if failed
                     else "completed",
