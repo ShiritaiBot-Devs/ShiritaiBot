@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import unicodedata
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
@@ -55,8 +56,34 @@ def parse_ref(value: str, prefixes: str = "efvc") -> tuple[str, int]:
     return match.group(1), int(match.group(2))
 
 
+QUOTE_MARKS = frozenset("\"'“”‘’\\`")
+QUOTE_IGNORED = re.compile(r"[\s" + re.escape("".join(QUOTE_MARKS)) + r"]+")
+
+
 def normalize(text: str) -> str:
-    return re.sub(r"[\s\"'“”‘’\\`]+", "", text).casefold()
+    return QUOTE_IGNORED.sub("", text).casefold()
+
+
+def quote_span(content: str, target: str, *, loose: bool) -> tuple[str, bool] | None:
+    """Map a normalized match (including casefold expansions) back to source offsets."""
+    chars = []
+    offsets = []
+    for i, char in enumerate(content):
+        if (
+            char.isspace()
+            or char in QUOTE_MARKS
+            or (loose and unicodedata.category(char).startswith("P"))
+        ):
+            continue
+        folded = char.casefold()
+        chars.append(folded)
+        offsets.extend([i] * len(folded))
+    haystack = "".join(chars)
+    start = haystack.find(target)
+    if start < 0:
+        return None
+    end = start + len(target) - 1
+    return content[offsets[start] : offsets[end] + 1], haystack.find(target, start + 1) >= 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,8 +288,10 @@ class MemoryManager:
 
     # ---- evidence ----------------------------------------------------------
 
-    async def evidence(self, ctx: Context, quote: str) -> tuple[str, str]:
-        """(authority, source) for a quote found verbatim in this turn's non-assistant messages."""
+    async def evidence(
+        self, ctx: Context, quote: str, *, strict: bool = False
+    ) -> tuple[str, str, str]:
+        """Return authority, source and an actual span of this turn's archived text."""
         target = normalize(quote)
         if len(target) < 2:
             raise PublicError("evidence 太短，请原样摘录支持这条记忆的原文")
@@ -270,7 +299,7 @@ class MemoryManager:
             f"SELECT data FROM messages WHERE session=? AND turn=? AND {MEMORY_PROFILE_FILTER} ORDER BY seq",
             (ctx.session, ctx.turn, ctx.memory_profile),
         )
-        found = None
+        sources = []
         samples: list[str] = []
         for item in rows:
             message = json.loads(item["data"])
@@ -281,15 +310,33 @@ class MemoryManager:
                 continue
             if len(samples) < 3 and content.strip():
                 samples.append(brief(content, 40))
-            if target not in normalize(content):
-                continue
             if message["role"] == "user" and ctx.owner and not ctx.background:
-                return "owner", f"owner:{ctx.turn}"
-            # In a Proactive loop the "user" message is the event itself, not the owner.
-            kind = "event:proactive" if message["role"] == "user" else "tool"
-            found = found or ("derived", f"{kind}:{ctx.turn}")
-        if found:
-            return found
+                authority, kind = "owner", "owner"
+            else:
+                authority = "derived"
+                kind = "event:proactive" if message["role"] == "user" else "tool"
+            sources.append((authority, f"{kind}:{ctx.turn}", content))
+
+        # Preserve the exact tier's existing precedence for the owner's own words.
+        for authority, source, content in sorted(sources, key=lambda row: row[0] != "owner"):
+            if quote in content:
+                return authority, source, quote
+            if target in normalize(content):
+                match = quote_span(content, target, loose=False)
+                if match:
+                    return authority, source, match[0]
+
+        compact = "".join(c for c in target if not unicodedata.category(c).startswith("P"))
+        if not strict and len(compact) >= 2:
+            found = None
+            for authority, source, content in sources:
+                match = quote_span(content, compact, loose=True)
+                if match:
+                    if found or match[1]:
+                        raise PublicError("evidence 对应多处原文，请摘录更完整的片段")
+                    found = authority, source, match[0]
+            if found:
+                return found
         hint = f"本轮可用的原文片段：{' / '.join(samples)}。" if samples else ""
         raise PublicError(
             "evidence 必须原样摘自本轮主人的消息或工具结果（不能改写、不能跨轮次），"
@@ -297,7 +344,7 @@ class MemoryManager:
         )
 
     async def owner_words(self, ctx: Context, quote: str) -> str:
-        authority, source = await self.evidence(ctx, quote)
+        authority, source, _ = await self.evidence(ctx, quote, strict=True)
         if authority != "owner":
             raise PublicError("owner_quote 必须原样摘自主人本轮的消息")
         return source
@@ -949,7 +996,7 @@ class MemoryManager:
         replaces: str = "",
     ) -> dict:
         content = self.check_content(content)
-        authority, source = await self.evidence(ctx, evidence)
+        authority, source, evidence = await self.evidence(ctx, evidence)
         await self.guard_tombstone(content, authority)
         subject_id = await self.resolve_entity(subject) if subject else None
         start = parse_time(valid_from, self.zone)[0] if valid_from else None
@@ -976,7 +1023,7 @@ class MemoryManager:
         replaces: str = "",
     ) -> dict:
         content = self.check_content(content)
-        authority, source = await self.evidence(ctx, evidence)
+        authority, source, evidence = await self.evidence(ctx, evidence)
         await self.guard_tombstone(content, authority)
         if time:
             occurred, granularity = parse_time(time, self.zone)
