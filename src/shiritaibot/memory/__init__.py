@@ -32,11 +32,11 @@ class ShortTermMemory:
         return await self.store.put("proactive_trace", key, row, "owner")
 
     async def enqueue(self, ctx: Context, status: str) -> None:
+        if not ctx.summary_eligible:
+            return
         owner_scope = owner_memory_scope(ctx.memory_profile)
         turn = await self.store.get("turn", ctx.turn) or {}
-        scope = turn.get("memory_scope") or (
-            owner_scope if ctx.owner and ctx.mode == "agent" and not ctx.group else ctx.session
-        )
+        scope = turn.get("memory_scope") or (owner_scope if ctx.mode == "agent" else ctx.session)
         cfg = self.config.value if self.config else None
         await self.store.insert(
             "memory_summary",
@@ -63,18 +63,33 @@ class ShortTermMemory:
         rows = await self.store.query(
             "SELECT data FROM records WHERE kind='turn' "
             "AND json_extract(data,'$.memory_scope') IS NOT NULL "
+            "AND COALESCE(json_extract(data,'$.summary_eligible'),1)=1 "
             "AND COALESCE(json_extract(data,'$.summary_enqueued'),0)=0"
         )
         for item in rows:
             row = json.loads(item["data"])
             profile = row.get("memory_profile", "default")
             private = row["memory_scope"] == owner_memory_scope(profile)
+            if "summary_eligible" not in row:
+                # Older turns recorded Agent ownership in the memory scope. Owner
+                # Chat turns used the session scope, just like guest Chat turns.
+                session = row["scope"]
+                if session.startswith("group:") or not (
+                    private
+                    or row["loop"] == "proactive"
+                    or (
+                        row["memory_scope"] == session
+                        and self.config
+                        and self.config.value.personal_memory_session(session)
+                    )
+                ):
+                    continue
             await self.enqueue(
                 Context(
                     row["scope"],
                     row["actor"],
                     "agent" if private else "chat",
-                    private,
+                    owner=True,
                     background=row["loop"] == "proactive",
                     turn=row["id"],
                     memory_profile=profile,

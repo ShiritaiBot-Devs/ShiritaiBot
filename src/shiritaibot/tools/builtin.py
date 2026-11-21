@@ -9,7 +9,7 @@ from shiritaibot.core import PublicError, Tool, now, session_dir
 from shiritaibot.core.process import run_process
 from shiritaibot.knowledge.tools import knowledge_tools
 from shiritaibot.meme.tools import meme_tools
-from shiritaibot.memory.tools import memory_tools
+from shiritaibot.memory.tools import memory_tools, private_agent
 from shiritaibot.routine import FINISHED, KEEP_FINISHED, RoutineItem
 from shiritaibot.skill.tools import skill_tools
 from shiritaibot.store import MEMORY_PROFILE_FILTER
@@ -295,6 +295,7 @@ async def register_builtin(app) -> None:
             ),
             proactive_recall,
             risk="safe",
+            available=private_agent,
         ),
         Tool(
             "routine_list",
@@ -438,7 +439,7 @@ async def register_builtin(app) -> None:
         ),
         feishu_file_tool(app),
     ]
-    entries += memory_tools(app.memory_for)
+    entries += memory_tools(app)
     entries += qq_tools(app)
     entries += meme_tools(app)
     entries += knowledge_tools(app)

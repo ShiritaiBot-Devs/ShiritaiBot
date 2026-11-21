@@ -664,6 +664,7 @@ class AgentRuntime:
             "actor": ctx.actor,
             "started": turn_started.isoformat(),
             "steps": 0,
+            "summary_eligible": ctx.summary_eligible,
             "memory_profile": ctx.memory_profile,
             "memory_scope": owner_memory_scope(ctx.memory_profile)
             if ctx.owner and ctx.mode == "agent" and not ctx.group
@@ -968,7 +969,7 @@ class AgentRuntime:
                 )
             body["finished"] = now().isoformat()
             await self.store.put("turn", ctx.turn, body, ctx.session)
-            if self.short_term and not ctx.interject:
+            if self.short_term and body["summary_eligible"]:
                 await self.short_term.enqueue(ctx, body["status"])
                 body["summary_enqueued"] = True
                 await self.store.put("turn", ctx.turn, body, ctx.session)

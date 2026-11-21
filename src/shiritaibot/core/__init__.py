@@ -110,6 +110,13 @@ class Context:
     require_manual_approval: bool = False
     group_wake: str = ""
 
+    @property
+    def summary_eligible(self) -> bool:
+        return (
+            self.owner and not self.group and not self.interject
+            and not self.session.startswith("group:")
+        )
+
 
 @dataclass(slots=True)
 class Tool:

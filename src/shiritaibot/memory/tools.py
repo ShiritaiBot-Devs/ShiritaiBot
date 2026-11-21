@@ -22,16 +22,37 @@ POLICY = (
 )
 
 
-def private(ctx: Context) -> None:
-    # The structural guard: only owner Agent sessions and Proactive loops reach memory.
-    if not ctx.owner or ctx.mode != "agent" or ctx.group:
-        raise PublicError("当前上下文无权访问私人记忆")
+def private_agent(ctx: Context) -> bool:
+    return (
+        ctx.owner and ctx.mode == "agent" and not ctx.group and not ctx.session.startswith("group:")
+    )
 
 
-def memory_tools(memory_for) -> list[Tool]:
-    def selected(ctx: Context):
-        private(ctx)
-        return memory_for(ctx.memory_profile)
+def memory_tools(app) -> list[Tool]:
+    def writable(ctx: Context) -> bool:
+        return private_agent(ctx) and (
+            ctx.background
+            or (
+                app.config.value.session_memory(ctx.session) == ctx.memory_profile
+                and app.permissions.session_policy(ctx).mode == "agent"
+            )
+        )
+
+    def readable(ctx: Context) -> bool:
+        if ctx.group:
+            cfg = app.config.value
+            return (
+                ctx.session.startswith("group:")
+                and not ctx.interject
+                and cfg.shared_memory(ctx.memory_profile)
+                and cfg.session_memory(ctx.session) == ctx.memory_profile
+            )
+        return writable(ctx)
+
+    def selected(ctx: Context, *, write: bool = False):
+        if not (writable(ctx) if write else readable(ctx)):
+            raise PublicError("当前会话无权访问该记忆库")
+        return app.memory_for(ctx.memory_profile)
 
     async def search(ctx, args):
         return await selected(ctx).search(
@@ -48,7 +69,7 @@ def memory_tools(memory_for) -> list[Tool]:
         return await selected(ctx).get(args["id"])
 
     async def save(ctx, args):
-        memory = selected(ctx)
+        memory = selected(ctx, write=True)
         kind = args["kind"]
         if kind == "entity":
             if not args.get("name") and not args.get("entity"):
@@ -85,17 +106,17 @@ def memory_tools(memory_for) -> list[Tool]:
         )
 
     async def forget(ctx, args):
-        return await selected(ctx).forget(args["id"], args["reason"])
+        return await selected(ctx, write=True).forget(args["id"], args["reason"])
 
     async def resolve(ctx, args):
-        return await selected(ctx).resolve_conflict(
+        return await selected(ctx, write=True).resolve_conflict(
             ctx, args["conflict"], args["decision"], args["owner_quote"], args.get("note", "")
         )
 
     return [
         Tool(
             "memory_search",
-            "检索主人的长期记忆（人物、事物、事实、事件）。可按关键词、实体（名字或 e 编号）、"
+            "检索当前会话记忆库中的长期记忆（人物、事物、事实、事件）。可按关键词、实体（名字或 e 编号）、"
             "类型和时间范围过滤；include_history 时也返回已被取代或遗忘的条目。" + POLICY,
             schema(
                 {
@@ -110,6 +131,8 @@ def memory_tools(memory_for) -> list[Tool]:
             ),
             search,
             risk="safe",
+            chat=True,
+            available=readable,
         ),
         Tool(
             "memory_get",
@@ -117,6 +140,8 @@ def memory_tools(memory_for) -> list[Tool]:
             schema({"id": {"type": "string", "pattern": "^[efvc][0-9]+$"}}, ["id"]),
             get,
             risk="safe",
+            chat=True,
+            available=readable,
         ),
         Tool(
             "memory_save",
@@ -133,7 +158,11 @@ def memory_tools(memory_for) -> list[Tool]:
                     "kind": {"type": "string", "enum": ["entity", "fact", "event"]},
                     "name": SHORT,
                     "entity": SHORT,
-                    "entity_kind": {"type": "string", "enum": ["person", "thing"], "description": "新建实体时必填（person 人物 / thing 事物）；仅更新已有实体时可省略"},
+                    "entity_kind": {
+                        "type": "string",
+                        "enum": ["person", "thing"],
+                        "description": "新建实体时必填（person 人物 / thing 事物）；仅更新已有实体时可省略",
+                    },
                     "aliases": NAMES,
                     "summary": {"type": "string", "maxLength": 500},
                     "merge": NAMES,
@@ -151,6 +180,7 @@ def memory_tools(memory_for) -> list[Tool]:
             ),
             save,
             risk="normal",
+            available=writable,
         ),
         Tool(
             "memory_forget",
@@ -161,6 +191,7 @@ def memory_tools(memory_for) -> list[Tool]:
             ),
             forget,
             risk="normal",
+            available=writable,
         ),
         Tool(
             "memory_resolve",
@@ -178,5 +209,6 @@ def memory_tools(memory_for) -> list[Tool]:
             ),
             resolve,
             risk="normal",
+            available=writable,
         ),
     ]
