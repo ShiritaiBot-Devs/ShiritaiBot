@@ -393,6 +393,7 @@ class ProactiveEngine:
             key, "received", event.title, source=event.source, kind=event.kind, title=event.title
         )
         scheduled = event.source == "routine" and event.kind in {"routine.reminder", "routine.job"}
+        reminder = event.source == "routine" and event.kind == "routine.reminder"
         # Memory's own questions for the owner are never discarded, but never urgent either.
         internal = event.source == "memory"
         requested = delegated(row["event"])
@@ -435,6 +436,23 @@ class ProactiveEngine:
                 if event.kind == "subagent.needs_input"
                 else "主人委派的子代理任务已结束，结果需要转告主人",
             )
+        elif scheduled:
+            # Explicit owner instructions skip the classifier; reminders bypass quiet hours.
+            decision = Decision(
+                importance=4 if reminder else 3,
+                decision="notify",
+                message=event.title,
+                reason="主人设定的提醒，必须按时通知主人"
+                if reminder
+                else "主人设定的定时任务，需执行并按结果决定是否通知",
+            )
+        elif internal:
+            decision = Decision(
+                importance=1,
+                decision="digest",
+                message=event.title,
+                reason="记忆系统内部确认事项，汇总后再告知主人",
+            )
         else:
             decision = await self.judge(event)
         if view is not None and self.hooks is not None:
@@ -443,10 +461,10 @@ class ProactiveEngine:
                 # The owner is waiting on a delegated run: plugins cannot silence it.
                 decision = decision.model_copy(update={"importance": 4, "decision": "notify"})
         if scheduled:
-            # Explicit owner instructions cannot be discarded by the classifier.
+            # Explicit owner instructions cannot be discarded or downgraded by plugins.
             decision = decision.model_copy(
                 update={
-                    "importance": max(3, decision.importance),
+                    "importance": 4 if reminder else max(3, decision.importance),
                     "decision": "notify",
                     "message": decision.message or event.title,
                 }
