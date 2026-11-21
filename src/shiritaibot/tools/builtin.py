@@ -185,6 +185,25 @@ async def register_builtin(app) -> None:
             "请直接简短告诉对方任务已委派、稍后回报结果，然后结束本轮回复。",
         }
 
+    async def subagent_spawn(ctx, args):
+        row = await app.subagents.spawn(
+            ctx,
+            args["prompt"],
+            role=args.get("role", ""),
+            instructions=args.get("instructions", ""),
+            tools=args.get("tools"),
+            skills=args.get("skills"),
+            read_only=args.get("read_only", False),
+            model=args.get("model", ""),
+        )
+        return {
+            "id": row["id"],
+            "instance": row["instance"],
+            "status": row["status"],
+            "note": "动态内置子代理已在后台启动。完成后结果会自动转告主人，无需等待或用 subagent_list 轮询。"
+            "请直接简短告诉对方任务已委派、稍后回报结果，然后结束本轮回复。",
+        }
+
     async def subagent_send(ctx, args):
         row = await app.subagents.send(ctx, args["id"], args["message"])
         return {
@@ -349,6 +368,39 @@ async def register_builtin(app) -> None:
             schema({"instance": TEXT, "prompt": TEXT}, ["instance", "prompt"]),
             subagent_start,
             risk="dangerous",
+        ),
+        Tool(
+            "subagent_spawn",
+            "无需预先配置实例，直接按需创建一个临时 ShiritaiBot 内置子代理在后台异步执行任务，立即返回任务 ID。"
+            "默认继承当前会话的工具权限、审批策略与技能范围（自动排除 subagent_* 防止递归嵌套）；"
+            "可通过 read_only=true 仅开放只读/safe 工具，或传入 tools / skills 进一步收紧权限（只缩不扩）。"
+            "可选 role（角色标签）、instructions（附加系统指令）和 model（指定已配置的文本生成模型，留空走 Agent 路由）。"
+            "prompt 要写清楚完整任务，子代理使用干净上下文，看不到当前对话。"
+            "完成后系统会自动把结果转告主人；若需要补充输入（status=needs_input）或继续改进，可用 subagent_send 续接。"
+            "启动后请告知已委派并结束本轮，不要等待或轮询结果。",
+            schema(
+                {
+                    "prompt": TEXT,
+                    "role": {"type": "string", "minLength": 1, "maxLength": 80},
+                    "instructions": {"type": "string", "maxLength": 16000},
+                    "tools": {
+                        "type": "array",
+                        "items": {"type": "string", "minLength": 1, "maxLength": 100},
+                        "maxItems": 100,
+                    },
+                    "skills": {
+                        "type": "array",
+                        "items": {"type": "string", "minLength": 1, "maxLength": 100},
+                        "maxItems": 100,
+                    },
+                    "read_only": {"type": "boolean"},
+                    "model": {"type": "string", "minLength": 1, "maxLength": 100},
+                },
+                ["prompt"],
+            ),
+            subagent_spawn,
+            risk="normal",
+            available=lambda _ctx: app.config.value.policy.dynamic_subagent,
         ),
         Tool(
             "subagent_send",

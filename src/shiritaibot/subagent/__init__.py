@@ -398,6 +398,54 @@ class SubagentManager:
         self.tasks[key] = task
         task.add_done_callback(lambda _: self.tasks.pop(key, None))
 
+    def _validate_dynamic_model(self, model: str) -> str:
+        model = model.strip()
+        if not model:
+            return ""
+        if not self.config.value.policy.dynamic_subagent_model_override:
+            raise PublicError("当前策略不允许动态子代理指定模型")
+        available = self.config.value.text_generation_models()
+        if model not in available:
+            hint = f"；可用模型：{', '.join(available)}" if available else ""
+            raise PublicError(f"模型 {model} 不存在、未启用或不是文本生成模型{hint}")
+        return model
+
+    def _dynamic_spec(self, row: dict):
+        from shiritaibot.subagent.native import DynamicSubagentSpec
+
+        if not self.config.value.policy.dynamic_subagent:
+            raise PublicError("动态内置子代理未启用")
+        raw = row.get("dynamic_spec")
+        if not isinstance(raw, dict):
+            raise PublicError("动态子代理配置缺失，请新建任务")
+        model = self._validate_dynamic_model(str(raw.get("model", "")))
+        tools = raw.get("tools")
+        skills = raw.get("skills")
+        return DynamicSubagentSpec(
+            id=row["instance"],
+            instructions=str(raw.get("instructions", "")),
+            model=model,
+            tools=tuple(tools) if isinstance(tools, list) else None,
+            skills=tuple(skills) if isinstance(skills, list) else None,
+            read_only=bool(raw.get("read_only", False)),
+            timeout=self.config.value.policy.max_turn_seconds,
+        )
+
+    @staticmethod
+    def _origin_snapshot(ctx: Context) -> dict:
+        return {
+            "actor": ctx.actor,
+            "mode": ctx.mode,
+            "owner": ctx.owner,
+            "group": ctx.group,
+            "background": ctx.background,
+            "memory_profile": ctx.memory_profile,
+            "allowed_tools": ctx.allowed_tools,
+            "allowed_skills": ctx.allowed_skills,
+            "require_manual_approval": ctx.require_manual_approval,
+            "tool_policy": ctx.tool_policy,
+        }
+
     async def start(self, ctx: Context, instance: str, prompt: str) -> dict:
         config = self.instance(instance)
         if len(self.tasks) >= 20:
@@ -415,19 +463,67 @@ class SubagentManager:
         }
         if config.kind == "shiritaibot":
             body["native_session_id"] = key
-            body["origin"] = {
-                "actor": ctx.actor,
-                "mode": ctx.mode,
-                "owner": ctx.owner,
-                "group": ctx.group,
-                "background": ctx.background,
-                "memory_profile": ctx.memory_profile,
-                "allowed_tools": ctx.allowed_tools,
-                "tool_policy": ctx.tool_policy,
-            }
+            body["origin"] = self._origin_snapshot(ctx)
         row = await self.store.put("subagent_run", key, body, ctx.session)
         self.launch(row, ctx, config, workspace, prompt)
         log.log(f"已排队 {instance}（{config.kind}）：{brief(prompt, 80)}", key[:8])
+        return row
+
+    async def spawn(
+        self,
+        ctx: Context,
+        prompt: str,
+        *,
+        role: str = "",
+        instructions: str = "",
+        tools: list[str] | None = None,
+        skills: list[str] | None = None,
+        read_only: bool = False,
+        model: str = "",
+    ) -> dict:
+        if not self.config.value.policy.dynamic_subagent:
+            raise PublicError("动态内置子代理未启用")
+        if len(self.tasks) >= 20:
+            raise PublicError("子代理队列已满")
+        validated_model = self._validate_dynamic_model(model)
+        label = f"dynamic:{role.strip()[:80] or 'worker'}"
+        clean_tools = (
+            list(dict.fromkeys(item.strip() for item in tools if item.strip()))
+            if tools is not None
+            else None
+        )
+        clean_skills = (
+            list(dict.fromkeys(item.strip() for item in skills if item.strip()))
+            if skills is not None
+            else None
+        )
+        dynamic_spec = {
+            "role": role.strip()[:80] or "worker",
+            "instructions": instructions.strip()[:16000],
+            "model": validated_model,
+            "tools": clean_tools,
+            "skills": clean_skills,
+            "read_only": bool(read_only),
+        }
+        key = uid()
+        workspace = self.home / "workspaces" / key
+        await asyncio.to_thread(workspace.mkdir, parents=True, exist_ok=True)
+        body = {
+            "instance": label,
+            "kind": "shiritaibot",
+            "dynamic": True,
+            "dynamic_spec": dynamic_spec,
+            "status": "queued",
+            "workspace": str(workspace),
+            "task": prompt[:16000],
+            "round": 0,
+            "native_session_id": key,
+            "origin": self._origin_snapshot(ctx),
+        }
+        spec = self._dynamic_spec(body)
+        row = await self.store.put("subagent_run", key, body, ctx.session)
+        self.launch(row, ctx, spec, workspace, prompt)
+        log.log(f"已排队动态子代理 {label}：{brief(prompt, 80)}", key[:8])
         return row
 
     async def send(self, ctx: Context, key: str, message: str) -> dict:
@@ -446,7 +542,10 @@ class SubagentManager:
             raise PublicError("该子代理任务没有可续接的原生会话（generic 类型或启动即失败）")
         if len(self.tasks) >= 20:
             raise PublicError("子代理队列已满")
-        config = self.instance(row["instance"])
+        if row.get("dynamic"):
+            config = self._dynamic_spec(row)
+        else:
+            config = self.instance(row["instance"])
         if ("kind" in row and row["kind"] != config.kind) or (
             config.kind == "shiritaibot" and "origin" not in row
         ):
@@ -460,6 +559,11 @@ class SubagentManager:
                 if origin.allowed_tools is not None:
                     allowed.intersection_update(origin.allowed_tools)
                 origin = replace(origin, allowed_tools=tuple(sorted(allowed)))
+            if ctx.allowed_skills is not None:
+                skills = list(ctx.allowed_skills)
+                if origin.allowed_skills is not None:
+                    skills = [s for s in skills if s in origin.allowed_skills]
+                origin = replace(origin, allowed_skills=tuple(dict.fromkeys(skills)))
         else:
             origin = Context(row["scope"], ctx.actor, ctx.mode, ctx.owner, ctx.group)
         if config.kind == "generic":

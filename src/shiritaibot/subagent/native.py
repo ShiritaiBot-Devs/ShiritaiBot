@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from shiritaibot.agent import repair_history
@@ -18,17 +18,65 @@ from shiritaibot.core import (
 from shiritaibot.subagent import NEEDS_INPUT
 
 
+@dataclass(frozen=True)
+class DynamicSubagentSpec:
+    id: str
+    instructions: str = ""
+    model: str = ""
+    tools: tuple[str, ...] | None = None
+    skills: tuple[str, ...] | None = None
+    read_only: bool = False
+    timeout: int = 1200
+    kind: str = "shiritaibot"
+
+
 class NativeRunner:
     def __init__(self, config, store, llm, registry, skills):
         self.config, self.store, self.llm = config, store, llm
         self.registry, self.skills = registry, skills
 
-    async def run(
-        self, key: str, ctx: Context, instance, workspace: Path, prompt: str, system: str
-    ):
-        cfg = self.config.value.model_copy(deep=True)
-        if instance.model:
-            cfg.routes["agent"] = [instance.model]
+    def _resolve_permissions(self, ctx: Context, instance) -> tuple[tuple[str, ...], tuple[str, ...] | None, bool]:
+        if isinstance(instance, DynamicSubagentSpec):
+            if instance.tools is None:
+                allowed = {
+                    name
+                    for name in self.registry.tools
+                    if not name.startswith("subagent_")
+                }
+            else:
+                allowed = {
+                    name
+                    for name in instance.tools
+                    if not name.startswith("subagent_") and name in self.registry.tools
+                }
+            if instance.skills is None:
+                allowed_skills = ctx.allowed_skills
+            else:
+                skills = tuple(dict.fromkeys(instance.skills))
+                if ctx.allowed_skills is not None:
+                    skills = tuple(name for name in skills if name in ctx.allowed_skills)
+                allowed_skills = skills
+                if skills:
+                    if instance.tools is not None:
+                        allowed.update(
+                            name
+                            for name in ("skill_list", "skill_read")
+                            if name in self.registry.tools
+                        )
+                else:
+                    allowed.discard("skill_list")
+                    allowed.discard("skill_read")
+            if instance.read_only:
+                allowed = {
+                    name
+                    for name in allowed
+                    if (tool := self.registry.tools.get(name)) is not None
+                    and tool.risk == "safe"
+                }
+            if ctx.allowed_tools is not None:
+                allowed.intersection_update(ctx.allowed_tools)
+            return tuple(sorted(allowed)), allowed_skills, ctx.require_manual_approval
+
         allowed = {
             name for name in instance.native_tools if not name.startswith(("subagent_", "skill_"))
         }
@@ -36,14 +84,25 @@ class NativeRunner:
             allowed.update(("skill_list", "skill_read"))
         if ctx.allowed_tools is not None:
             allowed.intersection_update(ctx.allowed_tools)
+        return tuple(sorted(allowed)), tuple(instance.native_skills), instance.native_manual_approval
+
+    async def run(
+        self, key: str, ctx: Context, instance, workspace: Path, prompt: str, system: str
+    ):
+        cfg = self.config.value.model_copy(deep=True)
+        if instance.model:
+            cfg.routes["agent"] = [instance.model]
+        allowed_tools, allowed_skills, require_manual_approval = self._resolve_permissions(
+            ctx, instance
+        )
         ctx = replace(
             ctx,
             turn=uid(),
             tool_call_id="",
             subagent_run=key,
-            allowed_tools=tuple(sorted(allowed)),
-            allowed_skills=tuple(instance.native_skills),
-            require_manual_approval=instance.native_manual_approval,
+            allowed_tools=allowed_tools,
+            allowed_skills=allowed_skills,
+            require_manual_approval=require_manual_approval,
         )
         system = (
             f"你是 ShiritaiBot 的子代理 {instance.id}。请完成委派的任务并向主 Agent 汇报结果。"

@@ -686,6 +686,8 @@ class Policy(Model):
     max_steps: int = Field(default=25, ge=1, le=100)
     max_turn_seconds: int = Field(default=1200, ge=10, le=7200)
     max_context_chars: int = Field(default=100000, ge=4000, le=1000000)
+    dynamic_subagent: bool = True
+    dynamic_subagent_model_override: bool = True
     # Merge a sender's consecutive messages before starting a turn.
     debounce_enabled: bool = True
     debounce_seconds: float = Field(default=1.5, ge=0, le=30)
@@ -1014,6 +1016,23 @@ class Settings(Model):
             return self.group_context.enabled
         adapter = self.active_feishu_session(session)
         return adapter is not None and adapter.feishu_group_context
+
+    def text_generation_models(self) -> list[str]:
+        decision = {
+            m.id
+            for m in self.models
+            for p in self.providers
+            if p.id == m.provider and p.protocol == "systemone"
+        }
+        enabled_providers = {p.id for p in self.providers if p.enabled}
+        return [
+            m.id
+            for m in self.models
+            if m.enabled
+            and m.kind != "embedding"
+            and m.id not in decision
+            and m.provider in enabled_providers
+        ]
 
     @model_validator(mode="after")
     def references(self) -> Settings:

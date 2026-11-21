@@ -663,6 +663,18 @@ export const POLICY_FIELDS: FieldSpec[] = [
     min: 4000,
     max: 1000000,
   },
+  {
+    key: "dynamic_subagent",
+    label: "允许动态内置子代理",
+    kind: "boolean",
+    help: "开启后，主 Agent 可通过 subagent_spawn 按需创建临时内置子代理，继承当前会话权限与审批策略。",
+  },
+  {
+    key: "dynamic_subagent_model_override",
+    label: "允许动态子代理自选模型",
+    kind: "boolean",
+    help: "允许主 Agent 在 subagent_spawn 时指定已启用的文本生成模型；关闭后固定使用 Agent 路由。",
+  },
 ];
 
 export const MESSAGE_MERGE_FIELDS: FieldSpec[] = [
