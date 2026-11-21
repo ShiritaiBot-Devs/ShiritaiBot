@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import heapq
 import json
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
@@ -9,7 +8,7 @@ from zoneinfo import ZoneInfo
 from croniter import croniter
 from pydantic import AwareDatetime, Field, model_validator
 
-from shiritaibot.core import ExternalEvent, Model, PublicError, now, uid
+from shiritaibot.core import EVENT_TITLE_LIMIT, ExternalEvent, Model, PublicError, now, uid
 from shiritaibot.core.logs import brief, get_logger
 
 log = get_logger("日程")
@@ -63,6 +62,7 @@ class RoutineManager:
         self.store, self.emit = store, emit
         self.wake = asyncio.Event()
         self.pruned = 0.0
+        self.retries: dict[tuple[str, float], tuple[float, float]] = {}
 
     async def create(self, item: RoutineItem) -> dict:
         key = uid()
@@ -162,43 +162,69 @@ class RoutineManager:
             log.log(f"自动清理 {len(stale)} 条结束超过 {KEEP_FINISHED // DAY} 天的日程")
         return len(stale)
 
+    async def _fire(self, row: dict, stamp: float) -> None:
+        key, fire = row["id"], row["next_fire"]
+        delay = stamp - fire
+        title = ("（延迟提醒）" if delay > 60 else "") + row["title"]
+        payload = {
+            "routine_id": key,
+            "scheduled_at": datetime.fromtimestamp(fire, UTC).isoformat(),
+            "late_seconds": delay,
+        }
+        if len(title) > EVENT_TITLE_LIMIT:
+            payload["routine_title"] = row["title"]
+            title = title[: EVENT_TITLE_LIMIT - 1] + "…"
+        event = ExternalEvent(
+            source="routine",
+            kind=f"routine.{row['kind']}",
+            dedup_key=f"{key}:{fire}",
+            title=title,
+            payload=payload,
+        )
+        if row["kind"] == "job":
+            next_fire = (
+                croniter(row["cron"], now().astimezone(ZoneInfo(row["timezone"])))
+                .get_next(datetime)
+                .timestamp()
+            )
+            changes = {"next_fire": next_fire}
+        else:
+            changes = {"status": "fired", "next_fire": None}
+        await self.emit(event)
+        await self.store.put("routine", key, {**row, **changes}, "owner")
+        log.log(
+            f"{KINDS.get(row['kind'], row['kind'])}触发：{brief(row['title'], 80)}"
+            + (f"（延迟 {delay:.0f} 秒）" if delay > 60 else "")
+        )
+
     async def tick(self) -> float:
-        heap = [
-            (r["next_fire"], r["id"], r)
-            for r in await self.store.with_status("routine", ("scheduled",), limit=10000)
-            if r.get("next_fire") is not None and r["status"] == "scheduled"
-        ]
-        heapq.heapify(heap)
+        rows = await self.store.with_status("routine", ("scheduled",), limit=10000)
+        scheduled = sorted(
+            (row["next_fire"], row["id"], row)
+            for row in rows
+            if row.get("next_fire") is not None and row["status"] == "scheduled"
+        )
         stamp = now().timestamp()
-        while heap and heap[0][0] <= stamp:
-            fire, key, row = heapq.heappop(heap)
-            delay = stamp - fire
-            event = ExternalEvent(
-                source="routine",
-                kind=f"routine.{row['kind']}",
-                dedup_key=f"{key}:{fire}",
-                title=("（延迟提醒）" if delay > 60 else "") + row["title"],
-                payload={
-                    "routine_id": key,
-                    "scheduled_at": datetime.fromtimestamp(fire, UTC).isoformat(),
-                    "late_seconds": delay,
-                },
-            )
-            log.log(
-                f"{KINDS.get(row['kind'], row['kind'])}触发：{brief(row['title'], 80)}"
-                + (f"（延迟 {delay:.0f} 秒）" if delay > 60 else "")
-            )
-            await self.emit(event)
-            if row["kind"] == "job":
-                row["next_fire"] = (
-                    croniter(row["cron"], now().astimezone(ZoneInfo(row["timezone"])))
-                    .get_next(datetime)
-                    .timestamp()
-                )
-            else:
-                row.update(status="fired", next_fire=None)
-            await self.store.put("routine", key, row, "owner")
-        return min(30, max(0.1, heap[0][0] - stamp)) if heap else 30
+        wake_at = stamp + 30
+        retries = {}
+        for fire, key, row in scheduled:
+            if fire > stamp:
+                wake_at = min(wake_at, fire)
+                break
+            occurrence = (key, fire)
+            retry_at, backoff = self.retries.get(occurrence, (0.0, 0.0))
+            if retry_at <= stamp:
+                try:
+                    await self._fire(row, stamp)
+                    continue
+                except Exception as exc:
+                    backoff = min(300, max(5, backoff * 2))
+                    retry_at = now().timestamp() + backoff
+                    log.error(f"日程 {key} 触发失败，{backoff:g} 秒后重试", exc=exc)
+            retries[occurrence] = (retry_at, backoff)
+            wake_at = min(wake_at, retry_at)
+        self.retries = retries
+        return max(0.1, wake_at - now().timestamp())
 
     async def run(self) -> None:
         while True:

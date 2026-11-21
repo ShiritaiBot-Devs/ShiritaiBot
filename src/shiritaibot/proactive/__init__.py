@@ -513,7 +513,8 @@ class ProactiveEngine:
                 "用人设口吻把结论整理好转告主人（失败时说明情况）。"
             )
         if event["source"] == "routine" and event["kind"] == "routine.job":
-            prompt += "\n\n这是主人保存的定时任务，请执行任务要求：" + event["title"]
+            instructions = event["payload"].get("routine_title", event["title"])
+            prompt += "\n\n这是主人保存的定时任务，请执行任务要求：" + str(instructions)
         row.update(status="running", loop_started=now().timestamp())
         event_log(key).log("交给 Proactive Agent 核查处理")
         await self.store.put("event", key, row)

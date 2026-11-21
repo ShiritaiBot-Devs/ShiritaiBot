@@ -57,12 +57,15 @@ class Actor(Model):
     role: str = Field(default="", max_length=50)  # sender | recipient | author | ...
 
 
+EVENT_TITLE_LIMIT = 1000
+
+
 class ExternalEvent(Model):
     id: str = Field(default_factory=uid, min_length=1, max_length=200)
     source: str = Field(min_length=1, max_length=200)
     kind: str = Field(min_length=1, max_length=200)
     dedup_key: str = Field(min_length=1, max_length=500)
-    title: str = Field(min_length=1, max_length=1000)
+    title: str = Field(min_length=1, max_length=EVENT_TITLE_LIMIT)
     payload: dict[str, Any] = Field(default_factory=dict)
     urgency: Literal["low", "normal", "high", "critical"] = "normal"
     occurred_at: AwareDatetime = Field(default_factory=now)
