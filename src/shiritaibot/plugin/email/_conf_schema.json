@@ -36,6 +36,7 @@
     "format": "date-time",
     "default": ""
   },
+  "smtp_enabled": { "type": "bool", "description": "启用 SMTP 发件", "hint": "通过邮件发送主动通知。需填写 SMTP 服务器和通知收件人。", "default": true },
   "smtp_host": { "type": "string", "description": "SMTP 服务器（可选）", "default": "" },
   "smtp_port": { "type": "int", "description": "SMTP 端口", "minimum": 1, "maximum": 65535, "default": 465 },
   "smtp_security": {
@@ -49,7 +50,7 @@
   "notify_to": {
     "type": "list",
     "description": "通知收件人",
-    "hint": "每行一个邮箱；同时填写 SMTP 服务器后启用邮件通知。",
+    "hint": "每行一个邮箱；启用 SMTP 发件并填写服务器后生效。",
     "default": []
   },
   "subject_prefix": { "type": "string", "description": "邮件主题前缀", "default": "[ShiritaiBot]" },

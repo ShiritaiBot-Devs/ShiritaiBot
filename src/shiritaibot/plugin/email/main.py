@@ -80,7 +80,7 @@ class EmailSettings(BaseModel):
     max_body_chars: int = Field(default=2000, ge=200, le=20000)
     time_filter: Literal["startup", "last_poll", "none", "custom"] = "startup"
     filter_before: AwareDatetime | None = None
-    # Optional notification channel; disabled unless smtp_host and notify_to are set.
+    smtp_enabled: bool = True
     smtp_host: str = ""
     smtp_port: int = Field(default=465, ge=1, le=65535)
     smtp_security: Security = "ssl"
@@ -223,9 +223,11 @@ class EmailPlugin(Plugin):
         self.state_path = self.context.data_dir / "imap_state.json"
         self.started_at = datetime.now(UTC)
         self.lock = asyncio.Lock()
-        if self.settings.smtp_host and self.settings.notify_to:
+        self.settings.smtp_host = self.settings.smtp_host.strip()
+        if self.settings.smtp_enabled and self.settings.smtp_host and self.settings.notify_to:
             self.context.register_notifier(self.notify)
-        self.task = asyncio.create_task(self.poll()) if self.settings.poll else None
+        if self.settings.poll:
+            self.task = asyncio.create_task(self.poll())
 
     async def terminate(self):
         if self.task is not None:

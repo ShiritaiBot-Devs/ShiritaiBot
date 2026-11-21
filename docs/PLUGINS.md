@@ -218,7 +218,8 @@ max_per_poll = 20
 max_body_chars = 2000
 time_filter = "startup"         # startup / last_poll / none / custom
 filter_before = ""              # custom 模式必填，如 2026-10-28T09:00:00+08:00
-# 可选：把主动通知同时发到邮箱（smtp_host 与 notify_to 都填写才启用）
+# SMTP 发件开关独立于 IMAP 自动收件。填写服务器和通知收件人后可发送邮件。
+smtp_enabled = true
 smtp_host = ""
 smtp_port = 465
 smtp_security = "ssl"
