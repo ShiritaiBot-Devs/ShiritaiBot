@@ -380,7 +380,18 @@ export interface GroupContextConfig {
   inject_messages: number;
   inject_chars: number;
   query_tool: boolean;
-  interject: boolean;
+  interject_mode: "off" | "simple" | "heartflow";
+  heartflow: {
+    activity: number;
+    focus_seconds: number;
+    max_streak: number;
+    rest_seconds: number;
+    energy_curve: "flat" | "linear" | "exponential";
+    energy_recovery_minutes: number;
+    debounce_seconds: number;
+    min_judge_interval: number;
+    developer: boolean;
+  };
   interject_probability: number;
   interject_cooldown: number;
   interject_max_per_hour: number;

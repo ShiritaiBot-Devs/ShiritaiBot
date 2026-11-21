@@ -17,6 +17,7 @@ from shiritaibot.config import (
 from shiritaibot.core import EventBus, PublicError
 from shiritaibot.core.logs import get_logger
 from shiritaibot.emotion import EmotionManager
+from shiritaibot.heartflow import Heartflow
 from shiritaibot.knowledge import KnowledgeBase
 from shiritaibot.llm import ProviderManager
 from shiritaibot.mcp import McpManager
@@ -136,6 +137,8 @@ class Application:
         )
         self.runtime.hooks = self.plugins.hooks
         self.adapters.runtime, self.adapters.permissions = self.runtime, self.permissions
+        self.adapters.heartflow = Heartflow(self.runtime, self.adapters.enqueue)
+        self.runtime.deliver_group_reply = self.adapters.deliver_group_reply
         self.permissions.notify = self.notify_approval
         self.proactive.notify_interaction = partial(self.adapters.notify_owner, handoff=False)
         self.runtime.wait_for_interaction = self.proactive.wait_for_interaction
@@ -365,6 +368,16 @@ class Application:
         await self.open_memory_profiles(settings)
         await self.open_knowledge_libraries(settings)
         await self.config.save(settings, expected_version=expected_version)
+        flow = self.adapters.heartflow
+        if flow:
+            await flow.reset(
+                [
+                    session
+                    for session in flow.groups
+                    if not flow.enabled(session)
+                    or previous.session_memory(session) != settings.session_memory(session)
+                ]
+            )
         for library in settings.knowledge.libraries:
             self.knowledge_bases[library].wake.set()
         await self.runtime.cancel_reconfigured_sessions(previous)

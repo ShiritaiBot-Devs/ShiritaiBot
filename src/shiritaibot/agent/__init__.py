@@ -375,6 +375,7 @@ class AgentRuntime:
         self.hooks: Any = None
         self.submit_locks: dict[str, asyncio.Lock] = {}
         self.context_locks: dict[str, asyncio.Lock] = {}
+        self.deliver_group_reply: Callable[[str, str, str], Awaitable[None]] | None = None
 
     async def handoff(self, session: str, text: str, send) -> None:
         # Append between turns, never between an assistant tool call and its result.
@@ -585,14 +586,21 @@ class AgentRuntime:
             finally:
                 current_reply.reset(token)
 
-    async def _turn(self, actor: SessionActor, ctx: Context, text: str) -> None:
+    async def interjection_candidate(self, ctx: Context, text: str) -> str | None:
+        """Generate without acquiring the passive actor, writing chat history or delivering."""
+        assert ctx.interject and ctx.group and not ctx.owner
+        return await self._turn(None, ctx, text)
+
+    async def _turn(self, actor: SessionActor | None, ctx: Context, text: str) -> str | None:
         turn_started = now()
         settings = self.config.value
         if not settings.adapter_context_valid(ctx) or (
             not ctx.background and ctx.memory_profile != settings.session_memory(ctx.session)
         ):
             return
-        ctx = replace(self.registry.permissions.context(ctx), turn=uid())
+        ctx = replace(
+            self.registry.permissions.context(ctx), turn=ctx.turn if actor is None else uid()
+        )
         append = partial(
             self.store.append, ctx.session, ctx.turn, memory_profile=ctx.memory_profile
         )
@@ -732,21 +740,33 @@ class AgentRuntime:
                 # Group chat is supplied per turn and never archived into the session history.
                 ambient = await self.group_context(ctx, cfg, tools)
                 current = {**user, "content": ambient + user["content"]} if ambient else user
-                history = repair_history(
-                    await ContextManager(self.store, self.llm).prepare(
-                        ctx.session,
-                        cfg,
-                        current,
-                        owner=ctx.owner,
-                        current_turn=ctx.turn,
-                        memory_profile=ctx.memory_profile,
-                    ),
-                    None,
-                )
+                if actor is None:
+                    # Observation can overlap a wake. Only read the existing conversation.
+                    history = repair_history(
+                        await self.store.history(
+                            ctx.session,
+                            limit=20,
+                            include_commands=False,
+                            memory_profile=ctx.memory_profile,
+                        ),
+                        cfg.policy.max_context_chars,
+                    )
+                else:
+                    history = repair_history(
+                        await ContextManager(self.store, self.llm).prepare(
+                            ctx.session,
+                            cfg,
+                            current,
+                            owner=ctx.owner,
+                            current_turn=ctx.turn,
+                            memory_profile=ctx.memory_profile,
+                        ),
+                        None,
+                    )
                 history.append(current)
                 repetitions: Counter = Counter()
                 for step in range(cfg.policy.max_steps):
-                    while actor.steering:
+                    while actor and actor.steering:
                         origin, steering = actor.steering.popleft()
                         item = {
                             "role": "user",
@@ -770,7 +790,7 @@ class AgentRuntime:
                         route,
                         request.system_prompt,
                         request.messages,
-                        request.tools,
+                        [] if actor is None else request.tools,
                         settings=cfg,
                         scope=ctx.session,
                     )
@@ -779,6 +799,11 @@ class AgentRuntime:
                         await hooks.call("llm_response", info, response)
                         if isinstance(response.text, str):
                             reply.text = response.text
+                    if actor is None:
+                        body["status"] = "completed"
+                        if reply.calls or not reply.text.strip():
+                            return None
+                        return "<pass>" if _is_pass(reply.text) else reply.text.strip()
                     if ctx.interject and not reply.calls and _is_pass(reply.text):
                         log.log("群聊观察后决定不插话")
                         body["status"] = "completed"
@@ -804,7 +829,10 @@ class AgentRuntime:
                         if not proactive:
                             log.log(f"回复：{brief(reply.text, 1000) or '（空）'}")
                         final = reply.text or "模型没有返回可显示的内容。"
-                        await self.deliver(ctx.session, final)
+                        if ctx.group_wake and self.deliver_group_reply:
+                            await self.deliver_group_reply(ctx.session, final, ctx.group_wake)
+                        else:
+                            await self.deliver(ctx.session, final)
                         body["status"] = "completed"
                         return
                     # Main-loop text is visible before tools run; proactive turns
@@ -910,6 +938,8 @@ class AgentRuntime:
                 "或在设置 → 策略里提高 max_turn_seconds。"
             )
             log.error(f"本轮失败：{error}")
+            if actor is None:
+                return None
             await append({"role": "assistant", "content": error})
             final = error
             await self.deliver(ctx.session, error)
@@ -922,6 +952,8 @@ class AgentRuntime:
                 f"本轮失败：{error}",
                 exc=None if isinstance(exc, (PublicError, TimeoutError)) else exc,
             )
+            if actor is None:
+                return None
             await append({"role": "assistant", "content": error})
             final = error
             await self.deliver(ctx.session, error)

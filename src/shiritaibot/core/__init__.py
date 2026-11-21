@@ -108,6 +108,7 @@ class Context:
     subagent_run: str = ""
     allowed_skills: tuple[str, ...] | None = None
     require_manual_approval: bool = False
+    group_wake: str = ""
 
 
 @dataclass(slots=True)

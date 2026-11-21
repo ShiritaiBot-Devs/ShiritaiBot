@@ -914,11 +914,20 @@ export const GROUP_CONTEXT_FIELDS: FieldSpec[] = [
     help: "允许 Bot 按关键词查询或向前翻阅本群记录，并在提示词中提醒其按需查询。仍受工具权限控制。",
   },
   {
-    key: "interject",
-    label: "允许被动参与（水群）",
-    kind: "boolean",
-    help: "未 @ Bot 的群消息按概率触发一次只读观察，喜欢就自己接一句，不合适就不说话。不占工具权限、不会写入会话历史。",
+    key: "interject_mode",
+    label: "群聊主动回复",
+    kind: "select",
+    options: ["off", "simple", "heartflow"],
+    optionLabels: {
+      off: "关闭主动回复",
+      simple: "简单主动回复",
+      heartflow: "心流主动回复",
+    },
+    help: "开启群聊上下文后生效。简单模式按概率抽取群消息，心流模式由轻量模型判断何时接话。适用于 OneBot 11 群聊。",
   },
+];
+
+export const SIMPLE_INTERJECT_FIELDS: FieldSpec[] = [
   {
     key: "interject_probability",
     label: "每条群消息的插话概率",
@@ -936,14 +945,81 @@ export const GROUP_CONTEXT_FIELDS: FieldSpec[] = [
     max: 86400,
     help: "同一群两次观察之间的最短间隔。",
   },
+];
+
+export const INTERJECT_LIMIT_FIELD: FieldSpec = {
+  key: "interject_max_per_hour",
+  label: "每群每小时上限",
+  kind: "number",
+  min: 1,
+  max: 60,
+  help: "简单模式按抽中次数计，心流模式按实际发言次数计。",
+};
+
+export const HEARTFLOW_FIELDS: FieldSpec[] = [
   {
-    key: "interject_max_per_hour",
-    label: "每群每小时上限",
+    key: "activity",
+    label: "接话积极度",
+    kind: "slider",
+    min: 0,
+    max: 1,
+    step: 0.05,
+  },
+  {
+    key: "focus_seconds",
+    label: "专注跟聊窗口（秒）",
+    kind: "number",
+    min: 0,
+    max: 3600,
+    help: "机器人发言后，在这段时间内优先留意群友的追问。设为 0 关闭跟聊。",
+  },
+  {
+    key: "max_streak",
+    label: "连续主动发言上限",
     kind: "number",
     min: 1,
-    max: 60,
-    help: "同一群一小时内最多观察并可能发言的次数。",
+    max: 20,
   },
+];
+
+export const HEARTFLOW_ADVANCED_FIELDS: FieldSpec[] = [
+  {
+    key: "rest_seconds",
+    label: "休整时长（秒）",
+    kind: "number",
+    min: 1,
+    max: 86400,
+  },
+  {
+    key: "energy_curve",
+    label: "精力消耗曲线",
+    kind: "select",
+    options: ["flat", "linear", "exponential"],
+    optionLabels: { flat: "均匀", linear: "线性递增", exponential: "指数递增" },
+  },
+  {
+    key: "energy_recovery_minutes",
+    label: "精力回满所需分钟",
+    kind: "number",
+    min: 1,
+    max: 1440,
+  },
+  {
+    key: "debounce_seconds",
+    label: "等待群友说完（秒）",
+    kind: "number",
+    min: 0.1,
+    max: 12,
+    step: 0.1,
+  },
+  {
+    key: "min_judge_interval",
+    label: "潜水时最短观察间隔（秒）",
+    kind: "number",
+    min: 1,
+    max: 3600,
+  },
+  { key: "developer", label: "记录心流调试日志", kind: "boolean" },
 ];
 
 export const VISION_FIELDS: FieldSpec[] = [

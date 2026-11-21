@@ -1,11 +1,6 @@
 import { PageTabs } from "../components/PageTabs";
-import { LoadingBar } from "../components/LoadingBar";
 import { ModelOptions } from "../components/ModelOptions";
 import { useState } from "react";
-import { useQueries } from "@tanstack/react-query";
-import type { ApiClient } from "../api/client";
-import type { Settings } from "../api/types";
-import { adapterSessionId } from "../lib/sessions";
 import { Field, FieldForm } from "../components/FieldForm";
 import { InstanceCollection } from "../components/InstanceCollection";
 import {
@@ -16,6 +11,10 @@ import {
   CONTEXT_FIELDS,
   EMOTION_FIELDS,
   GROUP_CONTEXT_FIELDS,
+  SIMPLE_INTERJECT_FIELDS,
+  INTERJECT_LIMIT_FIELD,
+  HEARTFLOW_FIELDS,
+  HEARTFLOW_ADVANCED_FIELDS,
   MEMORY_FIELDS,
   MESSAGE_MERGE_FIELDS,
   WEB_SEARCH_FIELDS,
@@ -24,64 +23,16 @@ import {
 } from "../config/schema";
 import type { ConfigPageProps } from "./common";
 
-function GroupTools({
-  client,
-  config,
-}: {
-  client: ApiClient;
-  config: Settings;
-}) {
-  const groups = config.adapters
-    .filter((adapter) => adapter.enabled)
-    .flatMap((adapter) =>
-      adapter.groups.map((group) => ({
-        adapter: adapter.id,
-        group,
-        session: adapterSessionId(adapter, "group", group),
-      })),
-    );
-  const results = useQueries({
-    queries: groups.map((item) => ({
-      queryKey: ["tools", item.session],
-      queryFn: () => client.tools(item.session),
-      staleTime: 30000,
-    })),
-  });
-  if (!groups.length) {
-    return <p className="muted">还没有启用任何群聊。</p>;
-  }
-  return (
-    <ul className="muted">
-      {groups.map((item, index) => {
-        const catalog = results[index]?.data;
-        const available = (catalog?.tools ?? [])
-          .filter((tool) => tool.decision !== "deny")
-          .map((tool) => tool.name);
-        return (
-          <li key={item.session}>
-            <strong>
-              {item.adapter} · {item.group}
-            </strong>
-            ：
-            {catalog ? (
-              available.join("、") || "无可用工具"
-            ) : (
-              <LoadingBar compact label="读取中…" />
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 const SETTINGS_TABS = [
   { id: "general", label: "通用设定" },
   { id: "persona", label: "人格设定" },
   { id: "extensions", label: "扩展功能" },
 ] as const;
 
-export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
+export function SettingsPage({ config, setConfig }: ConfigPageProps) {
+  const group = config.group_context;
+  const setHeartflow = (heartflow: typeof group.heartflow) =>
+    setConfig({ ...config, group_context: { ...group, heartflow } });
   const [tab, setTab] =
     useState<(typeof SETTINGS_TABS)[number]["id"]>("general");
   return (
@@ -229,13 +180,36 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
           <h2>群聊上下文感知</h2>
           <FieldForm
             value={config.group_context}
-            fields={GROUP_CONTEXT_FIELDS}
+            fields={[
+              ...GROUP_CONTEXT_FIELDS,
+              ...(group.interject_mode === "simple"
+                ? SIMPLE_INTERJECT_FIELDS
+                : []),
+              ...(group.interject_mode !== "off"
+                ? [INTERJECT_LIMIT_FIELD]
+                : []),
+            ]}
             onChange={(group_context) =>
               setConfig({ ...config, group_context })
             }
           />
-          <h3>当前群可用的工具</h3>
-          <GroupTools client={client} config={config} />
+          {group.interject_mode === "heartflow" && (
+            <>
+              <FieldForm
+                value={group.heartflow}
+                fields={HEARTFLOW_FIELDS}
+                onChange={setHeartflow}
+              />
+              <details>
+                <summary>心流高级设置</summary>
+                <FieldForm
+                  value={group.heartflow}
+                  fields={HEARTFLOW_ADVANCED_FIELDS}
+                  onChange={setHeartflow}
+                />
+              </details>
+            </>
+          )}
         </section>
       </div>
       <div

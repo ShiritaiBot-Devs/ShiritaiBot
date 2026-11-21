@@ -9,7 +9,7 @@ import re
 import time
 from collections import deque
 from time import monotonic
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -38,6 +38,9 @@ from shiritaibot.core import (
 from shiritaibot.core.logs import brief, get_logger
 from shiritaibot.core.text import clean_outbound
 from shiritaibot.meme.inject import MemeInjector
+
+if TYPE_CHECKING:
+    from shiritaibot.heartflow import Heartflow, Observation
 
 
 def segments(value) -> list[dict]:
@@ -301,6 +304,7 @@ class AdapterHub:
         # Passive participation: last interject per session and a one-hour history.
         self.interject_at: dict[str, float] = {}
         self.interject_log: dict[str, deque[float]] = {}
+        self.heartflow: Heartflow | None = None
 
     async def start(self) -> None:
         for cfg in self.config.value.adapters:
@@ -340,6 +344,8 @@ class AdapterHub:
         }
 
     async def close(self) -> None:
+        if self.heartflow:
+            await self.heartflow.reset()
         for task in self.tasks:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
@@ -469,7 +475,15 @@ class AdapterHub:
         )
         settings = self.config.value
         keyword = settings.matches_wake_keyword(text)
+        flow = (
+            self.heartflow
+            if group
+            and settings.group_context.enabled
+            and settings.group_context.interject_mode == "heartflow"
+            else None
+        )
         message_id = f"{cfg.id}:{event.get('message_id')}"
+        arrival = flow.arrival(session, wake=mentioned or keyword) if flow else None
         where = f"群 {target}" if group else "私聊"
         # Untriggered group chatter is only context, so it stays at debug level.
         (bot.log.log if not group or mentioned or keyword else bot.log.debug)(
@@ -520,6 +534,7 @@ class AdapterHub:
         ):
             bot.log.debug("重复消息，已跳过", speaker)
             return
+        wake = flow.wake(session) if flow and not passive_group else ""
         if passive_group:
             if text.startswith("/"):
                 if direct_command:
@@ -532,7 +547,10 @@ class AdapterHub:
                 return
             if self.hooks is not None and await self.hooks.dispatch(message(False)):
                 return
-            await self.maybe_interject(bot, session, user, speaker, describe(parts))
+            if flow and arrival is not None:
+                flow.message(session, arrival, user, speaker, text)
+            else:
+                await self.maybe_interject(bot, session, user, speaker, describe(parts))
             return
         # Keep the original text for the model, but allow "小知，/stop" and approval replies.
         rest = settings.strip_wake_prefix(text)
@@ -588,7 +606,14 @@ class AdapterHub:
         if text:
             owner = user == cfg.owner_id
             await self.runtime.submit(
-                Context(session, user, "agent" if owner and not group else "chat", owner, group),
+                Context(
+                    session,
+                    user,
+                    "agent" if owner and not group else "chat",
+                    owner,
+                    group,
+                    group_wake=wake,
+                ),
                 text,
             )
 
@@ -601,7 +626,12 @@ class AdapterHub:
 
         settings = self.config.value
         group = settings.group_context
-        if not group.enabled or not group.interject or not text or self.runtime is None:
+        if (
+            not group.enabled
+            or group.interject_mode != "simple"
+            or not text
+            or self.runtime is None
+        ):
             return
         busy = getattr(self.runtime, "busy", None)
         if busy is not None and busy(session):
@@ -687,19 +717,45 @@ class AdapterHub:
                 )
             )
 
+    async def deliver_group_reply(self, session: str, text: str, wake: str) -> None:
+        await self.enqueue(session, text, group_wake=wake)
+
     async def enqueue(
-        self, session: str, text: str, *, decorate: bool = True, approval_batch: str = ""
+        self,
+        session: str,
+        text: str,
+        *,
+        decorate: bool = True,
+        approval_batch: str = "",
+        observation: Observation | None = None,
+        group_wake: str = "",
     ) -> None:
         if decorate and self.hooks is not None:
             decorated = await self.hooks.decorate(session, text)
             if decorated is None:
                 return
             text = decorated
-        await self._enqueue(session, text, approval_batch=approval_batch)
+        if observation and not (self.heartflow and self.heartflow.valid(session, observation.id)):
+            return
+        await self._enqueue(
+            session,
+            text,
+            approval_batch=approval_batch,
+            observation=observation,
+            group_wake=group_wake,
+        )
         if self.hooks is not None:
             self.hooks.sent(session, text)
 
-    async def _enqueue(self, session: str, text: str, *, approval_batch: str = "") -> None:
+    async def _enqueue(
+        self,
+        session: str,
+        text: str,
+        *,
+        approval_batch: str = "",
+        observation: Observation | None = None,
+        group_wake: str = "",
+    ) -> None:
         injector = self.memes.injector if self.memes is not None else None
         if session.startswith(("web:", "background:")):
             if injector is not None:
@@ -727,27 +783,30 @@ class AdapterHub:
             delivery.update(qq_reply_to=anchor.message_id, expires=anchor.expires)
         if approval_batch:
             delivery["approval_batch"] = approval_batch
+        if group_wake:
+            delivery["group_wake"] = group_wake
+        if observation:
+            delivery["heartflow"] = observation.id
+            delivery["memory_profile"] = observation.profile
+
+        async def put(piece: dict):
+            key = uid()
+            if observation:
+                observation.rows.add(key)
+            try:
+                await self.store.put("outbox", key, {**piece, **delivery}, session)
+            except Exception:
+                if observation:
+                    observation.rows.discard(key)
+                raise
+
         for piece in pieces:
             if not isinstance(piece, str):
-                await self.store.put(
-                    "outbox",
-                    uid(),
-                    {
-                        "text": MemeInjector.label(piece),
-                        "meme": piece["id"],
-                        **delivery,
-                    },
-                    session,
-                )
+                await put({"text": MemeInjector.label(piece), "meme": piece["id"]})
                 continue
             chunk = 600 if official else 3500
             for index in range(0, len(piece), chunk):
-                await self.store.put(
-                    "outbox",
-                    uid(),
-                    {"text": piece[index : index + chunk], **delivery},
-                    session,
-                )
+                await put({"text": piece[index : index + chunk]})
 
     async def outgoing(self, row: dict) -> list[dict] | None:
         """OneBot message segments for an outbox row; None when its sticker is gone."""
@@ -799,7 +858,11 @@ class AdapterHub:
                     continue
                 kind, adapter_id, target = row["scope"].split(":", 2)
                 bot = self.instances.get(adapter_id)
-                if row["expires"] < now().timestamp():
+                if row.get("heartflow") and not (
+                    self.heartflow and self.heartflow.valid(row["scope"], row["heartflow"])
+                ):
+                    row["status"] = "expired"
+                elif row["expires"] < now().timestamp():
                     row["status"] = "expired"
                     get_logger(adapter_id).warning("消息超过发送有效期，已放弃")
                 elif kind == "group" and row.get(
@@ -833,6 +896,8 @@ class AdapterHub:
                     await self.flush_onebot(bot, row, kind, target, message)
                     continue
                 await self.store.put("outbox", row["id"], row, row["scope"])
+                if row.get("heartflow") and self.heartflow:
+                    self.heartflow.settled(row["scope"], row)
             await asyncio.sleep(1)
 
     async def flush_onebot(
@@ -844,9 +909,19 @@ class AdapterHub:
             row["status"] = "failed"
             bot.log.warning("无效的 OneBot 目标，已跳过", where)
             await self.store.put("outbox", row["id"], row, row["scope"])
+            if row.get("heartflow") and self.heartflow:
+                self.heartflow.settled(row["scope"], row)
             return
         row["status"] = "uncertain"
         await self.store.put("outbox", row["id"], row, row["scope"])
+        if row.get("heartflow") and not (
+            self.heartflow and self.heartflow.valid(row["scope"], row["heartflow"])
+        ):
+            row["status"] = "expired"
+            await self.store.put("outbox", row["id"], row, row["scope"])
+            if self.heartflow:
+                self.heartflow.settled(row["scope"], row)
+            return
         try:
             receipt = await bot.call(
                 "send_group_msg" if group else "send_private_msg",
@@ -864,10 +939,28 @@ class AdapterHub:
         else:
             row.update(status="sent", receipt=receipt)
             await self.store.put("outbox", row["id"], row, row["scope"])
+            if row.get("group_wake") and self.heartflow:
+                self.heartflow.passive_sent(row["scope"], row["group_wake"], row["text"])
+            if row.get("heartflow"):
+                try:
+                    await self.store.append(
+                        row["scope"],
+                        row["heartflow"],
+                        {
+                            "role": "assistant",
+                            "content": row["text"],
+                            "_speaker": self.config.value.assistant_name,
+                        },
+                        memory_profile=row["memory_profile"],
+                    )
+                except Exception as exc:
+                    bot.log.warning(f"插话已发送，记录会话历史失败（{type(exc).__name__}）", where)
             bot.log.debug(f"已发送：{brief(row['text'], 80)}", where)
             await self.record_sent_group(
                 bot.self_id, row, kind, enabled=self.config.value.group_context.enabled
             )
+        if row.get("heartflow") and self.heartflow and row["status"] != "pending":
+            self.heartflow.settled(row["scope"], row)
         await asyncio.sleep(0.7)
 
     async def flush_qq_official(self, bot: QQOfficial, row: dict, kind: str, target: str) -> None:

@@ -15,6 +15,7 @@ from pydantic import (
     Field,
     JsonValue,
     StringConstraints,
+    TypeAdapter,
     ValidationError,
     field_validator,
     model_validator,
@@ -550,6 +551,18 @@ class KnowledgeConfig(Model):
         return library if self.enabled and library != "disabled" else None
 
 
+class HeartflowConfig(Model):
+    activity: float = Field(default=0.5, ge=0, le=1)
+    focus_seconds: int = Field(default=150, ge=0, le=3600)
+    max_streak: int = Field(default=3, ge=1, le=20)
+    rest_seconds: int = Field(default=600, ge=1, le=86400)
+    energy_curve: Literal["flat", "linear", "exponential"] = "exponential"
+    energy_recovery_minutes: int = Field(default=45, ge=1, le=1440)
+    debounce_seconds: float = Field(default=4, ge=0.1, le=12)
+    min_judge_interval: int = Field(default=20, ge=1, le=3600)
+    developer: bool = False
+
+
 class GroupContextConfig(Model):
     enabled: bool = False
     # 0 disables injection; the Bot can still query when the tool is enabled.
@@ -560,10 +573,23 @@ class GroupContextConfig(Model):
     # injection is off; without it the model cannot tell which member is talking now.
     identify_sender: bool = True
     # Passive participation: sometimes chime in on chatter that never addressed the Bot.
-    interject: bool = False
+    interject_mode: Literal["off", "simple", "heartflow"] = "off"
+    heartflow: HeartflowConfig = Field(default_factory=HeartflowConfig)
     interject_probability: float = Field(default=0.02, ge=0, le=1)
     interject_cooldown: int = Field(default=900, ge=60, le=86400)
     interject_max_per_hour: int = Field(default=4, ge=1, le=60)
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_interject(cls, data):
+        if isinstance(data, dict) and "interject" in data:
+            data = data.copy()
+            old = data.pop("interject")
+            if "interject_mode" not in data:
+                data["interject_mode"] = (
+                    "simple" if TypeAdapter(bool).validate_python(old) else "off"
+                )
+        return data
 
 
 ToolPermission = Literal["deny", "manual", "auto", "allow"]
