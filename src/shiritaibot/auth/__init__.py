@@ -401,12 +401,13 @@ class Permissions:
         if decision in {"auto", "allow"} and sensitive:
             log.log("命令涉及含密钥的文件，改为人工审批", describe_session(ctx.session))
             decision = "manual"
+        elif decision in {"auto", "allow"} and ctx.require_manual_approval:
+            decision = "manual"
         if decision == "auto":
             await self.auto_review(ctx, tool, args)
             if self.decision(ctx, tool) not in {"auto", "allow"}:
                 raise PublicError("审批期间权限已变更，未执行")
-            if not ctx.require_manual_approval:
-                return
+            return
         if self.quick_granted(ctx, tool, args):
             log.log(f"五分钟免问生效，直接放行 {tool.name}", describe_session(ctx.session))
             return
@@ -438,10 +439,7 @@ class Permissions:
                 log.log(f"主人拒绝了 {tool.name}", where)
                 raise PublicError("主人拒绝了本次调用")
             log.log(f"主人批准了 {tool.name}", where)
-            accepted = {"approve", "allow"}
-            if decision == "auto":
-                accepted.add("auto")  # The model review already passed above.
-            if self.decision(ctx, tool) not in accepted:
+            if self.decision(ctx, tool) not in {"approve", "allow", "auto"}:
                 raise PublicError("审批期间权限已变更，未执行")
         except TimeoutError:
             log.warning(f"审批 {key} 超时，{tool.name} 未执行", where)

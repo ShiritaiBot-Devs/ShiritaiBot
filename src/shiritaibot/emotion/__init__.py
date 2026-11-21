@@ -13,7 +13,7 @@ import json
 from shiritaibot.core import Context, ExternalEvent, now
 from shiritaibot.core.logs import brief, get_logger
 from shiritaibot.emotion import rules, state
-from shiritaibot.emotion.judge import EmotionJudge
+from shiritaibot.emotion.judge import SITUATION_FLOOR, EmotionJudge
 from shiritaibot.emotion.prompt import render
 
 JUDGE_TIMEOUT = 30
@@ -101,8 +101,36 @@ class EmotionManager:
                 )
             raw = state.combine(semantic, hit.level, hit.negativity, cfg.emotion)
             at = now().timestamp()
-            for key in state.scope_keys(ctx):
-                previous = await self.store.get(state.KIND, key)
+            keys = state.scope_keys(ctx)
+            previous_by_key = {key: await self.store.get(state.KIND, key) for key in keys}
+            # Only summarize situation when the merged state will actually keep it.
+            if (
+                judgment is not None
+                and judgment.semantic >= SITUATION_FLOOR
+                and raw >= state.threshold(cfg.emotion)
+                and any(
+                    raw
+                    >= (
+                        state.decay(
+                            float(prev.get("value", 0.0)),
+                            float(prev.get("updated", 0.0)),
+                            cfg.emotion.persistence,
+                            at,
+                        )
+                        if prev
+                        else 0.0
+                    )
+                    for prev in previous_by_key.values()
+                )
+            ):
+                try:
+                    async with asyncio.timeout(JUDGE_TIMEOUT):
+                        situation = await judge.situation(cfg, text, recent)
+                except Exception as exc:
+                    log.debug("情绪近况概括失败", exc=exc)
+                    situation = ""
+            for key in keys:
+                previous = previous_by_key[key]
                 updated = state.merge(
                     previous,
                     raw,

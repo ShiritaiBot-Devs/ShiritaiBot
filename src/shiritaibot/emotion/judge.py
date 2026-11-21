@@ -118,13 +118,9 @@ class EmotionJudge:
             return None
         best = max(scores, key=lambda label: scores[label])
         affect = best if scores[best] >= DOMINANT_FLOOR else "calm"
-        judgment = Judgment(affect, intensity, impact, "", "judge")
-        if judgment.semantic < SITUATION_FLOOR:
-            return judgment
-        situation = await self._situation(settings, text, recent)
-        return Judgment(affect, intensity, impact, situation, "judge")
+        return Judgment(affect, intensity, impact, "", "judge")
 
-    async def _situation(self, settings, text: str, recent: list[str]) -> str:
+    async def situation(self, settings, text: str, recent: list[str]) -> str:
         if not settings.routes.get("light"):
             return ""
         message = canonical({"message": text[:2000], "recent": recent[-3:]})

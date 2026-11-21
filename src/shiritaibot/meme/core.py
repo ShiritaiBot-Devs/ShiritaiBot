@@ -303,6 +303,8 @@ class MemeCore:
                 picked = name if name in categories else None
             except (KeyError, ValueError):
                 pass
+        if fit and score is not None and score < cfg.meme.fit_threshold:
+            return score, picked
         if (fit and score is None) or (category and picked is None):
             material = (
                 f"助手人设：\n{persona}\n\n表情包描述：{description}\n\n可选分类：\n"

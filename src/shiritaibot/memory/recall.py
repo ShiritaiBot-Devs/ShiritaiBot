@@ -65,6 +65,12 @@ class MemoryRecall:
         strong = [key for key, matched in hits if matched >= need]
         vectors = [(k, s) for k, s in await memory.vectors.search(text) if s >= VECTOR_KEEP]
         if not linked and not strong and not any(s >= VECTOR_GATE for _, s in vectors):
+            # Skip asking the decision model when there is nothing in memory to fall back to.
+            has_fallback = bool(hits or vectors) or bool(
+                await memory.rows("SELECT 1 FROM mem_event WHERE status='active' LIMIT 1")
+            )
+            if not has_fallback:
+                return {}, set()
             # A decision model can still open the gate: "那件事后来怎么样了" names nothing.
             if hint is None and memory.judge.available():
                 hint = await memory.judge.recall(text)
@@ -96,19 +102,31 @@ class MemoryRecall:
         scores, pinned = await self.candidates(text, hint)
         if not scores:
             return ""
-        await self.rerank(text, scores, pinned)
+        items = await memory.load(list(scores))
+        shown = await self.shown(ctx)
+        digests: dict[str, str] = {}
+        for key in list(scores):
+            item = items.get(key)
+            if item is None or not is_live(item):
+                del scores[key]
+                continue
+            digest = fingerprint(memory.plain(item))
+            if shown.get(key) == digest:
+                del scores[key]
+                continue
+            digests[key] = digest
         if not scores:
             return ""
-        items = await memory.load(list(scores))
+        await self.rerank(text, scores, pinned, items=items)
+        if not scores:
+            return ""
         stamp = now().timestamp()
-        for key, item in items.items():
+        for key in scores:
+            item = items[key]
             if item["type"] == "event":
                 age = max(0.0, stamp - (item["occurred_at"] or item["created"]))
                 scores[key] *= 0.5 + 0.5 * math.pow(2, -age / EVENT_HALF_LIFE)
-        order = sorted(
-            (k for k in items if is_live(items[k])), key=lambda k: (k not in pinned, -scores[k])
-        )
-        shown = await self.shown(ctx)
+        order = sorted(scores, key=lambda k: (k not in pinned, -scores[k]))
         corrections = {
             key: [old for old in olds if old in shown]
             for key, olds in (await self.corrections(order)).items()
@@ -121,9 +139,7 @@ class MemoryRecall:
         used = 0
         for key in order:
             item = items[key]
-            digest = fingerprint(memory.plain(item))
-            if shown.get(key) == digest:
-                continue
+            digest = digests[key]
             entity = item if item["type"] == "entity" else item.get("entity")
             if entity is not None:
                 slot = entity["ref"]
@@ -166,15 +182,24 @@ class MemoryRecall:
             [f'<memory retrieved_at="{minute(stamp, memory.zone)}">', HEADER, *body, "</memory>"]
         )
 
-    async def rerank(self, text: str, scores: dict[str, float], pinned: set[str]) -> None:
+    async def rerank(
+        self,
+        text: str,
+        scores: dict[str, float],
+        pinned: set[str],
+        *,
+        items: dict[str, dict] | None = None,
+    ) -> None:
         """Blend in the decision model's relevance; drop off-topic or instructive items."""
         judge = self.memory.judge
         if not judge.available():
             return
         top = sorted(scores, key=lambda k: -scores[k])[:RERANK]
-        items = await self.memory.load(top)
-        refs = [key for key in top if key in items]
-        answers = await judge.rerank(text, [self.memory.plain(items[k]) for k in refs])
+        loaded = items if items is not None else await self.memory.load(top)
+        refs = [key for key in top if key in loaded]
+        if not refs or (len(refs) == 1 and refs[0] in pinned):
+            return
+        answers = await judge.rerank(text, [self.memory.plain(loaded[k]) for k in refs])
         if answers is None:
             return
         best = max(scores[k] for k in refs)
