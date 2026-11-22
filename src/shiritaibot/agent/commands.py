@@ -113,11 +113,7 @@ async def command(runtime, ctx, text):
             if cfg.help_menu_style != "text" and not ctx.background:
                 try:
                     image = await asyncio.to_thread(
-                        render_help_menu,
-                        cfg.assistant_name,
-                        sections,
-                        cfg.help_menu_style,
-                        font_dir=runtime.store.home / "fonts",
+                        render_help_menu, cfg.assistant_name, sections, cfg.help_menu_style
                     )
                 except (OSError, ValueError) as exc:
                     log.warning(f"帮助菜单图片渲染失败，已改发文字（{exc}）")

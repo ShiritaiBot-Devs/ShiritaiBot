@@ -1,13 +1,11 @@
 import asyncio
 import base64
-import hashlib
 import json
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import httpx
-import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -26,10 +24,9 @@ def png_data() -> bytes:
     return output.getvalue()
 
 
-def test_help_image_is_available_in_web_history(tmp_path, monkeypatch):
-    png = png_data()
-    render = Mock(return_value=png)
-    monkeypatch.setattr("shiritaibot.agent.commands.render_help_menu", render)
+def test_help_image_is_rendered_and_saved_without_system_fonts(tmp_path, monkeypatch):
+    monkeypatch.setattr(help_menu, "system_cjk_font", lambda: None)
+    monkeypatch.setattr(httpx, "stream", Mock(side_effect=AssertionError("unexpected download")))
     monkeypatch.setattr(RuntimeEnvironment, "prepare", AsyncMock())
     (tmp_path / "config.toml").write_text(
         'help_menu_style = "dark"\n[policy.sessions."web:help-test".tools]\nmemory_search = "deny"\n',
@@ -52,39 +49,11 @@ def test_help_image_is_available_in_web_history(tmp_path, monkeypatch):
         assert client.get(path).status_code == 401
         response = client.get(path, headers=headers)
         assert response.headers["content-type"] == "image/png"
-        assert response.content == png
-        assert render.call_args.args[2] == "dark"
-        assert render.call_args.kwargs["font_dir"] == tmp_path / "fonts"
+        with Image.open(BytesIO(response.content)) as image:
+            assert image.format == "PNG" and image.width == 1120
+            assert image.getpixel((0, 0)) == (20, 18, 29)
         assert client.delete(f"/api/web-chats/{session}", headers=headers).status_code == 200
         assert client.get(path, headers=headers).status_code == 404
-
-
-def test_help_font_installs_when_missing_and_reuses_verified_cache(tmp_path, monkeypatch):
-    font_bytes = b"fake font"
-    monkeypatch.setattr(help_menu, "system_cjk_font", lambda: None)
-    monkeypatch.setattr(help_menu, "FONT_SIZE", len(font_bytes))
-    monkeypatch.setattr(help_menu, "FONT_SHA256", hashlib.sha256(font_bytes).hexdigest())
-    replies = Mock(side_effect=[b"bad bytes", font_bytes, font_bytes])
-
-    def download(request):
-        assert str(request.url) == help_menu.FONT_URL
-        return httpx.Response(200, content=replies())
-
-    with httpx.Client(transport=httpx.MockTransport(download)) as client:
-        monkeypatch.setattr(help_menu.httpx, "stream", client.stream)
-        font_dir = tmp_path / "fonts"
-        with pytest.raises(OSError, match="完整性校验"):
-            help_menu.cjk_font(font_dir)
-        assert not list(font_dir.iterdir())
-
-        installed = help_menu.cjk_font(font_dir)
-        assert installed.read_bytes() == font_bytes
-        assert help_menu.cjk_font(font_dir) == installed
-        assert replies.call_count == 2
-
-        installed.write_bytes(b"bad bytes")
-        assert help_menu.cjk_font(font_dir).read_bytes() == font_bytes
-        assert replies.call_count == 3
 
 
 def test_onebot_help_image_takes_precedence_over_folding():
