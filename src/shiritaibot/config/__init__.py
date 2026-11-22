@@ -826,6 +826,11 @@ class WebSearchConfig(Model):
     deepseek: DeepSeekSearchConfig = Field(default_factory=DeepSeekSearchConfig)
 
 
+class HelpMenuSection(Model):
+    id: str = Field(pattern=r"^(builtin|plugin):[A-Za-z0-9_-]{1,64}$")
+    visible: bool = True
+
+
 class Settings(Model):
     providers: list[ProviderConfig] = Field(default_factory=list)
     models: list[ModelConfig] = Field(default_factory=list)
@@ -859,6 +864,7 @@ class Settings(Model):
     onebot_forward_long_messages: bool = False
     onebot_forward_threshold: int = Field(default=1000, ge=1)
     help_menu_style: Literal["text", "light", "dark"] = "text"
+    help_menu_sections: list[HelpMenuSection] = Field(default_factory=list)
     context: ContextConfig = Field(default_factory=ContextConfig)
     group_context: GroupContextConfig = Field(default_factory=GroupContextConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
@@ -906,6 +912,13 @@ class Settings(Model):
     @classmethod
     def routes_complete(cls, value: dict[str, list[str]]) -> dict[str, list[str]]:
         return {**{k: [] for k in ROUTE_KEYS}, **value}
+
+    @field_validator("help_menu_sections")
+    @classmethod
+    def help_menu_sections_unique(cls, value: list[HelpMenuSection]) -> list[HelpMenuSection]:
+        if len({section.id for section in value}) != len(value):
+            raise ValueError("帮助菜单分区不能重复")
+        return value
 
     @field_validator("wake_keywords")
     @classmethod

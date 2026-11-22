@@ -2,6 +2,7 @@ import { PageTabs } from "../components/PageTabs";
 import { ModelOptions } from "../components/ModelOptions";
 import { useState } from "react";
 import { Field, FieldForm } from "../components/FieldForm";
+import { HelpMenuSections } from "../components/HelpMenuSections";
 import { InstanceCollection } from "../components/InstanceCollection";
 import {
   BASIC_SETTINGS_FIELDS,
@@ -30,7 +31,7 @@ const SETTINGS_TABS = [
   { id: "extensions", label: "扩展功能" },
 ] as const;
 
-export function SettingsPage({ config, setConfig }: ConfigPageProps) {
+export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
   const group = config.group_context;
   const setHeartflow = (heartflow: typeof group.heartflow) =>
     setConfig({ ...config, group_context: { ...group, heartflow } });
@@ -112,6 +113,13 @@ export function SettingsPage({ config, setConfig }: ConfigPageProps) {
             onChange={setConfig}
           />
         </section>
+        <HelpMenuSections
+          client={client}
+          value={config.help_menu_sections}
+          onChange={(help_menu_sections) =>
+            setConfig({ ...config, help_menu_sections })
+          }
+        />
         <section className="settings-group">
           <h2>上下文管理</h2>
           <div className="field-grid">

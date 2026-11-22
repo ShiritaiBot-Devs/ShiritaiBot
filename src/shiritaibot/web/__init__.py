@@ -20,7 +20,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from shiritaibot import __version__ as BOT_VERSION
 from shiritaibot.adapters.qq_official import MAX_CALLBACK_BYTES, CallbackError, QQOfficial
-from shiritaibot.agent.commands import visible_builtin_commands
+from shiritaibot.agent.commands import help_section_titles, visible_builtin_commands
 from shiritaibot.api.event import MessageEvent
 from shiritaibot.app import Application
 from shiritaibot.config import (
@@ -202,6 +202,13 @@ def create_app(
         ] + [
             {"name": handler.command[1:], "description": handler.description or handler.plugin}
             for handler in runtime.plugins.hooks.commands_for_context(ctx)
+        ]
+
+    @api.get("/api/help-menu/sections", dependencies=protected)
+    async def help_menu_sections():
+        return [
+            {"id": key, "title": title}
+            for key, title in help_section_titles(runtime.plugins.hooks.of("command")).items()
         ]
 
     @api.get("/api/health", dependencies=protected)

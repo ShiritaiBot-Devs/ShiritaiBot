@@ -2,6 +2,8 @@ import asyncio
 import base64
 import json
 from io import BytesIO
+from pathlib import Path
+from shutil import copytree
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -54,6 +56,59 @@ def test_help_image_is_rendered_and_saved_without_system_fonts(tmp_path, monkeyp
             assert image.getpixel((0, 0)) == (20, 18, 29)
         assert client.delete(f"/api/web-chats/{session}", headers=headers).status_code == 200
         assert client.get(path, headers=headers).status_code == 404
+
+
+def test_help_menu_layout_is_shared_by_text_and_image(tmp_path, monkeypatch):
+    example = Path(__file__).resolve().parents[1] / "examples" / "plugins" / "hello_world"
+    copytree(example, tmp_path / "plugins" / "hello_world")
+    (tmp_path / "config.toml").write_text(
+        '[[plugins]]\nid = "hello_world"\nenabled = true\n', encoding="utf8"
+    )
+    plan = SimpleNamespace(supports=lambda *_: True)
+    monkeypatch.setattr(RuntimeEnvironment, "prepare", AsyncMock(return_value=plan))
+    render = Mock(return_value=png_data())
+    monkeypatch.setattr("shiritaibot.agent.commands.render_help_menu", render)
+    headers = {"Authorization": "Bearer local-test"}
+    with TestClient(create_app(tmp_path, token="local-test")) as client:
+        catalog = client.get("/api/help-menu/sections", headers=headers).json()
+        assert {entry["id"] for entry in catalog} == {
+            "builtin:session",
+            "builtin:models",
+            "builtin:memory",
+            "builtin:tools",
+            "plugin:hello_world",
+        }
+        config = client.get("/api/config", headers=headers).json()
+        config["help_menu_sections"] = [
+            {"id": "plugin:hello_world", "visible": True},
+            {"id": "plugin:temporarily-unavailable", "visible": False},
+            {"id": "builtin:models", "visible": False},
+        ]
+
+        def menu():
+            response = client.post("/api/messages", headers=headers, json={"text": "/help"})
+            assert response.json() == {"status": "command"}
+            return client.get("/api/history", headers=headers).json()[-1]
+
+        assert client.put("/api/config", headers=headers, json=config).status_code == 200
+        text = menu()["content"]
+        assert text.index("插件 · hello_world") < text.index("\n会话\n")
+        assert "/models" not in text and "/permissions" in text
+
+        config["help_menu_style"] = "dark"
+        assert client.put("/api/config", headers=headers, json=config).status_code == 200
+        image = menu()
+        assert image["content"] == text and image["_help_image"]
+        sections = render.call_args.args[1]
+        assert sections[0][0] == "插件 · hello_world"
+        assert "模型与人格" not in [title for title, _ in sections]
+
+        config["help_menu_sections"][0]["visible"] = False
+        assert client.put("/api/config", headers=headers, json=config).status_code == 200
+        assert "/hello" not in menu()["content"]
+        assert "hello" in {
+            item["name"] for item in client.get("/api/commands", headers=headers).json()
+        }
 
 
 def test_onebot_help_image_takes_precedence_over_folding():

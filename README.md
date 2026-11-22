@@ -94,6 +94,8 @@ shiritaibot token             # 一键安装（macOS / Linux）
 
 在 WebUI「设置 → 通用设定 → 消息发送」可以配置 OneBot 长消息折叠，以及 `/help` 的文字、亮色图片或暗色图片样式。图片菜单优先使用系统中文字体，缺少时使用随程序附带的 Noto Sans SC 2.004，可离线渲染。飞书发送图片需要应用开通 `im:resource` 权限。 [字体来源](https://github.com/notofonts/noto-cjk/blob/Sans2.004/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf) · [SIL Open Font License 1.1](src/shiritaibot/agent/fonts/OFL-NotoSansSC.txt)
 
+同页的「`/help` 菜单分区」可设置内置功能分区和已加载插件分区的显示及顺序。文字和图片共用这份设置，仍按发起者的会话权限筛选命令。未配置的分区按默认顺序追加。
+
 ## 许可证
 
 本项目使用 [GNU Affero General Public License v3.0](LICENSE)（AGPL-3.0-or-later）开源。

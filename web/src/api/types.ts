@@ -483,6 +483,16 @@ export interface Paginated<T> {
   page_size: number;
 }
 
+export interface HelpMenuSectionSetting {
+  id: string;
+  visible: boolean;
+}
+
+export interface HelpMenuSection {
+  id: string;
+  title: string;
+}
+
 export interface Settings {
   providers: ProviderConfig[];
   models: ModelConfig[];
@@ -509,6 +519,7 @@ export interface Settings {
   onebot_forward_long_messages: boolean;
   onebot_forward_threshold: number;
   help_menu_style: "text" | "light" | "dark";
+  help_menu_sections: HelpMenuSectionSetting[];
   context: ContextConfig;
   group_context: GroupContextConfig;
   memory: MemoryConfig;

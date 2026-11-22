@@ -147,6 +147,23 @@
   margin-left: auto;
 }
 
+.help-menu-sections .list-row {
+  gap: 6px;
+  padding: 3px 0;
+}
+
+.help-menu-sections .field-toggle {
+  flex: 1;
+  min-width: 0;
+  min-height: 42px;
+  margin-right: 6px;
+  overflow-wrap: anywhere;
+}
+
+.help-menu-sections .list-row:last-child {
+  border-bottom: 0;
+}
+
 .tag {
   padding: 3px 7px;
   border: 1px solid var(--border-strong);

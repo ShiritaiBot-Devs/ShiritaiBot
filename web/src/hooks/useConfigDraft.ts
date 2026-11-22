@@ -53,6 +53,7 @@ export function useConfigDraft(client: ApiClient | null) {
       ["config"],
       ["tools"],
       ["commands"],
+      ["help-menu-sections"],
       ["diagnostics"],
       ["memory-profiles"],
       ["knowledge-libraries"],

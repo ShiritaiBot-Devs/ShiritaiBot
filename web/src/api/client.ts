@@ -7,6 +7,7 @@ import type {
   FeishuQrAdapter,
   FeishuQrRegistration,
   Health,
+  HelpMenuSection,
   HistoryMessage,
   KnowledgeDetail,
   KnowledgeDocument,
@@ -102,6 +103,7 @@ export interface ApiClient {
   stats(hours: number): Promise<Statistics>;
   exchangeRate(): Promise<ExchangeRate>;
   commands(session: string): Promise<CommandInfo[]>;
+  helpMenuSections(): Promise<HelpMenuSection[]>;
   helpMenuImage(id: string): Promise<Blob>;
   history(session: string): Promise<HistoryMessage[]>;
   webChats(): Promise<WebChat[]>;
@@ -343,6 +345,7 @@ export function createClient(getToken: () => string): ApiClient {
     exchangeRate: () => request<ExchangeRate>("/exchange-rate"),
     commands: (session) =>
       request<CommandInfo[]>("/commands?" + new URLSearchParams({ session })),
+    helpMenuSections: () => request<HelpMenuSection[]>("/help-menu/sections"),
     helpMenuImage: (id) =>
       requestBlob("/help-images/" + encodeURIComponent(id)),
     webChats: () => request<WebChat[]>("/web-chats"),

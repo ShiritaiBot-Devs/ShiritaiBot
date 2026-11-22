@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from collections.abc import Iterable
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from shiritaibot.agent.help_menu import HelpSection, render_help_menu
 from shiritaibot.auth.menu import RISK_LABELS
 from shiritaibot.config import SessionPolicy, preset_risks
 from shiritaibot.core import PublicError, uid
 from shiritaibot.core.logs import get_logger
+
+if TYPE_CHECKING:
+    from shiritaibot.plugin.core.hooks import Handler
 
 COMMANDS = {
     "help": "查看命令帮助",
@@ -36,10 +41,10 @@ PRIVATE_COMMANDS = {"tasks", "memory", "approve", "deny", "grants"}
 OWNER_COMMANDS = {"new", "clear"}
 COMMAND_TOOLS = {"memory": "memory_search", "tasks": "subagent_list"}
 COMMAND_GROUPS = {
-    "会话": ("help", "status", "new", "clear", "stop", "mode"),
-    "模型与人格": ("models", "model", "personas", "persona"),
-    "工具与审批": ("tools", "permissions", "approve", "deny", "grants"),
-    "记忆与任务": ("memory", "tasks"),
+    "builtin:session": ("会话", ("help", "status", "new", "clear", "stop", "mode")),
+    "builtin:models": ("模型与人格", ("models", "model", "personas", "persona")),
+    "builtin:tools": ("工具与审批", ("tools", "permissions", "approve", "deny", "grants")),
+    "builtin:memory": ("记忆与任务", ("memory", "tasks")),
 }
 log = get_logger("指令")
 
@@ -67,20 +72,32 @@ def visible_builtin_commands(ctx, registry) -> dict[str, str]:
     return visible
 
 
+def help_section_titles(handlers: Iterable[Handler]) -> dict[str, str]:
+    return {
+        **{key: title for key, (title, _) in COMMAND_GROUPS.items()},
+        **{f"plugin:{handler.plugin}": f"插件 · {handler.plugin}" for handler in handlers},
+    }
+
+
 def help_sections(runtime, ctx) -> list[HelpSection]:
     from shiritaibot.plugin.core.hooks import usage
 
     commands = visible_builtin_commands(ctx, runtime.registry)
-    sections = [
-        (title, [(f"/{name}", commands[name]) for name in names if name in commands])
-        for title, names in COMMAND_GROUPS.items()
+    entries = {
+        key: [(f"/{name}", commands[name]) for name in names if name in commands]
+        for key, (_, names) in COMMAND_GROUPS.items()
+    }
+    hooks = getattr(runtime, "hooks", None)
+    handlers = hooks.commands_for_context(ctx) if hooks is not None else []
+    for handler in handlers:
+        entries.setdefault(f"plugin:{handler.plugin}", []).append((usage(handler), handler.description))
+    titles = help_section_titles(handlers)
+    configured = {section.id: section.visible for section in runtime.config.value.help_menu_sections}
+    return [
+        (titles[key], entries[key])
+        for key in dict.fromkeys((*configured, *titles))
+        if configured.get(key, True) and entries.get(key)
     ]
-    plugins: dict[str, list[tuple[str, str]]] = {}
-    if hooks := getattr(runtime, "hooks", None):
-        for handler in hooks.commands_for_context(ctx):
-            plugins.setdefault(handler.plugin, []).append((usage(handler), handler.description))
-    sections.extend((f"插件 · {name}", entries) for name, entries in plugins.items())
-    return [(title, entries) for title, entries in sections if entries]
 
 
 async def command(runtime, ctx, text):
@@ -103,14 +120,15 @@ async def command(runtime, ctx, text):
                 raise PublicError("只有主人可以重置会话、切换模型或人格。")
         if name == "help":
             sections = help_sections(runtime, ctx)
-            answer = f"{cfg.assistant_name} 命令帮助\n\n" + "\n\n".join(
+            body = "\n\n".join(
                 title + "\n" + "\n".join(
                     f"{usage} — {description}" if description else usage
                     for usage, description in entries
                 )
                 for title, entries in sections
             )
-            if cfg.help_menu_style != "text" and not ctx.background:
+            answer = f"{cfg.assistant_name} 命令帮助\n\n{body or '当前会话没有可显示的命令。'}"
+            if sections and cfg.help_menu_style != "text" and not ctx.background:
                 try:
                     image = await asyncio.to_thread(
                         render_help_menu, cfg.assistant_name, sections, cfg.help_menu_style
