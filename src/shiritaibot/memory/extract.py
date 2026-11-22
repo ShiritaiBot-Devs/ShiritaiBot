@@ -18,7 +18,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
-from shiritaibot.core import PublicError, canonical, now
+from shiritaibot.core import PublicError, canonical, model_usage_session, now, record_usage_for
 from shiritaibot.core.logs import brief, describe_session, get_logger
 from shiritaibot.memory.judge import DECIDED, GATE_SKIP, SAME_EVENT
 from shiritaibot.memory.longterm import (
@@ -235,7 +235,10 @@ class MemoryExtractor:
         return (
             cfg.memory.profile(self.profile) is not None
             and cfg.memory.extract
-            and bool(cfg.routes.get("memory") or cfg.routes.get("light"))
+            and any(
+                routes.get("memory") or routes.get("light")
+                for routes in (cfg.routes, *cfg.session_routes.values())
+            )
         )
 
     async def tick(self) -> None:
@@ -243,9 +246,10 @@ class MemoryExtractor:
             return
         async with self.lock:
             stamp = now().timestamp()
+            routes = self.config.value.routes
             jobs = (
                 await self.store.with_status("memory_extract", ("pending",))
-                if self.profile == "default"
+                if self.profile == "default" and (routes.get("memory") or routes.get("light"))
                 else []
             )
             for job in jobs:
@@ -302,7 +306,10 @@ class MemoryExtractor:
 
     async def chat_job(self, session: str) -> bool:
         """Read one due window of a private session; True when there may be more."""
-        cfg = self.config.value.memory
+        settings = self.config.value.with_session_routes(session)
+        if not (settings.routes["memory"] or settings.routes["light"]):
+            return False
+        cfg = settings.memory
         cursor = await self.memory.rows("SELECT seq FROM mem_cursor WHERE session=?", (session,))
         start = cursor[0]["seq"] if cursor else 0
         args = (session, start, self.profile)
@@ -362,7 +369,8 @@ class MemoryExtractor:
                 chars += len(line.text)
             end = seq
         if any(line.role in {"owner", "participant"} for line in segment):
-            await self.process(await self.window(segment, [], describe_session(session)))
+            with record_usage_for(session):
+                await self.process(await self.window(segment, [], describe_session(session)))
         await self.memory.store.execute(
             "INSERT INTO mem_cursor VALUES(?,?,?) ON CONFLICT(session) DO UPDATE "
             "SET seq=excluded.seq,updated=excluded.updated",
@@ -513,7 +521,7 @@ class MemoryExtractor:
         return "\n".join(parts)
 
     async def ask(self, system: str, content: str) -> dict:
-        cfg = self.config.value.model_copy(deep=True)
+        cfg = self.config.value.with_session_routes(model_usage_session.get())
         if not cfg.routes.get("memory"):
             cfg.routes["memory"] = list(cfg.routes.get("light", []))
         async with asyncio.timeout(180):

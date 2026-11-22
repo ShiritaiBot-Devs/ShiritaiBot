@@ -15,7 +15,7 @@ from shiritaibot.config import (
     Settings,
 )
 from shiritaibot.core import EventBus, PublicError
-from shiritaibot.core.logs import get_logger
+from shiritaibot.core.logs import describe_session, get_logger
 from shiritaibot.emotion import EmotionManager
 from shiritaibot.heartflow import Heartflow
 from shiritaibot.knowledge import KnowledgeBase
@@ -277,10 +277,16 @@ class Application:
             if provider.enabled and not provider_ok[provider.id]:
                 warnings.append(f"提供商「{provider.id}」没有可用的 API Key")
         models = {model.id: model for model in settings.models}
-        for route, refs in settings.routes.items():
+        routes = [(route, refs, "") for route, refs in settings.routes.items()]
+        routes.extend(
+            (route, refs, f"{describe_session(session)} · ")
+            for session, overrides in settings.session_routes.items()
+            for route, refs in overrides.items()
+        )
+        for route, refs, prefix in routes:
             if route == "test":
                 continue
-            label = ROUTE_LABELS.get(route, route)
+            label = prefix + ROUTE_LABELS.get(route, route)
             if route == "embedding" and not any(m.kind == "embedding" for m in models.values()):
                 continue
             if not refs:

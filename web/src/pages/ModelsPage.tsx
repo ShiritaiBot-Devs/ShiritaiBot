@@ -18,7 +18,10 @@ import type {
 import { Field, FieldForm, jsonObjectError } from "../components/FieldForm";
 import { ModelTestButton } from "../components/ModelTestButton";
 import { ModelOptions } from "../components/ModelOptions";
+import { QueryErrorNotice } from "../components/QueryErrorNotice";
+import { SessionPicker } from "../components/SessionPicker";
 import { configuredModelName, modelName, modelNameById } from "../lib/models";
+import { isMainSession } from "../lib/sessions";
 import { EmptyState } from "../components/EmptyState";
 import { ProviderPresetMenu } from "../components/ProviderPresetMenu";
 import {
@@ -88,6 +91,7 @@ const ROUTES: { key: string; label: string; help: string }[] = [
 
 // Decision models (systemone) classify only, so they fit just these routes.
 const DECISION_ROUTES = ["router", "light", "memory", "approval", "meme"];
+const GLOBAL_ONLY_ROUTES = ["embedding", "meme"];
 const EMBEDDING_PROTOCOLS: Protocol[] = [
   "chat_completions",
   "responses",
@@ -151,10 +155,15 @@ export function ModelsPage({
   config,
   setConfig,
   act,
-}: ConfigPageProps) {
+  initialSession = "web:owner",
+}: ConfigPageProps & { initialSession?: string }) {
   const [category, setCategory] = useState<Category>("text");
   const [selected, setSelected] = useState(0);
   const [tab, setTab] = useState<"provider" | "routes">("provider");
+  const [scope, setScope] = useState("global");
+  const [session, setSession] = useState(
+    isMainSession(initialSession) ? initialSession : "web:owner",
+  );
   const [remote, setRemote] = useState<{
     source: string;
     rows: DiscoveredModel[];
@@ -180,6 +189,17 @@ export function ModelsPage({
     queryFn: () => client.memoryStatus(),
     enabled: category === "embedding",
     refetchInterval: 10000,
+  });
+  const perSession = scope === "session" && category !== "embedding";
+  const visibleRoutes = perSession
+    ? current.routes.filter((key) => !GLOBAL_ONLY_ROUTES.includes(key))
+    : current.routes;
+  const sessionRoutes = config.session_routes ?? {};
+  const overrides = sessionRoutes[session] ?? {};
+  const chats = useQuery({
+    queryKey: ["web-chats"],
+    queryFn: () => client.webChats(),
+    enabled: tab === "routes" && perSession,
   });
 
   function routeAccepts(key: string, model: ModelConfig) {
@@ -215,13 +235,38 @@ export function ModelsPage({
     });
   }
 
-  function routesWithout(ids: string[]) {
-    return Object.fromEntries(
-      Object.entries(config.routes).map(([route, models]) => [
-        route,
-        models.filter((id) => !ids.includes(id)),
-      ]),
-    );
+  function mapRouteModels(mapModels: (models: string[]) => string[]) {
+    const mapRoutes = (routes: Record<string, string[]>) =>
+      Object.entries(routes).map(
+        ([route, models]) => [route, mapModels(models)] as const,
+      );
+    const sessions: typeof sessionRoutes = {};
+    for (const [id, routes] of Object.entries(sessionRoutes)) {
+      const kept = mapRoutes(routes).filter(([, models]) => models.length);
+      if (kept.length) sessions[id] = Object.fromEntries(kept);
+    }
+    return {
+      routes: Object.fromEntries(mapRoutes(config.routes)),
+      session_routes: sessions,
+    };
+  }
+
+  function updateSessionRoutes(next: Record<string, string[]>) {
+    const sessions = { ...sessionRoutes };
+    if (Object.keys(next).length) sessions[session] = next;
+    else delete sessions[session];
+    setConfig({ ...config, session_routes: sessions });
+  }
+
+  function updateRoute(key: string, route: string[]) {
+    if (!perSession) {
+      setConfig({ ...config, routes: { ...config.routes, [key]: route } });
+      return;
+    }
+    const next = { ...overrides };
+    if (route.length) next[key] = route;
+    else delete next[key];
+    updateSessionRoutes(next);
   }
 
   function addModel(row?: DiscoveredModel) {
@@ -258,18 +303,15 @@ export function ModelsPage({
 
   function updateModel(position: number, patch: Record<string, unknown>) {
     const old = config.models[position];
-    const routes =
+    const routeChanges =
       patch.id !== undefined
-        ? Object.fromEntries(
-            Object.entries(config.routes).map(([route, ids]) => [
-              route,
-              ids.map((id) => (id === old.id ? String(patch.id) : id)),
-            ]),
+        ? mapRouteModels((ids) =>
+            ids.map((id) => (id === old.id ? String(patch.id) : id)),
           )
-        : config.routes;
+        : {};
     setConfig({
       ...config,
-      routes,
+      ...routeChanges,
       models: config.models.map((model, itemIndex) =>
         itemIndex === position ? { ...model, ...patch } : model,
       ),
@@ -388,8 +430,56 @@ export function ModelsPage({
               <p className="muted">
                 每条路由从上到下依次尝试；同一条路由在各标签页中是同一份配置。
                 {category === "text" &&
+                  !perSession &&
                   "添加首个模型时，会自动设为 Chat、Agent Work 和分诊路由的默认模型。"}
               </p>
+              {category !== "embedding" && (
+                <div className="field-grid">
+                  <label className="field">
+                    <span className="field-name">配置范围</span>
+                    <select
+                      value={scope}
+                      onChange={(event) => setScope(event.target.value)}
+                    >
+                      <option value="global">全局默认</option>
+                      <option value="session">指定 Main 会话</option>
+                    </select>
+                  </label>
+                  {perSession && (
+                    <SessionPicker
+                      client={client}
+                      adapters={config.adapters}
+                      suggestions={[
+                        ...Object.keys(config.policy.sessions),
+                        ...Object.keys(sessionRoutes),
+                      ]}
+                      session={session}
+                      onChange={setSession}
+                      onReset={
+                        Object.keys(overrides).length
+                          ? () => updateSessionRoutes({})
+                          : undefined
+                      }
+                      titles={
+                        new Map(
+                          chats.data?.map((chat) => [chat.id, chat.title]),
+                        )
+                      }
+                    />
+                  )}
+                </div>
+              )}
+              {perSession && (
+                <p className="muted">
+                  未设置的路由跟随全局默认。会话内通过 /model
+                  选择的回复模型优先。
+                </p>
+              )}
+              {perSession && chats.error && (
+                <QueryErrorNotice
+                  message={`读取网页会话失败：${chats.error.message}`}
+                />
+              )}
               {category === "embedding" && (
                 <p className="muted" aria-label="记忆向量状态">
                   {status.data ? (
@@ -403,7 +493,7 @@ export function ModelsPage({
                   )}
                 </p>
               )}
-              {category === "text" && (
+              {category === "text" && !perSession && (
                 <div className="field field-toggle route-split">
                   <div>
                     <span className="field-name">
@@ -427,7 +517,7 @@ export function ModelsPage({
                   />
                 </div>
               )}
-              {category === "text" && (
+              {category === "text" && !perSession && (
                 <div className="field field-toggle route-split">
                   <div>
                     <span className="field-name">Chat 转 Work 判断</span>
@@ -450,9 +540,18 @@ export function ModelsPage({
                   />
                 </div>
               )}
-              {ROUTES.filter(({ key }) => current.routes.includes(key)).map(
+              {ROUTES.filter(({ key }) => visibleRoutes.includes(key)).map(
                 ({ key, label, help }) => {
-                  const route = config.routes[key] ?? [];
+                  const globalRoute = config.routes[key] ?? [];
+                  const route = perSession
+                    ? (overrides[key] ?? [])
+                    : globalRoute;
+                  const usesLight =
+                    !globalRoute.length &&
+                    (key === "memory" || key === "approval");
+                  const inherited = usesLight
+                    ? (overrides.light ?? config.routes.light ?? [])
+                    : globalRoute;
                   const inactive =
                     !config.agent_split &&
                     (key === "agent_chat" || key === "router");
@@ -463,6 +562,14 @@ export function ModelsPage({
                     >
                       <h3>{label}</h3>
                       {help && <p className="muted route-help">{help}</p>}
+                      {perSession && !route.length && (
+                        <p className="muted route-help">
+                          {usesLight ? "使用分诊与摘要路由" : "跟随全局默认"} ·{" "}
+                          {inherited
+                            .map((id) => modelNameById(config.models, id))
+                            .join(" → ") || "未配置"}
+                        </p>
+                      )}
                       {route.map((id, position) => (
                         <div className="inline" key={id + position}>
                           <span>
@@ -480,10 +587,7 @@ export function ModelsPage({
                                 next[position],
                                 next[position - 1],
                               ];
-                              setConfig({
-                                ...config,
-                                routes: { ...config.routes, [key]: next },
-                              });
+                              updateRoute(key, next);
                             }}
                           >
                             上移
@@ -494,15 +598,10 @@ export function ModelsPage({
                               "移除路由 " + modelNameById(config.models, id)
                             }
                             onClick={() =>
-                              setConfig({
-                                ...config,
-                                routes: {
-                                  ...config.routes,
-                                  [key]: route.filter(
-                                    (_, item) => item !== position,
-                                  ),
-                                },
-                              })
+                              updateRoute(
+                                key,
+                                route.filter((_, item) => item !== position),
+                              )
                             }
                           >
                             <Trash2 size={14} />
@@ -514,16 +613,15 @@ export function ModelsPage({
                         value=""
                         onChange={(event) => {
                           if (!event.target.value) return;
-                          setConfig({
-                            ...config,
-                            routes: {
-                              ...config.routes,
-                              [key]: [...route, event.target.value],
-                            },
-                          });
+                          updateRoute(key, [...route, event.target.value]);
                         }}
                       >
-                        <option value="">＋ 添加模型</option>
+                        <option value="">
+                          ＋{" "}
+                          {perSession && !route.length
+                            ? "添加会话模型"
+                            : "添加模型"}
+                        </option>
                         <ModelOptions
                           models={config.models.filter(
                             (model) =>
@@ -532,7 +630,7 @@ export function ModelsPage({
                           )}
                         />
                       </select>
-                      {key === "vision" && (
+                      {key === "vision" && !perSession && (
                         <FieldForm
                           value={config.vision}
                           fields={VISION_FIELDS}
@@ -569,7 +667,9 @@ export function ModelsPage({
                       models: config.models.filter(
                         (model) => !ids.includes(model.id),
                       ),
-                      routes: routesWithout(ids),
+                      ...mapRouteModels((refs) =>
+                        refs.filter((id) => !ids.includes(id)),
+                      ),
                     });
                   }}
                 >
@@ -708,7 +808,9 @@ export function ModelsPage({
                               models: config.models.filter(
                                 (_, itemIndex) => itemIndex !== position,
                               ),
-                              routes: routesWithout([model.id]),
+                              ...mapRouteModels((ids) =>
+                                ids.filter((id) => id !== model.id),
+                              ),
                             })
                           }
                         >

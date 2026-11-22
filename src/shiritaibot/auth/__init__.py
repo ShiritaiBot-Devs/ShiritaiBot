@@ -252,7 +252,9 @@ class Permissions:
             "expires": now().timestamp() + self.config.value.policy.approval_timeout,
         }
         await self.store.put("approval", key, body, ctx.session)
-        signature = body["hash"]
+        cfg = self.config.value.with_session_routes(ctx.session, deep=True)
+        cfg.routes["approval"] = cfg.routes.get("approval") or cfg.routes.get("light", [])
+        signature = fingerprint([body["hash"], cfg.routes["approval"]])
         clock = time.monotonic()
         cached = self.review_cache.get(signature)
         try:
@@ -263,8 +265,6 @@ class Permissions:
                     status="approved", reason=f"复用一分钟内相同调用的批准结论：{cached[1]}"
                 )
             else:
-                cfg = self.config.value.model_copy(deep=True)
-                cfg.routes["approval"] = cfg.routes.get("approval") or cfg.routes.get("light", [])
                 # The conversation is context, not evidence: a dozen recent lines is enough
                 # and keeps the fallback round-trip short.
                 history = await self.store.history(

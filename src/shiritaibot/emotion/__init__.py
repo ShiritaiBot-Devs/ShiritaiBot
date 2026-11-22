@@ -68,7 +68,7 @@ class EmotionManager:
         failed: bool | None = None,
     ) -> None:
         try:
-            cfg = self.config.value.model_copy(deep=True)
+            cfg = self.config.value.with_session_routes(ctx.session, deep=True)
             if not cfg.emotion.enabled:
                 return
             if recent is None:

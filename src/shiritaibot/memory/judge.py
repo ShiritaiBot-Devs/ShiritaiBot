@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from shiritaibot.core import now, uid
+from shiritaibot.core import model_usage_session, now, uid
 from shiritaibot.core.logs import brief, get_logger
 
 log = get_logger("记忆")
@@ -70,7 +70,7 @@ class MemoryJudge:
         self.llm, self.config, self.store = llm, config, store
 
     def settings(self):
-        cfg = self.config.value.model_copy(deep=True)
+        cfg = self.config.value.with_session_routes(model_usage_session.get())
         if not cfg.routes.get("memory"):
             cfg.routes["memory"] = list(cfg.routes.get("light", []))
         return cfg

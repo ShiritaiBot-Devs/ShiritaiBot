@@ -621,7 +621,7 @@ class AgentRuntime:
         if ctx.interject:
             # A passing remark is one cheap chat turn: no tools, no policy upgrade.
             ctx = replace(ctx, mode="chat", allowed_tools=())
-        cfg = self.config.value.model_copy(deep=True)
+        cfg = settings.with_session_routes(ctx.session, deep=True)
         selected_persona = await self.store.get("session_persona", ctx.session)
         system = cfg.system_prompt(
             selected_persona.get("persona", "") if selected_persona else "",

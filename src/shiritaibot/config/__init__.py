@@ -793,6 +793,7 @@ ROUTE_KEYS = (
     "vision",
     "meme",
 )
+SESSION_ROUTE_KEYS = frozenset(ROUTE_KEYS) - {"embedding", "meme"}
 # Routes whose callers can use a decision model; other candidates still serve text calls.
 DECISION_ROUTES = ("router", "light", "memory", "approval", "meme")
 # Protocols with an embeddings endpoint (OpenAI-compatible /embeddings or Gemini).
@@ -841,6 +842,7 @@ class Settings(Model):
     # embedding: 记忆、表情与知识库向量；vision: 为不支持图像输入的模型转述图片；
     # meme: 表情转述（多模态文本模型）与表情分类判断（决策模型）。
     routes: dict[str, list[str]] = Field(default_factory=lambda: {k: [] for k in ROUTE_KEYS})
+    session_routes: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     # When off, every Agent-mode turn uses the Agent Work route.
     agent_split: bool = False
     agent_chat_handoff: bool = False
@@ -914,6 +916,33 @@ class Settings(Model):
     @classmethod
     def routes_complete(cls, value: dict[str, list[str]]) -> dict[str, list[str]]:
         return {**{k: [] for k in ROUTE_KEYS}, **value}
+
+    @field_validator("session_routes")
+    @classmethod
+    def session_routes_valid(
+        cls, value: dict[str, dict[str, list[str]]]
+    ) -> dict[str, dict[str, list[str]]]:
+        overrides = {}
+        for session, routes in value.items():
+            if not MAIN_SESSION.fullmatch(session):
+                raise ValueError("会话路由需要 Main web/private/group 会话 ID")
+            if invalid := routes.keys() - SESSION_ROUTE_KEYS:
+                raise ValueError(f"以下路由无法按会话设置：{'、'.join(sorted(invalid))}")
+            if active := {key: models for key, models in routes.items() if models}:
+                overrides[session] = active
+        return overrides
+
+    def with_session_routes(self, session: str, *, deep: bool = False) -> Settings:
+        """Copy settings with the session's route overrides applied."""
+        settings = self.model_copy(deep=deep)
+        settings.routes = {
+            **settings.routes,
+            **{
+                key: models.copy()
+                for key, models in settings.session_routes.get(session, {}).items()
+            },
+        }
+        return settings
 
     @field_validator("help_menu_sections")
     @classmethod
@@ -1096,7 +1125,10 @@ class Settings(Model):
         missing = [m.id for m in self.models if m.provider not in providers]
         if missing:
             raise ValueError(f"模型 {'、'.join(missing)} 引用了不存在的提供商")
-        lost = sorted({m for route in self.routes.values() for m in route if m not in models})
+        routes = [*self.routes.items()]
+        for overrides in self.session_routes.values():
+            routes.extend(overrides.items())
+        lost = sorted({m for _, route in routes for m in route if m not in models})
         if lost:
             raise ValueError(f"路由引用了不存在的模型：{'、'.join(lost)}")
         decision = {
@@ -1107,7 +1139,7 @@ class Settings(Model):
         }
         if any(
             m in decision
-            for key, route in self.routes.items()
+            for key, route in routes
             if key not in (*DECISION_ROUTES, "test")
             for m in route
         ):
@@ -1128,7 +1160,7 @@ class Settings(Model):
                 raise ValueError(f"子代理 {instance.id} 选择的模型或提供商未启用")
         if any(
             (m in embedding) != (key == "embedding")
-            for key, route in self.routes.items()
+            for key, route in routes
             if key != "test"
             for m in route
         ):
@@ -1140,7 +1172,12 @@ class Settings(Model):
             for p in self.providers
         ):
             raise ValueError("向量模型需要 OpenAI 兼容或 Gemini 协议的提供商")
-        if any(m.id in self.routes["vision"] and "image" not in m.modalities for m in self.models):
+        if any(
+            m.id in route and "image" not in m.modalities
+            for key, route in routes
+            if key == "vision"
+            for m in self.models
+        ):
             raise ValueError("vision 路由里的模型必须支持图像输入（modalities 含 image）")
         if any(
             m.id in self.routes["meme"] and m.id not in decision and "image" not in m.modalities

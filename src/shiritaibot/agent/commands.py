@@ -200,16 +200,17 @@ async def command(runtime, ctx, text):
             def display(ref):
                 return model_names.get(ref, f"未知提供商/{ref}")
 
+            routes = cfg.with_session_routes(ctx.session).routes
             if model:
                 models = display(model)
             elif ctx.mode != "agent":
-                models = " → ".join(map(display, cfg.routes.get("chat", []))) or "未配置"
+                models = " → ".join(map(display, routes["chat"])) or "未配置"
             else:
-                models = " → ".join(map(display, cfg.routes.get("agent", []))) or "未配置"
-                if cfg.agent_split and cfg.routes.get("agent_chat"):
+                models = " → ".join(map(display, routes["agent"])) or "未配置"
+                if cfg.agent_split and routes["agent_chat"] and routes["router"]:
                     models = (
                         f"Work {models}；Chat "
-                        + " → ".join(map(display, cfg.routes["agent_chat"]))
+                        + " → ".join(map(display, routes["agent_chat"]))
                         + "（按消息自动分流）"
                     )
             answer = f"会话：{ctx.session}\n模式：{ctx.mode}\n模型：{models}"

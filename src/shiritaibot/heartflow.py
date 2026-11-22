@@ -24,9 +24,9 @@ DIMENSIONS = {
 QUESTIONS = {key: {"type": "noul", "instructions": value} for key, value in DIMENSIONS.items()}
 
 
-async def judge(llm, material: dict) -> dict[str, float]:
+async def judge(llm, material: dict, settings=None) -> dict[str, float]:
     async with asyncio.timeout(8):
-        answers = await llm.decide("light", material, QUESTIONS)
+        answers = await llm.decide("light", material, QUESTIONS, settings=settings)
         if answers is None:
             reply = await llm.complete(
                 "light",
@@ -34,6 +34,7 @@ async def judge(llm, material: dict) -> dict[str, float]:
                 "只输出 JSON 对象，每项为 0 到 1 的数值。各项含义：" + canonical(DIMENSIONS),
                 [{"role": "user", "content": canonical(material)}],
                 [],
+                settings=settings,
             )
             scores = json.loads(reply.text)
         else:
@@ -314,7 +315,7 @@ class Heartflow:
             if not self.valid(session, obs.id):
                 return
             with record_usage_for(session):
-                scores = await judge(self.runtime.llm, material)
+                scores = await judge(self.runtime.llm, material, cfg.with_session_routes(session))
             if not self.valid(session, obs.id):
                 return
             focused = group.phase == "FOCUS"

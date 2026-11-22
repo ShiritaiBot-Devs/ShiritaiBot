@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useId } from "react";
 import type { ApiClient } from "../api/client";
 import type { AdapterConfig } from "../api/types";
 import {
@@ -31,13 +32,18 @@ export function SessionPicker({
   suggestions,
   session,
   onChange,
+  onReset,
+  titles,
 }: {
   client: ApiClient;
   adapters: AdapterConfig[];
   suggestions: string[];
   session: string;
   onChange: (session: string) => void;
+  onReset?: () => void;
+  titles?: ReadonlyMap<string, string>;
 }) {
+  const id = useId();
   const observed = useQuery({
     queryKey: ["records", "session"],
     queryFn: () => client.records("session"),
@@ -54,6 +60,7 @@ export function SessionPicker({
     "web:owner",
     session,
     ...suggestions,
+    ...(titles?.keys() ?? []),
     ...configured,
     ...(observed.data ?? [])
       .filter((row) => !row.background)
@@ -61,15 +68,24 @@ export function SessionPicker({
   ].filter(isMainSession);
 
   return (
-    <label className="field">
-      <span className="field-name">会话</span>
-      <select
-        aria-label="会话"
-        value={session}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <SessionOptions ids={sessions} />
-      </select>
-    </label>
+    <div className="field">
+      <label className="field-name" htmlFor={id}>
+        会话
+      </label>
+      <div className="inline">
+        <select
+          id={id}
+          value={session}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          <SessionOptions ids={sessions} titles={titles} />
+        </select>
+        {onReset && (
+          <button type="button" onClick={onReset}>
+            恢复默认配置
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

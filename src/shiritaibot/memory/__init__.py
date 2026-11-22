@@ -131,12 +131,13 @@ class ShortTermMemory:
             "关键事实、工具及实际结果、最终答复、未完成事项和失败/取消状态。不要臆造成功，"
             "不输出凭据，不调用工具，只输出摘要。"
         )
+        cfg = self.config.value.with_session_routes(row["session"]) if self.config else None
 
         async def summarize(content: str) -> str:
             async with asyncio.timeout(60):
                 with record_usage_for(row["session"]):
                     reply = await self.llm.complete(
-                        "light", system, [{"role": "user", "content": content}], []
+                        "light", system, [{"role": "user", "content": content}], [], settings=cfg
                     )
             if not reply.text.strip() or reply.calls:
                 raise PublicError("短期记忆摘要无效")

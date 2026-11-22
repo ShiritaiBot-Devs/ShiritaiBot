@@ -498,6 +498,7 @@ export interface Settings {
   providers: ProviderConfig[];
   models: ModelConfig[];
   routes: Record<string, string[]>;
+  session_routes: Record<string, Record<string, string[]>>;
   agent_split: boolean;
   agent_chat_handoff: boolean;
   adapters: AdapterConfig[];

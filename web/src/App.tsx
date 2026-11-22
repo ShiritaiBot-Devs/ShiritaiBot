@@ -364,7 +364,7 @@ function ConsoleApp() {
       case "logs":
         return <LogsPage client={api} act={act} />;
       case "models":
-        return <ModelsPage {...configProps} />;
+        return <ModelsPage {...configProps} initialSession={session} />;
       case "adapters":
         return <AdaptersPage {...configProps} dirty={draft.dirty} />;
       case "subagents":
