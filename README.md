@@ -92,7 +92,7 @@ shiritaibot token             # 一键安装（macOS / Linux）
 
 ## 消息发送
 
-在 WebUI「设置 → 通用设定 → 消息发送」可以配置 OneBot 长消息折叠，以及 `/help` 的文字、亮色图片或暗色图片样式。Docker 镜像包含中文字体，Debian/Ubuntu 裸机可安装 `fonts-noto-cjk`。飞书发送图片需要应用开通 `im:resource` 权限。
+在 WebUI「设置 → 通用设定 → 消息发送」可以配置 OneBot 长消息折叠，以及 `/help` 的文字、亮色图片或暗色图片样式。图片菜单优先使用系统中文字体。缺少字体时，首次渲染会将 [Noto Sans CJK SC](https://github.com/notofonts/noto-cjk/releases/tag/Sans2.004) 下载到 ShiritaiBot 数据目录的 `fonts/`，后续直接复用。下载失败时会发送文字菜单，下次仍可重试。飞书发送图片需要应用开通 `im:resource` 权限。
 
 ## 许可证
 

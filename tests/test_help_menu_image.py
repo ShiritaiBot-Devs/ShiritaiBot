@@ -1,17 +1,20 @@
 import asyncio
 import base64
+import hashlib
 import json
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from shiritaibot.adapters.feishu_transport import FeishuTransport
 from shiritaibot.adapters.onebot11 import AdapterHub
 from shiritaibot.adapters.qq_official import QQOfficial
+from shiritaibot.agent import help_menu
 from shiritaibot.config import Settings
 from shiritaibot.dependencies import RuntimeEnvironment
 from shiritaibot.web import create_app
@@ -51,8 +54,37 @@ def test_help_image_is_available_in_web_history(tmp_path, monkeypatch):
         assert response.headers["content-type"] == "image/png"
         assert response.content == png
         assert render.call_args.args[2] == "dark"
+        assert render.call_args.kwargs["font_dir"] == tmp_path / "fonts"
         assert client.delete(f"/api/web-chats/{session}", headers=headers).status_code == 200
         assert client.get(path, headers=headers).status_code == 404
+
+
+def test_help_font_installs_when_missing_and_reuses_verified_cache(tmp_path, monkeypatch):
+    font_bytes = b"fake font"
+    monkeypatch.setattr(help_menu, "system_cjk_font", lambda: None)
+    monkeypatch.setattr(help_menu, "FONT_SIZE", len(font_bytes))
+    monkeypatch.setattr(help_menu, "FONT_SHA256", hashlib.sha256(font_bytes).hexdigest())
+    replies = Mock(side_effect=[b"bad bytes", font_bytes, font_bytes])
+
+    def download(request):
+        assert str(request.url) == help_menu.FONT_URL
+        return httpx.Response(200, content=replies())
+
+    with httpx.Client(transport=httpx.MockTransport(download)) as client:
+        monkeypatch.setattr(help_menu.httpx, "stream", client.stream)
+        font_dir = tmp_path / "fonts"
+        with pytest.raises(OSError, match="完整性校验"):
+            help_menu.cjk_font(font_dir)
+        assert not list(font_dir.iterdir())
+
+        installed = help_menu.cjk_font(font_dir)
+        assert installed.read_bytes() == font_bytes
+        assert help_menu.cjk_font(font_dir) == installed
+        assert replies.call_count == 2
+
+        installed.write_bytes(b"bad bytes")
+        assert help_menu.cjk_font(font_dir).read_bytes() == font_bytes
+        assert replies.call_count == 3
 
 
 def test_onebot_help_image_takes_precedence_over_folding():
