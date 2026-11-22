@@ -570,6 +570,8 @@ class ProviderManager:
         tools: list[dict],
         settings=None,
         scope: str | None = None,
+        *,
+        tool_free: bool = False,
     ) -> Reply:
         """Use an explicit session for usage attribution and QQ image resolution when given."""
         cfg = settings or self.config.value
@@ -600,6 +602,15 @@ class ProviderManager:
                 provider.protocol, model.model, system, sent, tools, model.max_output
             )
             body = merge_body(body, model.extra_body)
+            if tool_free:
+                for field in (
+                    "tools",
+                    "tool_choice",
+                    "parallel_tool_calls",
+                    "toolConfig",
+                    "tool_config",
+                ):
+                    body.pop(field, None)
             if provider.protocol == "chat_completions" and "max_tokens" in model.extra_body:
                 body.pop("max_completion_tokens", None)
             generation = body.get("generationConfig")

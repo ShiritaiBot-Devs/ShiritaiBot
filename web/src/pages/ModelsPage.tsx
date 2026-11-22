@@ -427,6 +427,29 @@ export function ModelsPage({
                   />
                 </div>
               )}
+              {category === "text" && (
+                <div className="field field-toggle route-split">
+                  <div>
+                    <span className="field-name">Chat 转 Work 判断</span>
+                    <small className="field-help">
+                      私聊和网页对话分到 Agent Chat 后，只带可见对话与摘要。
+                      Chat 判断需要执行任务或核查细节时，本轮转给 Agent Work。
+                    </small>
+                  </div>
+                  <input
+                    aria-label="Chat 转 Work 判断"
+                    type="checkbox"
+                    disabled={!config.agent_split}
+                    checked={Boolean(config.agent_chat_handoff)}
+                    onChange={(event) =>
+                      setConfig({
+                        ...config,
+                        agent_chat_handoff: event.target.checked,
+                      })
+                    }
+                  />
+                </div>
+              )}
               {ROUTES.filter(({ key }) => current.routes.includes(key)).map(
                 ({ key, label, help }) => {
                   const route = config.routes[key] ?? [];

@@ -18,7 +18,7 @@ MARKER = re.compile(r"<(?:me){2,}>\s*([A-Za-z0-9_]{1,40})\s*</(?:me){2,}>", re.I
 STRAY = re.compile(r"</?(?:me){2,}>", re.IGNORECASE)
 
 
-def meme_prompt(cfg) -> str:
+def meme_prompt(cfg, *, tool_guidance: bool = True) -> str:
     meme = cfg.meme
     if not (meme.enabled and meme.inject):
         return ""
@@ -27,15 +27,25 @@ def meme_prompt(cfg) -> str:
     )
     return (
         "\n<memes>\n你可以在 QQ 回复里发表情包：在想发表情的位置写 <meme>分类</meme>，"
-        "会随机发出该分类的一张表情；写 <meme>表情ID</meme> 发送指定表情（ID 来自 meme_search）。"
-        "表情作为单独的消息发出，标记写在句子中间时，回复会在该处拆成前后两条消息。\n"
+        "会随机发出该分类的一张表情"
+        + (
+            "；写 <meme>表情ID</meme> 发送指定表情（ID 来自 meme_search）。"
+            if tool_guidance
+            else "。"
+        )
+        + "表情作为单独的消息发出，标记写在句子中间时，回复会在该处拆成前后两条消息。\n"
         f"可用分类：\n{categories}\n"
         f"每条回复最多 {meme.max_per_reply} 个表情，多余的会被忽略；某分类暂时没有表情时标记也会被忽略。"
         "标签必须逐字写 <meme>…</meme>，不要写成 <mememe>、<meme >、<表情> 等变体，"
         "写错的表情标记不会被发送。"
         "表情是点缀，贴合语气时再用，不要每句都发，也不要在标记前后解释表情内容。"
-        "想找贴合语境的具体表情可调用 meme_search，看图确认可调用 meme_view；"
-        "对方发来的图片适合做表情时，可用 meme_save 收藏。\n</memes>"
+        + (
+            "想找贴合语境的具体表情可调用 meme_search，看图确认可调用 meme_view；"
+            "对方发来的图片适合做表情时，可用 meme_save 收藏。"
+            if tool_guidance
+            else ""
+        )
+        + "\n</memes>"
     )
 
 

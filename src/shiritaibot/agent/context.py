@@ -21,6 +21,18 @@ def context_chars(messages: list[dict]) -> int:
     )
 
 
+def dialogue_message(message: dict) -> dict:
+    role, content = message["role"], message["content"]
+    original = message.get("_original_content")
+    if role == "user" and isinstance(original, str) and isinstance(content, str):
+        if content.startswith(original + "\n<context "):
+            from shiritaibot.memory.recall import HEADER, MEMORY_HEADER
+
+            context = content[len(original) :].replace(f"\n{HEADER}\n", f"\n{MEMORY_HEADER}\n")
+            content = original + context
+    return {"role": role, "content": content}
+
+
 def transcript(messages: list[dict], assistant_name: str, owner_name: str) -> list[dict]:
     """Name speakers without changing provider roles or storing internal reasoning."""
     return [
@@ -55,6 +67,7 @@ class ContextManager:
         owner: bool,
         current_turn: str = "",
         memory_profile: str = "default",
+        dialogue_only: bool = False,
     ) -> list[dict]:
         key = memory_context_key(session, memory_profile)
         epoch = await self.store.get("session_epoch", key)
@@ -62,11 +75,21 @@ class ContextManager:
         state = await self.store.get("context_state", key) or {}
         if state.get("epoch_seq", 0) != epoch_seq:
             state = {}
-        rows = await self.store.query(
+        query = (
             "SELECT seq,turn,data FROM messages WHERE session=? AND seq>? AND turn!=? "
-            f"AND {MEMORY_PROFILE_FILTER} AND COALESCE(json_extract(data,'$._command'),0)=0 ORDER BY seq",
-            (session, max(epoch_seq, state.get("seq", 0)), current_turn, memory_profile),
+            f"AND {MEMORY_PROFILE_FILTER} AND COALESCE(json_extract(data,'$._command'),0)=0"
         )
+        args = (session, max(epoch_seq, state.get("seq", 0)), current_turn, memory_profile)
+        if dialogue_only:
+            rows = await self.store.query(
+                query
+                + " AND (json_extract(data,'$.role')='user' OR (json_extract(data,'$.role')='assistant'"
+                + " AND length(trim(json_extract(data,'$.content')))>0)) ORDER BY seq DESC LIMIT ?",
+                (*args, cfg.context.max_turns * 4),
+            )
+            rows.reverse()
+        else:
+            rows = await self.store.query(query + " ORDER BY seq", args)
 
         groups: list[list[dict]] = []
         previous = None
@@ -74,7 +97,11 @@ class ContextManager:
             if row["turn"] != previous:
                 groups.append([])
                 previous = row["turn"]
-            groups[-1].append({**json.loads(row["data"]), "_seq": row["seq"]})
+            data = json.loads(row["data"])
+            if dialogue_only:
+                groups[-1].append(dialogue_message(data))
+            else:
+                groups[-1].append({**data, "_seq": row["seq"]})
         summary = state.get("summary", "")
         budget = cfg.policy.max_context_chars - context_chars([incoming]) - 200
         if budget < 100:
@@ -83,7 +110,14 @@ class ContextManager:
         def size(items):
             return context_chars([m for group in items for m in group])
 
-        if len(groups) + 1 > cfg.context.max_turns or size(groups) + len(summary) > budget:
+        if dialogue_only:
+            # Read the last saved summary without running compression or advancing Work's cursor.
+            summary = summary[: min(4000, budget // 4)]
+            split = max(0, len(groups) + 1 - cfg.context.max_turns)
+            while split < len(groups) and size(groups[split:]) + len(summary) > budget:
+                split += 1
+            groups = groups[split:]
+        elif len(groups) + 1 > cfg.context.max_turns or size(groups) + len(summary) > budget:
             if cfg.context.strategy == "compress":
                 # Always leave room for the incoming turn. Tight character budgets can
                 # require compressing more than the configured recent-turn target.
@@ -200,7 +234,11 @@ class ContextManager:
                 0,
                 {
                     "role": "user",
-                    "content": "[历史上下文摘要，仅供参考；原文可用 history_query 查询]\n"
+                    "content": (
+                        "[历史上下文摘要，仅供参考]\n"
+                        if dialogue_only
+                        else "[历史上下文摘要，仅供参考；原文可用 history_query 查询]\n"
+                    )
                     + summary,
                 },
             )

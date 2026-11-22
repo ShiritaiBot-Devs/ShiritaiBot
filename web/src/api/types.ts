@@ -499,6 +499,7 @@ export interface Settings {
   models: ModelConfig[];
   routes: Record<string, string[]>;
   agent_split: boolean;
+  agent_chat_handoff: boolean;
   adapters: AdapterConfig[];
   subagents: SubagentConfig[];
   plugins: PluginConfig[];

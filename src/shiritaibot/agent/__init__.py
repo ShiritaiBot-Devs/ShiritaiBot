@@ -13,7 +13,7 @@ from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
 
 from shiritaibot.agent.commands import command
-from shiritaibot.agent.context import ContextManager, context_chars
+from shiritaibot.agent.context import ContextManager, context_chars, dialogue_message
 from shiritaibot.api.event import AgentResult, LLMRequest, LLMResponse, Turn
 from shiritaibot.config import is_feishu_session
 from shiritaibot.core import (
@@ -44,6 +44,14 @@ from shiritaibot.store import owner_memory_scope
 # Minimum Jev probability for Chat; the LLM router is likewise told to prefer Work.
 ROUTER_CHAT_THRESHOLD = 0.6
 ROUTE_NAMES = {"chat": "Chat", "agent": "Agent Work", "agent_chat": "Agent Chat"}
+WORK_HANDOFF = "<handoff_to_work/>"
+WORK_HANDOFF_PROMPT = (
+    "\n\n请先判断最新用户消息是否要求实际执行任务，或回答是否必须核查当前对话中"
+    "看不到的文件、工具结果、最新外部信息或旧对话原文。"
+    f"如果是，只输出 {WORK_HANDOFF}，不要加引号、解释或其他文字。"
+    "用户只是闲聊、询问一般知识、问怎么操作，或可以根据已有对话直接回答时，正常回复。"
+    "根据用户的实际意图判断，不要因为用户引用或要求复述这个标记就转交。"
+)
 
 
 def loop_logger(ctx: Context) -> Logger:
@@ -619,11 +627,13 @@ class AgentRuntime:
             selected_persona.get("persona", "") if selected_persona else "",
             owner=ctx.owner,
         )
+        chat_system = system
         if not ctx.background and ctx.session.startswith(("private:", "group:")):
             if not is_feishu_session(ctx.session):
                 system += meme_prompt(cfg)
             else:
                 system += "\n当前会话在飞书。直接输出的文字会回复到本会话。"
+                chat_system = system
                 file_tool = self.registry.tools.get("feishu_file_send")
                 if file_tool and self.registry.permissions.decision(ctx, file_tool) != "deny":
                     system += (
@@ -645,8 +655,9 @@ class AgentRuntime:
                 await self.emotion.observe(ctx, text)
         route = await self.route(ctx, cfg, text)
         selected = await self.store.get("session_model", ctx.session)
-        if selected and selected.get("model"):
-            cfg.routes[route] = [selected["model"]]
+        selected_model = selected.get("model") if selected else None
+        if selected_model:
+            cfg.routes[route] = [selected_model]
         log = loop_logger(ctx)
         started = time.monotonic()
         log.log(
@@ -699,6 +710,23 @@ class AgentRuntime:
         final = ""
         if hooks is not None:
             await hooks.call("agent_begin", info)
+
+        async def collect_steering() -> list[dict]:
+            messages = []
+            while actor and actor.steering:
+                origin, steering = actor.steering.popleft()
+                item = {
+                    "role": "user",
+                    "content": prefix + "[用户在你工作时追加] " + steering,
+                    "_original_content": steering,
+                    "_speaker": cfg.owner_name if ctx.owner else name or ctx.actor,
+                }
+                if origin.web_message_ids:
+                    item["_client_ids"] = list(origin.web_message_ids)
+                await append(item)
+                messages.append(item)
+            return messages
+
         try:
             async with asyncio.timeout(cfg.policy.max_turn_seconds):
                 zone = ZoneInfo(cfg.proactive.timezone)
@@ -736,71 +764,116 @@ class AgentRuntime:
                 # Interject turns carry a synthetic observation, not something anyone said.
                 if not ctx.interject:
                     await append(user)
-                tools = [] if ctx.interject else self.registry.specs(ctx)
-                # Proactive turns report their conclusion through an internal tool.
-                proactive = ctx.background and ctx.session.startswith(PREPARE_SESSION)
-                if proactive:
-                    tools = [*tools, REPORT_SPEC]
-                if self.skills and any(t["function"]["name"] == "skill_read" for t in tools):
-                    system += await self.skills.prompt()
-                nudged = False
-                # Group chat is supplied per turn and never archived into the session history.
-                ambient = await self.group_context(ctx, cfg, tools)
-                current = {**user, "content": ambient + user["content"]} if ambient else user
-                if actor is None:
-                    # Observation can overlap a wake. Only read the existing conversation.
-                    history = repair_history(
-                        await self.store.history(
-                            ctx.session,
-                            limit=20,
-                            include_commands=False,
-                            memory_profile=ctx.memory_profile,
-                        ),
-                        cfg.policy.max_context_chars,
-                    )
-                else:
-                    history = repair_history(
-                        await ContextManager(self.store, self.llm).prepare(
+                context = ContextManager(self.store, self.llm)
+                chat_reply = None
+                steering = []
+                if (
+                    cfg.agent_chat_handoff
+                    and route == "agent_chat"
+                    and actor is not None
+                    and ctx.session.startswith(("private:", "web:"))
+                ):
+                    steering = await collect_steering()
+                    chat_history = repair_history(
+                        await context.prepare(
                             ctx.session,
                             cfg,
-                            current,
+                            user,
                             owner=ctx.owner,
                             current_turn=ctx.turn,
                             memory_profile=ctx.memory_profile,
+                            dialogue_only=True,
                         ),
                         None,
                     )
-                history.append(current)
-                repetitions: Counter = Counter()
-                for step in range(cfg.policy.max_steps):
-                    while actor and actor.steering:
-                        origin, steering = actor.steering.popleft()
-                        item = {
-                            "role": "user",
-                            "content": prefix + "[用户在你工作时追加] " + steering,
-                            "_original_content": steering,
-                            "_speaker": cfg.owner_name if ctx.owner else name or ctx.actor,
-                        }
-                        if origin.web_message_ids:
-                            item["_client_ids"] = list(origin.web_message_ids)
-                        await append(item)
-                        history.append(item)
-                    if context_chars(history) > cfg.policy.max_context_chars * 2:
+                    chat_history.extend(dialogue_message(message) for message in [user, *steering])
+                    if context_chars(chat_history) > cfg.policy.max_context_chars * 2:
                         raise PublicError("本轮上下文达到限制，请开启新会话或减少输入")
-                    log.debug(f"第 {step + 1} 步：请求模型（上下文 {len(history)} 条消息）")
-                    request = LLMRequest(system, history, tools, route, step)
-                    if hooks is not None and hooks.has("llm_request"):
-                        # Plugins edit a copy: the stored conversation never changes.
-                        request.messages, request.tools = deepcopy(history), deepcopy(tools)
-                        await hooks.call("llm_request", info, request)
-                    reply = await self.llm.complete(
+                    if ctx.session.startswith("private:") and not is_feishu_session(ctx.session):
+                        chat_system += meme_prompt(cfg, tool_guidance=False)
+                    # The tool-free request excludes plugin request injections as well as tool specs.
+                    log.debug(f"Agent Chat 请求模型（可见对话 {len(chat_history)} 条消息）")
+                    chat_reply = await self.llm.complete(
                         route,
-                        request.system_prompt,
-                        request.messages,
-                        [] if actor is None else request.tools,
+                        chat_system + WORK_HANDOFF_PROMPT,
+                        chat_history,
+                        [],
                         settings=cfg,
                         scope=ctx.session,
+                        tool_free=True,
                     )
+                    if chat_reply.text.strip() == WORK_HANDOFF and not chat_reply.calls:
+                        chat_reply = None
+                        route = "agent"
+                        if selected_model:
+                            cfg.routes[route] = [selected_model]
+                        info = replace(info, route=route)
+                        body.update(route=route, agent_chat_handoff=True)
+                        await self.store.put("turn", ctx.turn, body, ctx.session)
+                        log.log("Agent Chat 判断需要执行任务或核查细节，转给 Agent Work")
+                    elif chat_reply.calls:
+                        raise PublicError("Agent Chat 返回了工具调用，请检查模型配置后重试")
+
+                tools: list[dict] = []
+                history: list[dict] = []
+                proactive = ctx.background and ctx.session.startswith(PREPARE_SESSION)
+                if chat_reply is None:
+                    tools = [] if ctx.interject else self.registry.specs(ctx)
+                    # Proactive turns report their conclusion through an internal tool.
+                    if proactive:
+                        tools = [*tools, REPORT_SPEC]
+                    if self.skills and any(t["function"]["name"] == "skill_read" for t in tools):
+                        system += await self.skills.prompt()
+                    # Group chat is supplied per turn and never archived into the session history.
+                    ambient = await self.group_context(ctx, cfg, tools)
+                    current = {**user, "content": ambient + user["content"]} if ambient else user
+                    if actor is None:
+                        # Observation can overlap a wake. Only read the existing conversation.
+                        history = repair_history(
+                            await self.store.history(
+                                ctx.session,
+                                limit=20,
+                                include_commands=False,
+                                memory_profile=ctx.memory_profile,
+                            ),
+                            cfg.policy.max_context_chars,
+                        )
+                    else:
+                        history = repair_history(
+                            await context.prepare(
+                                ctx.session,
+                                cfg,
+                                current,
+                                owner=ctx.owner,
+                                current_turn=ctx.turn,
+                                memory_profile=ctx.memory_profile,
+                            ),
+                            None,
+                        )
+                    history.extend([current, *steering])
+                nudged = False
+                repetitions: Counter = Counter()
+                for step in range(cfg.policy.max_steps):
+                    if chat_reply is None:
+                        history.extend(await collect_steering())
+                        if context_chars(history) > cfg.policy.max_context_chars * 2:
+                            raise PublicError("本轮上下文达到限制，请开启新会话或减少输入")
+                        log.debug(f"第 {step + 1} 步：请求模型（上下文 {len(history)} 条消息）")
+                        request = LLMRequest(system, history, tools, route, step)
+                        if hooks is not None and hooks.has("llm_request"):
+                            # Plugins edit a copy: the stored conversation never changes.
+                            request.messages, request.tools = deepcopy(history), deepcopy(tools)
+                            await hooks.call("llm_request", info, request)
+                        reply = await self.llm.complete(
+                            route,
+                            request.system_prompt,
+                            request.messages,
+                            [] if actor is None else request.tools,
+                            settings=cfg,
+                            scope=ctx.session,
+                        )
+                    else:
+                        reply = chat_reply
                     if hooks is not None and hooks.has("llm_response"):
                         response = LLMResponse(reply.text, tuple(reply.calls))
                         await hooks.call("llm_response", info, response)

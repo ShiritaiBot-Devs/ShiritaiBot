@@ -843,6 +843,7 @@ class Settings(Model):
     routes: dict[str, list[str]] = Field(default_factory=lambda: {k: [] for k in ROUTE_KEYS})
     # When off, every Agent-mode turn uses the Agent Work route.
     agent_split: bool = False
+    agent_chat_handoff: bool = False
     adapters: list[AdapterConfig] = Field(default_factory=list)
     subagents: list[SubagentConfig] = Field(default_factory=list)
     plugins: list[PluginConfig] = Field(default_factory=list)
