@@ -26,7 +26,8 @@ from shiritaibot.api.event import (
     Triage,
 )
 from shiritaibot.api.hook import FILTERS, HANDLERS, MessageType, Names, Permission, Platform
-from shiritaibot.core import PublicError, uid
+from shiritaibot.config import is_feishu_session, is_qq_official_session
+from shiritaibot.core import Context, PublicError, uid
 from shiritaibot.core.logs import brief, get_logger
 
 log = get_logger("插件")
@@ -220,11 +221,19 @@ class HookBus:
                 clashes |= handler.path[0] & (BUILTIN_COMMANDS | others)
         return sorted(clashes)
 
-    def help_lines(self, owner: bool) -> list[str]:
+    def help_lines(self, ctx: Context) -> list[str]:
+        platform = "qq"
+        if ctx.session.startswith("web:"):
+            platform = "web"
+        elif is_feishu_session(ctx.session):
+            platform = "feishu"
+        elif is_qq_official_session(ctx.session):
+            platform = "qq_official"
+        elif ctx.background:
+            return []
         return [
-            f"{h.command} — {h.description or '插件指令'}（{h.plugin}）"
-            for h in self.of("command")
-            if owner or h.permission is not Permission.OWNER
+            f"{usage(h)} — {h.description or '插件指令'}（{h.plugin}）"
+            for h in self.available_commands(platform, group=ctx.group, owner=ctx.owner)
         ]
 
     def describe(self, plugin: str) -> tuple[list[dict], list[dict]]:
@@ -283,15 +292,27 @@ class HookBus:
 
     # Messages -----------------------------------------------------------------------
 
-    def matches(self, handler: Handler, event: MessageEvent) -> bool:
-        kind = MessageType.GROUP if event.is_group else MessageType.PRIVATE
-        platform = {
+    @staticmethod
+    def matches_channel(handler: Handler, platform: str, *, group: bool) -> bool:
+        kind = MessageType.GROUP if group else MessageType.PRIVATE
+        channel = {
             "qq": Platform.QQ,
             "qq_official": Platform.QQ,
             "web": Platform.WEB,
             "feishu": Platform.FEISHU,
-        }.get(event.platform, Platform(0))
-        return bool(kind & handler.types) and bool(platform & handler.platforms)
+        }.get(platform, Platform(0))
+        return bool(kind & handler.types) and bool(channel & handler.platforms)
+
+    def matches(self, handler: Handler, event: MessageEvent) -> bool:
+        return self.matches_channel(handler, event.platform, group=event.is_group)
+
+    def available_commands(self, platform: str, *, group: bool, owner: bool) -> list[Handler]:
+        return [
+            h
+            for h in self.of("command")
+            if self.matches_channel(h, platform, group=group)
+            and (owner or h.permission is not Permission.OWNER)
+        ]
 
     def match_command(self, text: str) -> tuple[Handler, str] | None:
         tokens = text[1:].split()
@@ -310,12 +331,10 @@ class HookBus:
         tokens = text[1:].split()
         lines = [
             f"{usage(h)} — {h.description}" if h.description else usage(h)
-            for h in self.of("command")
+            for h in self.available_commands(event.platform, group=event.is_group, owner=event.is_owner)
             if tokens
             and len(h.path) > 1
             and tokens[0] in h.path[0]
-            and self.matches(h, event)
-            and (event.is_owner or h.permission is not Permission.OWNER)
         ]
         return "可用的子指令：\n" + "\n".join(lines) if lines else ""
 

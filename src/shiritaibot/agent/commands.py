@@ -29,6 +29,9 @@ COMMANDS = {
 
 
 BUILTIN_COMMANDS = frozenset({*COMMANDS, "cancel", "reset"})
+PRIVATE_COMMANDS = {"tasks", "memory", "approve", "deny", "grants"}
+OWNER_COMMANDS = {"new", "clear"}
+COMMAND_TOOLS = {"memory": "memory_search", "tasks": "subagent_list"}
 
 
 def builtin_slash(text: str) -> bool:
@@ -47,22 +50,30 @@ async def command(runtime, ctx, text):
     private = ctx.owner and not ctx.group and not ctx.background
     actor = runtime.actors.get(ctx.session)
     try:
-        if name in {"tasks", "memory", "approve", "deny", "grants"} and not private:
+        if name in PRIVATE_COMMANDS and not private:
             raise PublicError("此命令仅限主人私聊或 WebUI 使用。")
-        capability = {"memory": "memory_search", "tasks": "subagent_list"}.get(name)
+        capability = COMMAND_TOOLS.get(name)
         if capability:
             await runtime.registry.permissions.check(ctx, runtime.registry.tools[capability], {})
-        if name in {"new", "clear"} or (name in {"model", "persona"} and argument):
+        if name in OWNER_COMMANDS or (name in {"model", "persona"} and argument):
             if not ctx.owner or ctx.background:
                 raise PublicError("只有主人可以重置会话、切换模型或人格。")
         if name == "help":
+            def available(key: str) -> bool:
+                if key in PRIVATE_COMMANDS and not private:
+                    return False
+                if key in OWNER_COMMANDS and (not ctx.owner or ctx.background):
+                    return False
+                if tool_name := COMMAND_TOOLS.get(key):
+                    tool = runtime.registry.tools.get(tool_name)
+                    return tool is not None and runtime.registry.permissions.decision(ctx, tool) != "deny"
+                return True
+
             answer = f"{cfg.assistant_name} 命令（直接执行，不消耗模型 tokens）\n" + "\n".join(
-                f"/{key} — {value}"
-                for key, value in COMMANDS.items()
-                if private or key not in {"tasks", "memory", "approve", "deny", "grants"}
+                f"/{key} — {value}" for key, value in COMMANDS.items() if available(key)
             )
             hooks = getattr(runtime, "hooks", None)
-            plugin_lines = hooks.help_lines(ctx.owner) if hooks is not None else []
+            plugin_lines = hooks.help_lines(ctx) if hooks is not None else []
             if plugin_lines:
                 answer += "\n\n插件指令\n" + "\n".join(plugin_lines)
         elif name in {"new", "clear"}:
