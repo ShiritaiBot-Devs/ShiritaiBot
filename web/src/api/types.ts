@@ -409,6 +409,7 @@ export interface ToolPolicy {
 
 export interface SessionPolicy extends ToolPolicy {
   mode: "agent" | "chat";
+  shell_workspace_isolation?: boolean;
 }
 
 export interface ToolInfo {

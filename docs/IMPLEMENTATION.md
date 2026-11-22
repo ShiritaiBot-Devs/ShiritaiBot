@@ -22,7 +22,7 @@
 
 - 四种文本协议默认从提供商接收 SSE，在返回完整回复前采集首段输出和生成时间。模型的自定义请求参数可设 `{"stream": false}` 使用普通 JSON 响应。按模型的调用错误率从启用采集后开始统计，同一候选的内部重试合并计一次，路由回退按各候选分别计数。
 - Chat 仅对话，所有工具均被执行层拒绝。每个 Main 会话可由主人或 WebUI 配置为 Agent，其他成员不能自行提权。
-- Shell 按当前会话逐工具权限执行，支持禁止、人工审批、模型自动审批和无需审批；它不是系统沙箱。Codex 默认 `read-only`，可配置 `workspace-write`；Claude 默认只暴露 Read/Glob/Grep，edit 模式增加 Edit/Write，不开放 Bash。Generic CLI 的行为由管理员提供的程序决定。
+- Shell 按当前会话的工具权限执行。权限设置可对 Main 会话开启「Shell 工作区隔离」。Linux 上由 bubblewrap 按原路径挂载本会话目录，系统工具只读，其他会话和宿主机数据目录不挂载，`/tmp` 独立。网络仍可用。现有会话默认关闭隔离，继续在原会话工作目录运行。Codex 默认 `read-only`，可配置 `workspace-write`。Claude 默认只暴露 Read/Glob/Grep，edit 模式增加 Edit/Write。Generic CLI 的行为由管理员提供的程序决定。
 - 子代理启动按当前工具策略审批；这不是子代理内部逐个工具的审批桥接。子代理拿不到额外的 ShiritaiBot 工具权限。
 - 插件是可信进程内代码，工具策略不能防止恶意插件绕过框架直接访问系统。
 - API 只绑定 loopback，使用本地随机 token；浏览器令牌放在 sessionStorage。敏感凭据使用 Fernet 加密保存在 SQLite，配置只保存引用。密钥和数据库在同一台机器，不能抵御该账号已被控制的情况。

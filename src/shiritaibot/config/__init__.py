@@ -684,6 +684,7 @@ class ToolPolicy(Model):
 
 class SessionPolicy(ToolPolicy):
     mode: Literal["agent", "chat"] = "agent"
+    shell_workspace_isolation: bool = False
 
 
 class Policy(Model):

@@ -9,17 +9,20 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
+import json
 import re
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import httpx
 
 from shiritaibot.adapters.onebot11 import qq_download_url
 from shiritaibot.core import PublicError, canonical
 from shiritaibot.core.logs import get_logger
+from shiritaibot.core.text import IMAGE_REF
 
 log = get_logger("模型")
 
-IMAGE_REF = re.compile(r"\[QQ 图片引用 ([0-9a-f]{32}): [^\]\n]*\]")
 # meme_view results carry this marker; rendering attaches the image or reports an error.
 MEME_VIEW = re.compile(r"\[表情图片 meme=([0-9a-f]{16})\]")
 NO_VISION = canonical(
@@ -29,6 +32,7 @@ NO_VISION = canonical(
 )
 # Base64 of this stays within the strictest provider per-image limit (5 MB).
 MAX_IMAGE_BYTES = 3_750_000
+MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 CAPTION_PROMPT = (
     "你是图像转述器，为看不到图片的模型描述图片。用中文客观描述图片内容："
     "主体、场景、人物动作与表情、关键细节；图中文字按原文转录。"
@@ -56,30 +60,44 @@ def view_marker(key: str) -> str:
     return f"[表情图片 meme={key}]"
 
 
-def first_frame(data: bytes) -> bytes | None:
-    """PNG of the first frame; GIF and animated WebP are not accepted by every provider."""
-    from PIL import Image, UnidentifiedImageError
+def prepare_image(data: bytes) -> bytes | None:
+    mime = sniff(data)
+    if mime is None:
+        return None
+    animated = mime == "image/gif" or (mime == "image/webp" and b"ANIM" in data[:64])
+    if not animated and len(data) <= MAX_IMAGE_BYTES:
+        return data
+
+    from PIL import Image, ImageOps, UnidentifiedImageError
 
     try:
         with Image.open(io.BytesIO(data)) as image:
-            image.seek(0)
+            image.thumbnail((2048, 2048))
+            frame = ImageOps.exif_transpose(image).convert("RGBA")
             out = io.BytesIO()
-            image.convert("RGBA").save(out, "PNG", optimize=True)
-            return out.getvalue()
+            frame.save(out, "PNG", optimize=True)
+            if out.tell() <= MAX_IMAGE_BYTES:
+                return out.getvalue()
+            # Keep transparency for ordinary images, flatten it only if lossless output is too big.
+            rgb = Image.new("RGB", frame.size, "white")
+            rgb.paste(frame, mask=frame.getchannel("A"))
+            rgb.thumbnail((2048, 2048))
+            for quality in (85, 65):
+                out = io.BytesIO()
+                rgb.save(out, "JPEG", quality=quality, optimize=True)
+                if out.tell() <= MAX_IMAGE_BYTES:
+                    return out.getvalue()
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
-        return None
+        pass
+    return None
 
 
 def model_image(data: bytes) -> str | None:
     """A data URL for model input, or None when the bytes are not a supported image."""
-    mime = sniff(data)
-    if mime is None:
+    prepared = prepare_image(data)
+    if prepared is None:
         return None
-    if mime == "image/gif" or (mime == "image/webp" and b"ANIM" in data[:64]):
-        frame = first_frame(data)
-        if frame is not None:
-            data, mime = frame, "image/png"
-    return f"data:{mime};base64,{base64.b64encode(data).decode()}"
+    return f"data:{sniff(prepared)};base64,{base64.b64encode(prepared).decode()}"
 
 
 class ImageResolver:
@@ -95,10 +113,16 @@ class ImageResolver:
         return any(
             isinstance(m.get("content"), str)
             and (
-                (m["role"] == "user" and IMAGE_REF.search(m["content"]))
+                (ImageResolver.qq_message(m) and IMAGE_REF.search(m["content"]))
                 or (m["role"] == "tool" and MEME_VIEW.search(m["content"]))
             )
             for m in messages
+        )
+
+    @staticmethod
+    def qq_message(message: dict) -> bool:
+        return message["role"] == "user" or (
+            message["role"] == "tool" and message.get("_tool_name") == "group_context_query"
         )
 
     async def meme(self, key: str) -> str | None:
@@ -125,15 +149,26 @@ class ImageResolver:
         path = self.llm.store.home / "media" / ref
         try:
             data = await asyncio.to_thread(path.read_bytes)
-        except FileNotFoundError:
+        except OSError:
             data = await self._download(row["data"].get("url", ""))
             if data is None:
                 return None
+
             # QQ CDN links expire, so later turns read the local copy.
-            temp = path.with_suffix(".part")
-            await asyncio.to_thread(path.parent.mkdir, parents=True, exist_ok=True)
-            await asyncio.to_thread(temp.write_bytes, data)
-            await asyncio.to_thread(temp.replace, path)
+            def cache():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with NamedTemporaryFile(dir=path.parent, delete=False) as stream:
+                    temp = Path(stream.name)
+                try:
+                    temp.write_bytes(data)
+                    temp.replace(path)
+                finally:
+                    temp.unlink(missing_ok=True)
+
+            try:
+                await asyncio.to_thread(cache)
+            except OSError:
+                log.warning("QQ 图片缓存写入失败")
         return await asyncio.to_thread(model_image, data)
 
     async def _download(self, url: str) -> bytes | None:
@@ -145,15 +180,17 @@ class ImageResolver:
                 response.raise_for_status()
                 async for chunk in response.aiter_bytes(65536):
                     size += len(chunk)
-                    if size > MAX_IMAGE_BYTES:
-                        log.warning("图片超过大小上限，不发送给模型")
+                    if size > MAX_DOWNLOAD_BYTES:
+                        log.warning("QQ 图片超过下载上限")
                         return None
                     chunks.append(chunk)
         except httpx.HTTPError as exc:
             log.warning(f"图片下载失败（{type(exc).__name__}）")
             return None
-        data = b"".join(chunks)
-        return data if sniff(data) else None
+        prepared = await asyncio.to_thread(prepare_image, b"".join(chunks))
+        if prepared is None:
+            log.warning("QQ 图片无法转换成受支持的图像")
+        return prepared
 
     async def caption(self, ref: str) -> str | None:
         if not self.cfg.vision.caption or not self.cfg.routes.get("vision"):
@@ -195,7 +232,7 @@ class ImageResolver:
         refs = [
             match[1]
             for m in messages
-            if m["role"] == "user" and isinstance(m.get("content"), str)
+            if self.qq_message(m) and isinstance(m.get("content"), str)
             for match in IMAGE_REF.finditer(m["content"])
         ]
         views = [
@@ -211,11 +248,41 @@ class ImageResolver:
         # Viewed memes follow the whole tool-result group as one user message, so
         # providers still see every tool result right after its call.
         attached: list[dict] = []
+        rendered_refs: set[str] = set()
 
         def flush() -> None:
             if attached:
                 result.append({"role": "user", "content": list(attached)})
                 attached.clear()
+
+        async def render_text(content: str, tool_result: bool = False) -> str | list[dict]:
+            parts, text, end = [], "", 0
+            for match in IMAGE_REF.finditer(content):
+                ref = match[1]
+                text += content[end : match.start()]
+                end = match.end()
+                label = f"[图片 ref={ref}]"
+                if ref in rendered_refs:
+                    text += label
+                    continue
+                url = await self.image(ref) if ref in recent else None
+                if url:
+                    rendered_refs.add(ref)
+                    if tool_result:
+                        attached.extend([{"type": "text", "text": label}, image_part(url)])
+                        text += label
+                    else:
+                        parts.extend([{"type": "text", "text": text + label}, image_part(url)])
+                        text = ""
+                    continue
+                caption = await self.caption(ref)
+                text += f"[图片 ref={ref}：{caption or '未附带图片'}]"
+            text += content[end:]
+            if not parts:
+                return text
+            if text.strip():
+                parts.append({"type": "text", "text": text})
+            return parts
 
         for message in messages:
             content = message.get("content")
@@ -239,30 +306,22 @@ class ImageResolver:
                 result.append({**message, "content": content})
                 continue
             if (
-                message["role"] != "user"
+                not self.qq_message(message)
                 or not isinstance(content, str)
                 or not IMAGE_REF.search(content)
             ):
                 result.append(message)
                 continue
-            parts, text, end = [], "", 0
-            for match in IMAGE_REF.finditer(content):
-                ref = match[1]
-                text += content[end : match.start()]
-                end = match.end()
-                url = await self.image(ref) if ref in recent else None
-                if url:
-                    parts += [{"type": "text", "text": text + f"[图片 ref={ref}]"}, image_part(url)]
-                    text = ""
+            if message["role"] == "tool":
+                try:
+                    payload = json.loads(content)
+                except json.JSONDecodeError:
+                    result.append(message)
                     continue
-                caption = await self.caption(ref)
-                text += f"[图片 ref={ref}：{caption}]" if caption else f"[图片 ref={ref}]"
-            text += content[end:]
-            if not parts:
-                result.append({**message, "content": text})
+                for row in payload.get("messages", []):
+                    row["text"] = await render_text(row["text"], tool_result=True)
+                result.append({**message, "content": canonical(payload)})
                 continue
-            if text.strip():
-                parts.append({"type": "text", "text": text})
-            result.append({**message, "content": parts})
+            result.append({**message, "content": await render_text(content)})
         flush()
         return result

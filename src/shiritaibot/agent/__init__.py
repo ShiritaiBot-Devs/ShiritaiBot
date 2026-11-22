@@ -27,6 +27,7 @@ from shiritaibot.core import (
     uid,
 )
 from shiritaibot.core.logs import Logger, brief, describe_session, get_logger
+from shiritaibot.core.text import clip_image_text
 from shiritaibot.meme.inject import meme_prompt
 from shiritaibot.memory.judge import recall_question
 from shiritaibot.memory.recall import MemoryRecall
@@ -476,10 +477,11 @@ class AgentRuntime:
                 ctx.session, settings.inject_messages + 1, memory_profile=ctx.memory_profile
             )
             # The triggering message is the user turn itself.
-            for index in range(len(rows) - 1, -1, -1):
-                if rows[index]["sender"] == ctx.actor and rows[index]["triggered"]:
-                    rows.pop(index)
-                    break
+            if not ctx.interject:
+                for index in range(len(rows) - 1, -1, -1):
+                    if rows[index]["sender"] == ctx.actor and rows[index]["triggered"]:
+                        rows.pop(index)
+                        break
             rows = rows[-settings.inject_messages :]
         zone = ZoneInfo(cfg.proactive.timezone)
         # One long message must not crowd out the rest of the recent conversation.
@@ -487,7 +489,7 @@ class AgentRuntime:
         lines, used = [], 0
         for row in reversed(rows):
             stamp = datetime.fromtimestamp(row["created"], zone).strftime("%m-%d %H:%M")
-            text = row["text"] if len(row["text"]) <= cap else row["text"][:cap] + "…"
+            text = clip_image_text(row["text"], cap)
             line = f"[{stamp}] {row['name']}({row['sender']}): {text}"
             if used + len(line) > settings.inject_chars:
                 break
@@ -906,7 +908,12 @@ class AgentRuntime:
                                 log.warning(
                                     f"工具 {function['name']} 失败，用时 {spent:.1f}s：{summary}"
                                 )
-                        result = {"role": "tool", "tool_call_id": call["id"], "content": output}
+                        result = {
+                            "role": "tool",
+                            "tool_call_id": call["id"],
+                            "_tool_name": function["name"],
+                            "content": output,
+                        }
                         await append(result)
                         history.append(result)
                     if report is not None:

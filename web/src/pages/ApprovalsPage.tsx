@@ -280,6 +280,30 @@ export function ApprovalsPage({
               {forcedChat && <small>飞书群聊固定使用 Chat。</small>}
             </label>
           )}
+          {target !== "proactive_default" && (
+            <label className="field">
+              Shell 工作区隔离
+              <select
+                value={
+                  (profile as SessionPolicy).shell_workspace_isolation
+                    ? "on"
+                    : "off"
+                }
+                onChange={(event) =>
+                  update({
+                    ...(profile as SessionPolicy),
+                    shell_workspace_isolation: event.target.value === "on",
+                  })
+                }
+              >
+                <option value="off">关闭</option>
+                <option value="on">开启</option>
+              </select>
+              <small>
+                开启后仅可写入本会话目录和临时目录。需要 Linux 和 bubblewrap。
+              </small>
+            </label>
+          )}
           <label className="field">
             权限预设
             <select

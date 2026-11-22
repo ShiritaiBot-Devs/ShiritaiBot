@@ -14,7 +14,7 @@ UNDERSCORE = re.compile(r"(?<!\w)__([^_\n]+?)__(?!\w)", re.S)
 STRIKE = re.compile(r"~~(.+?)~~", re.S)
 LINK = re.compile(r"\[([^\]\n]*)\]\((https?://[^)\s]+)\)")
 BLANKS = re.compile(r"\n{3,}")
-
+IMAGE_REF = re.compile(r"\[QQ 图片引用 ([0-9a-f]{32}): [^\]\n]*\]")
 REDACTED = "[已脱敏]"
 TOKEN_PATTERNS = (
     re.compile(r"\bsk-[A-Za-z0-9_-]{16,}"),
@@ -26,6 +26,21 @@ TOKEN_PATTERNS = (
         r"\s*[:=]\s*)([\"']?)[A-Za-z0-9._~+/=-]{8,}\2"
     ),
 )
+
+
+def clip_image_text(text: str, limit: int) -> str:
+    """Keep complete image references when clipping a long group message."""
+    if len(text) <= limit:
+        return text
+    budget = limit - 1
+    refs = []
+    for match in IMAGE_REF.finditer(text):
+        marker = " " + match[0]
+        if len(marker) > budget:
+            break
+        refs.append(marker)
+        budget -= len(marker)
+    return IMAGE_REF.sub("[图片]", text)[: max(0, budget)] + "…" + "".join(refs)
 
 
 def clean_outbound(text: str) -> str:

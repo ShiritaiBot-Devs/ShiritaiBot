@@ -1,17 +1,23 @@
 import asyncio
+import io
 import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import httpx
 import pytest
+from PIL import Image
 from pydantic import ValidationError
 
 from shiritaibot.adapters.onebot11 import AdapterHub, OneBotNotConnected
 from shiritaibot.agent import AgentRuntime
 from shiritaibot.config import ConfigService, GroupContextConfig, HeartflowConfig, Settings
 from shiritaibot.core import EventBus, Reply
+from shiritaibot.core.text import IMAGE_REF
 from shiritaibot.heartflow import DIMENSIONS, Heartflow, cost, judge
+from shiritaibot.llm import request_payload
+from shiritaibot.llm.media import MAX_IMAGE_BYTES, ImageResolver
 from shiritaibot.store import Store
 
 SESSION = "group:qq:123"
@@ -95,8 +101,10 @@ async def group_bot(path, mode="heartflow"):
         await store.close()
 
 
-async def receive(hub, bot, text, msg_id, *, wake=False, group="123"):
+async def receive(hub, bot, text, msg_id, *, wake=False, group="123", image=False):
     parts = [{"type": "text", "data": {"text": text}}]
+    if image:
+        parts.append({"type": "image", "data": {"url": "https://gchat.qpic.cn/test.png"}})
     if wake:
         parts.append({"type": "at", "data": {"qq": bot.self_id}})
     await hub.receive(
@@ -124,6 +132,48 @@ async def pending(hub):
 
 async def flush(hub, bot, row):
     await hub.flush_onebot(bot, row, "group", "123", await hub.outgoing(row))
+
+
+def test_passive_group_image_becomes_model_input(tmp_path):
+    async def run():
+        async with group_bot(tmp_path, mode="off") as (hub, bot, llm):
+            await receive(hub, bot, "这是一张很大的图。" * 200, 1, image=True)
+            await receive(hub, bot, "刚才那张图里是什么？", 2, wake=True)
+            await until(lambda: pending(hub))
+            _, _, request, _ = llm.complete.await_args.args
+            messages = [message for message in request if message["role"] == "user"]
+            content = messages[-1]["content"]
+            match = IMAGE_REF.search(content)
+            assert match and "刚才那张图" in content
+            assert match[0] not in (await hub.store.history(SESSION))[0]["content"]
+            assert await hub.store.get("qq_file", match[1])
+
+            image = io.BytesIO()
+            Image.new("RGB", (1500, 1000), "orange").save(image, "PNG", compress_level=0)
+            assert len(image.getvalue()) > MAX_IMAGE_BYTES
+            transport = httpx.MockTransport(lambda _: httpx.Response(200, content=image.getvalue()))
+            async with httpx.AsyncClient(transport=transport) as client:
+                provider = SimpleNamespace(store=hub.store, client=client)
+                cfg = hub.config.value
+                model = SimpleNamespace(modalities=["image"])
+                rendered = await ImageResolver(provider, SESSION, cfg).render(messages, model)
+                _, body = request_payload("chat_completions", "test", "", rendered, [], 128)
+                parts = body["messages"][-1]["content"]
+                assert any(p["type"] == "image_url" for p in parts)
+                assert (tmp_path / "media" / match[1]).stat().st_size <= MAX_IMAGE_BYTES
+
+                foreign = await ImageResolver(provider, "group:qq:456", cfg).render(messages, model)
+                assert isinstance(foreign[-1]["content"], str)
+                assert "未附带图片" in foreign[-1]["content"]
+
+                call = {"role": "tool", "_tool_name": "group_context_query", "tool_call_id": "call"}
+                call["content"] = json.dumps({"messages": [{"text": match[0]}]}, ensure_ascii=False)
+                queried = await ImageResolver(provider, SESSION, cfg).render([call], model)
+                assert queried[0]["role"] == "tool"
+                assert "QQ 图片引用" not in queried[0]["content"]
+                assert queried[1]["content"][-1]["type"] == "image_url"
+
+    asyncio.run(run())
 
 
 def test_passive_focus_followup_receipt_and_split_retry(tmp_path):

@@ -36,7 +36,7 @@ from shiritaibot.core import (
     uid,
 )
 from shiritaibot.core.logs import brief, get_logger
-from shiritaibot.core.text import clean_outbound
+from shiritaibot.core.text import clean_outbound, clip_image_text
 from shiritaibot.meme.inject import MemeInjector
 
 if TYPE_CHECKING:
@@ -60,11 +60,11 @@ def segments(value) -> list[dict]:
     return result
 
 
-def describe(parts: list[dict]) -> str:
+def describe(parts: list[dict], images: dict[int, str] | None = None) -> str:
     """Readable plain text for group context, keeping placeholders for non-text segments."""
     labels = {"image": "[图片]", "face": "[表情]", "record": "[语音]", "video": "[视频]"}
     out = []
-    for part in parts:
+    for index, part in enumerate(parts):
         data = part.get("data", {})
         kind = part.get("type")
         if kind == "text":
@@ -75,9 +75,11 @@ def describe(parts: list[dict]) -> str:
             out.append(f"[文件 {data.get('name', '')}]")
         elif kind == "forward":
             out.append(f"[合并转发 {data.get('id', '')}]")
+        elif images and index in images:
+            out.append(images[index])
         elif kind in labels:
             out.append(labels[kind])
-    return "".join(out).strip()[:2000]
+    return clip_image_text("".join(out).strip(), 2000)
 
 
 def forward_node(message: list[dict], user_id: str, nickname: str) -> dict:
@@ -89,8 +91,11 @@ def forward_node(message: list[dict], user_id: str, nickname: str) -> dict:
 
 def qq_download_url(url: str) -> bool:
     """Only QQ's own HTTPS CDNs; never protocol-side local paths or arbitrary hosts."""
-    parsed = urlparse(url)
-    host = parsed.hostname or ""
+    try:
+        parsed = urlparse(url)
+        host = parsed.hostname or ""
+    except ValueError:
+        return False
     return (
         parsed.scheme == "https"
         and not parsed.username
@@ -498,13 +503,26 @@ class AdapterHub:
         )
         if group and self.memes is not None:
             self.memes.hooker.observe(session, parts)
+        images: dict[int, str] = {}
+
+        async def image_reference(index: int, data: dict) -> str:
+            if index not in images:
+                if not qq_download_url(str(data.get("url") or "")):
+                    return "[QQ 图片，协议端未提供可用的下载地址]"
+                ref = await file_ref(self.store, cfg.id, target if group else "", data, session)
+                images[index] = f"[QQ 图片引用 {ref}: 图片]"
+            return images[index]
+
         if group and settings.group_context.enabled:
+            for index, part in enumerate(parts):
+                if part.get("type") == "image":
+                    await image_reference(index, part.get("data", {}))
             await self.store.record_group(
                 session,
                 message_id,
                 user,
                 str(sender.get("card") or sender.get("nickname") or user),
-                describe(parts),
+                describe(parts, images),
                 mentioned or keyword,
                 memory_profile=settings.session_memory(session),
             )
@@ -555,9 +573,9 @@ class AdapterHub:
             if self.hooks is not None and await self.hooks.dispatch(message(False)):
                 return
             if flow and arrival is not None:
-                flow.message(session, arrival, user, speaker, text)
+                flow.message(session, arrival, user, speaker, describe(parts, images))
             else:
-                await self.maybe_interject(bot, session, user, speaker, describe(parts))
+                await self.maybe_interject(bot, session, user, speaker, describe(parts, images))
             return
         # Keep the original text for the model, but allow "小知，/stop" and approval replies.
         rest = settings.strip_wake_prefix(text)
@@ -591,20 +609,19 @@ class AdapterHub:
                 return
         if self.hooks is not None and await self.hooks.dispatch(message(True)):
             return
-        for part in parts:
+        for index, part in enumerate(parts):
             data = part.get("data", {})
             if part.get("type") == "file":
                 ref = await file_ref(self.store, cfg.id, target if group else "", data, session)
                 text += f"\n[QQ 文件引用 {ref}: {data.get('name') or data.get('file') or 'file'}]"
-            elif part.get("type") in {"image", "video"}:
-                # Media-only messages must still start a turn; the CDN link becomes a
-                # session-bound ref that qq_file_download can fetch.
-                label = "图片" if part["type"] == "image" else "视频"
+            elif part.get("type") == "image":
+                text += "\n" + await image_reference(index, data)
+            elif part.get("type") == "video":
                 if data.get("url"):
                     ref = await file_ref(self.store, cfg.id, target if group else "", data, session)
-                    text += f"\n[QQ {label}引用 {ref}: {data.get('file') or label}]"
+                    text += f"\n[QQ 视频引用 {ref}: {data.get('file') or '视频'}]"
                 else:
-                    text += f"\n[QQ {label}，协议端未提供下载地址]"
+                    text += "\n[QQ 视频，协议端未提供下载地址]"
             elif part.get("type") == "forward" and data.get("id"):
                 text += f"\n[QQ 合并转发 {data['id']}]"
             elif part.get("type") == "reply" and data.get("id"):

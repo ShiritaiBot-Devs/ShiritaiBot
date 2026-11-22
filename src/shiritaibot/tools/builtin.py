@@ -17,6 +17,7 @@ from shiritaibot.tools import TEXT, schema
 from shiritaibot.tools.feishu import feishu_file_tool
 from shiritaibot.tools.qq import qq_tools
 from shiritaibot.tools.shell_diff import file_diffs, snapshot
+from shiritaibot.tools.shell_workspace import isolated_shell
 from shiritaibot.tools.web_search import search_token, search_web
 
 
@@ -38,6 +39,19 @@ async def register_builtin(app) -> None:
 
     async def shell(ctx, args):
         workspace = session_dir(app.home, "workspaces", ctx.session)
+        isolate = (
+            not ctx.background
+            and registry.permissions.session_policy(ctx).shell_workspace_isolation
+        )
+        command = [
+            *app.config.value.policy.shell_command,
+            app.plugins.filter_shell(args["command"]),
+        ]
+        if isolate:
+            expected = app.home.resolve() / "workspaces" / workspace.name
+            if workspace.resolve() != expected:
+                raise PublicError("会话工作区已重定向，无法隔离执行")
+            command = await asyncio.to_thread(isolated_shell, command, expected)
         await asyncio.to_thread(workspace.mkdir, parents=True, exist_ok=True)
         before = (
             await asyncio.to_thread(snapshot, workspace)
@@ -46,7 +60,7 @@ async def register_builtin(app) -> None:
         )
         try:
             return await run_process(
-                [*app.config.value.policy.shell_command, app.plugins.filter_shell(args["command"])],
+                command,
                 workspace,
                 timeout=args.get("timeout", 60),
                 env=app.plugins.child_env(),
@@ -272,7 +286,7 @@ async def register_builtin(app) -> None:
         ),
         Tool(
             "shell",
-            "在会话工作目录执行 bash，调用受当前工具权限配置约束。"
+            "在会话工作目录执行 Shell，受当前会话的工具权限和工作区隔离设置约束。"
             "环境不保证安装 ripgrep 等第三方工具，文本检索请优先用 grep。"
             "启动 codex / claude / dsh / agy 等外部 Agent 请使用 subagent_instances + subagent_start。",
             schema(
