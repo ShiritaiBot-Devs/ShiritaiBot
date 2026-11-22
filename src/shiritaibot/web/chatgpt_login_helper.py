@@ -1,8 +1,9 @@
 """Run on the computer opening the browser. Uses only the Python standard library."""
 
 from html import escape
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from secrets import compare_digest
+from threading import Event
 from time import monotonic
 from urllib.parse import parse_qs, urlsplit
 from webbrowser import open as open_browser
@@ -15,15 +16,16 @@ def main(authorization_url: str) -> None:
     port = redirect.port
     if redirect.scheme != "http" or redirect.hostname != "127.0.0.1" or port is None:
         raise SystemExit("Invalid localhost callback.")
-    result = ""
+    completed = Event()
 
     class Callback(BaseHTTPRequestHandler):
+        # StreamRequestHandler applies this timeout before reading the request line.
+        timeout = 5
+
         def log_message(self, *_args):
             pass
 
         def do_GET(self):
-            nonlocal result
-            self.connection.settimeout(5)
             try:
                 uri = urlsplit(self.path)
                 query = parse_qs(uri.query, keep_blank_values=True, max_num_fields=24)
@@ -40,7 +42,7 @@ def main(authorization_url: str) -> None:
             if not valid:
                 self.send_error(400, "This callback does not match the current ChatGPT sign-in.")
                 return
-            result = redirect._replace(query=uri.query).geturl()
+            callback_url = redirect._replace(query=uri.query).geturl()
             page = f"""<!doctype html>
 <html lang="zh-CN"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -52,7 +54,7 @@ button {{font: inherit; padding: .35rem .7rem}}
 </style>
 <h1>返回 ShiritaiBot</h1>
 <p>复制下面的一次性回调地址，粘贴回 WebUI 的 ChatGPT 授权面板。</p>
-<textarea id="callback" rows="4" readonly aria-label="一次性回调地址">{escape(result)}</textarea>
+<textarea id="callback" rows="4" readonly aria-label="一次性回调地址">{escape(callback_url)}</textarea>
 <button id="copy">复制回调地址</button>
 <script>
 history.replaceState(null, "", location.pathname);
@@ -75,9 +77,11 @@ document.querySelector("#copy").onclick = async (event) => {{
             self.send_header("X-Frame-Options", "DENY")
             self.end_headers()
             self.wfile.write(page)
+            self.wfile.flush()
+            completed.set()
 
     try:
-        server = HTTPServer(("127.0.0.1", port), Callback)
+        server = ThreadingHTTPServer(("127.0.0.1", port), Callback)
     except OSError:
         raise SystemExit(
             "The callback port is unavailable. Start a new sign-in in ShiritaiBot."
@@ -88,7 +92,7 @@ document.querySelector("#copy").onclick = async (event) => {{
             print("Open this URL in your browser:", authorization_url, flush=True)
         server.timeout = 1
         deadline = monotonic() + 600
-        while not result and monotonic() < deadline:
+        while not completed.is_set() and monotonic() < deadline:
             server.handle_request()
-    if not result:
+    if not completed.is_set():
         raise SystemExit("Sign-in timed out. Start a new sign-in in ShiritaiBot.")

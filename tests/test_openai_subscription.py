@@ -210,7 +210,7 @@ def test_subscription_web_flow_rotates_credentials_and_tracks_inference(tmp_path
         assert "client_id=oaiapp_fixture" in reconnect
 
 
-def test_login_helper_listens_on_browser_computer_and_checks_state(monkeypatch):
+def test_login_helper_handles_callbacks_while_a_browser_connection_is_idle(monkeypatch):
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -227,10 +227,15 @@ def test_login_helper_listens_on_browser_computer_and_checks_state(monkeypatch):
     helper = Thread(target=chatgpt_login_helper.main, args=(authorization_url,), daemon=True)
     helper.start()
     assert browser_opened.wait(3)
-    with httpx.Client(trust_env=False) as browser:
+    # Browsers can connect before sending anything. Keep that connection open even
+    # while the valid callback finishes and the helper shuts down.
+    with (
+        socket.create_connection(("127.0.0.1", port), timeout=2),
+        httpx.Client(trust_env=False, timeout=2) as browser,
+    ):
         assert browser.get(redirect, params={"code": "code", "state": "other"}).status_code == 400
         response = browser.get(redirect, params={"code": "fixture-code", "state": "fixture-state"})
-    assert response.status_code == 200
-    assert "fixture-code" in response.text and "复制回调地址" in response.text
-    helper.join(timeout=3)
-    assert not helper.is_alive()
+        assert response.status_code == 200
+        assert "fixture-code" in response.text and "复制回调地址" in response.text
+        helper.join(timeout=3)
+        assert not helper.is_alive()
