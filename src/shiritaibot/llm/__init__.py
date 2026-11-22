@@ -10,7 +10,14 @@ from typing import Any
 
 import httpx
 
-from shiritaibot.core import PublicError, Reply, canonical, uid
+from shiritaibot.core import (
+    PublicError,
+    Reply,
+    canonical,
+    model_usage_session,
+    record_usage_for,
+    uid,
+)
 from shiritaibot.core.logs import get_logger
 from shiritaibot.llm.media import ImageResolver
 from shiritaibot.llm.streaming import collect_stream
@@ -470,7 +477,7 @@ class ProviderManager:
                     body.pop("stream_options", None)
         return await self._request(provider, "POST", base + path, json=body, headers=headers)
 
-    async def _record_call(self, model, protocol, status, usage=None, timing=None):
+    async def _record_call(self, model, protocol, status, usage=None, timing=None, *, scope=None):
         await self.store.put(
             "usage",
             uid(),
@@ -482,6 +489,7 @@ class ProviderManager:
                 "usage": usage or {},
                 **(timing or {}),
             },
+            model_usage_session.get() if scope is None else scope,
         )
 
     async def discover(self, provider) -> list[dict]:
@@ -563,7 +571,7 @@ class ProviderManager:
         settings=None,
         scope: str | None = None,
     ) -> Reply:
-        """`scope` is the session whose QQ image refs may be resolved for this call."""
+        """Use an explicit session for usage attribution and QQ image resolution when given."""
         cfg = settings or self.config.value
         candidates = cfg.routes.get(route, [])
         if not candidates:
@@ -584,7 +592,10 @@ class ProviderManager:
                 decision_only = True
                 continue
             # Captioning calls complete() itself, so it must run outside the semaphore.
-            sent = await images.render(messages, model) if images else messages
+            sent = messages
+            if images:
+                with record_usage_for(images.scope):
+                    sent = await images.render(messages, model)
             path, body = request_payload(
                 provider.protocol, model.model, system, sent, tools, model.max_output
             )
@@ -634,6 +645,7 @@ class ProviderManager:
                     "ok",
                     reply.usage,
                     response.extensions.get("model_timing"),
+                    scope=scope,
                 )
                 log.debug(
                     f"{model.display_name} 应答，用时 {time.monotonic() - started:.1f}s"
@@ -649,7 +661,7 @@ class ProviderManager:
                 TypeError,
                 AttributeError,
             ) as exc:
-                await self._record_call(model, provider.protocol, "failed")
+                await self._record_call(model, provider.protocol, "failed", scope=scope)
                 log.warning(
                     f"{model.display_name} 调用失败（{failure(provider.id, exc)}），尝试下一个候选模型",
                     route,

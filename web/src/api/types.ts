@@ -592,6 +592,7 @@ export interface ExchangeRate {
 
 export interface Statistics {
   hours: number;
+  bucket_hours: 1 | 24;
   timezone: string;
   buckets: TokenBucket[];
   start: string;

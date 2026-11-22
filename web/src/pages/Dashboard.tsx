@@ -4,6 +4,7 @@ import { configuredModelName, modelName } from "../lib/models";
 import { LoadingBar } from "../components/LoadingBar";
 import { MetricIcon } from "../components/MetricIcon";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
+import { SessionOptions } from "../components/SessionPicker";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ApiClient } from "../api/client";
@@ -13,7 +14,7 @@ import type {
   Statistics,
   TokenBucket,
 } from "../api/types";
-import { formatHour, formatNumber } from "../lib/utils";
+import { formatBucketTime, formatDateTime, formatNumber } from "../lib/utils";
 
 const CURRENCY_SYMBOL: Record<Currency, string> = { USD: "$", CNY: "¥" };
 const CURRENCY_STORAGE_KEY = "shiritaibot.cost-currency";
@@ -140,7 +141,9 @@ const HOUR_RANGES = [
   [24, "24 小时"],
   [72, "3 天"],
   [168, "7 天"],
+  [720, "30 天"],
 ] as const;
+const UNATTRIBUTED = "unattributed";
 
 interface Series {
   key: string;
@@ -182,14 +185,16 @@ function field(key: keyof Statistics["totals"]) {
   return (row: TokenBucket) => row[key];
 }
 
-function HourlyChart({
+function UsageChart({
   title,
   rows,
   series,
+  daily,
 }: {
   title: string;
   rows: TokenBucket[];
   series: Series[];
+  daily: boolean;
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const [focusedSeries, setFocusedSeries] = useState<string | null>(null);
@@ -311,7 +316,7 @@ function HourlyChart({
           className="hourly-chart"
           viewBox={`0 0 ${width} ${height + labelHeight}`}
           role="group"
-          aria-label={title + "逐小时图表"}
+          aria-label={`${title}逐${daily ? "日" : "小时"}图表`}
           onMouseLeave={() => setHover(null)}
         >
           {[0, 0.5, 1].map((level) => (
@@ -330,7 +335,7 @@ function HourlyChart({
               key={row.hour}
               tabIndex={0}
               role="img"
-              aria-label={`${formatHour(row.hour)} ${series
+              aria-label={`${formatBucketTime(row.hour, daily)} ${series
                 .map((item) => `${item.label} ${item.value(row)}`)
                 .join("，")}`}
               onMouseEnter={() => setHover(index)}
@@ -373,7 +378,7 @@ function HourlyChart({
                   fill="currentColor"
                   fontSize={12}
                 >
-                  {formatHour(row.hour)}
+                  {formatBucketTime(row.hour, daily)}
                 </text>
               )}
             </g>
@@ -403,7 +408,7 @@ function HourlyChart({
       <div className="chart-detail" aria-live="polite">
         {selected ? (
           <>
-            <strong>{formatHour(selected.hour)}</strong>
+            <strong>{formatBucketTime(selected.hour, daily)}</strong>
             {series
               .filter((item) => item.value(selected) > 0)
               .map((item) => (
@@ -416,7 +421,7 @@ function HourlyChart({
         ) : (
           <span className="muted">
             默认高亮全部曲线；点击图例突出某条曲线，再次点击恢复全部。悬停或用
-            Tab 查看每小时数据。
+            Tab 查看{daily ? "每日" : "每小时"}数据。
           </span>
         )}
       </div>
@@ -426,6 +431,7 @@ function HourlyChart({
 
 export function Dashboard({ client }: { client: ApiClient }) {
   const [hours, setHours] = useState<number>(24);
+  const [session, setSession] = useState("");
   const [currency, setCurrency] = useState<Currency>(savedCurrency);
   const exchange = useQuery({
     queryKey: ["exchange-rate"],
@@ -445,11 +451,31 @@ export function Dashboard({ client }: { client: ApiClient }) {
     }
   };
   const query = useQuery({
-    queryKey: ["stats", hours],
-    queryFn: () => client.stats(hours),
+    queryKey: ["stats", hours, session],
+    queryFn: () =>
+      client.stats(hours, session === UNATTRIBUTED ? "" : session || undefined),
     refetchInterval: 30000,
   });
+  const sessions = useQuery({
+    queryKey: ["stats-sessions"],
+    queryFn: () => client.statsSessions(),
+    refetchInterval: 30000,
+  });
+  const chats = useQuery({
+    queryKey: ["web-chats"],
+    queryFn: () => client.webChats(),
+  });
+  const sessionNames = new Map(
+    chats.data?.map((chat) => [chat.id, chat.title]),
+  );
+  const sessionIds = [
+    "web:owner",
+    ...(sessions.data ?? []),
+    ...sessionNames.keys(),
+  ];
+  if (session && session !== UNATTRIBUTED) sessionIds.push(session);
   const data: Statistics | undefined = query.data;
+  const daily = data ? data.bucket_hours === 24 : hours > 168;
   const config = useQuery({
     queryKey: ["config"],
     queryFn: () => client.config(),
@@ -494,24 +520,42 @@ export function Dashboard({ client }: { client: ApiClient }) {
       <div className="panel-head">
         <div>
           <h2>数据看板</h2>
-          <p className="muted">北京时间 · 每小时聚合 · 每 30 秒更新</p>
+          <p className="muted">
+            北京时间 · {daily ? "按日" : "按小时"}汇总 · 每 30 秒更新
+          </p>
         </div>
-        <div className="range-tabs" role="group" aria-label="统计区间">
-          {HOUR_RANGES.map(([value, label]) => (
-            <button
-              type="button"
-              key={value}
-              className={hours === value ? "selected" : ""}
-              aria-pressed={hours === value}
-              onClick={() => setHours(value)}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="dashboard-filters">
+          <select
+            aria-label="统计会话"
+            value={session}
+            onChange={(event) => setSession(event.target.value)}
+          >
+            <option value="">全部会话</option>
+            <option value={UNATTRIBUTED}>未归属会话</option>
+            <SessionOptions ids={sessionIds} titles={sessionNames} />
+          </select>
+          <div className="range-tabs" role="group" aria-label="统计区间">
+            {HOUR_RANGES.map(([value, label]) => (
+              <button
+                type="button"
+                key={value}
+                className={hours === value ? "selected" : ""}
+                aria-pressed={hours === value}
+                onClick={() => setHours(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       {query.error && (
         <QueryErrorNotice message={`读取统计失败：${query.error.message}`} />
+      )}
+      {sessions.error && (
+        <QueryErrorNotice
+          message={`读取统计会话失败：${sessions.error.message}`}
+        />
       )}
       {warnings.length > 0 && (
         <section className="panel" role="alert">
@@ -606,10 +650,15 @@ export function Dashboard({ client }: { client: ApiClient }) {
               </div>
             ))}
           </div>
-          <ModelPerformanceCharts rows={data.buckets} models={models} />
-          <HourlyChart
+          <ModelPerformanceCharts
+            rows={data.buckets}
+            models={models}
+            daily={daily}
+          />
+          <UsageChart
             title="Token 用量（按模型）"
             rows={data.buckets}
+            daily={daily}
             series={[
               {
                 key: "total",
@@ -626,9 +675,10 @@ export function Dashboard({ client }: { client: ApiClient }) {
             currency={currency}
             rate={rate}
           />
-          <HourlyChart
+          <UsageChart
             title="对话消息"
             rows={data.buckets}
+            daily={daily}
             series={[
               {
                 key: "incoming_messages",
@@ -645,9 +695,9 @@ export function Dashboard({ client }: { client: ApiClient }) {
             ]}
           />
           <p className="muted stats-note">
-            统计区间 {formatHour(data.start)} 至 {formatHour(data.end)}
-            ，首尾小时按实际区间截取。Token
-            取提供商返回的用量，包含工具轮次与连接测试； 缓存命中{" "}
+            统计区间 {formatDateTime(data.start)} 至 {formatDateTime(data.end)}
+            ，首尾按实际区间截取。Token 取提供商返回的用量。
+            缺少会话归属的历史记录和连接测试等调用计入「未归属会话」。 缓存命中{" "}
             {formatNumber(data.totals.cached_tokens)} tokens（已计入输入）。
             花费按模型当前单价估算，仅供参考：缓存写入按输入单价计，不含分级定价与免费额度；
             已删除或未设单价的模型不计入。

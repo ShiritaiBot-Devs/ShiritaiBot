@@ -9,6 +9,29 @@
   gap: 14px;
 }
 
+.dashboard-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+}
+
+.dashboard-filters select {
+  width: 13rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.dashboard-filters .range-tabs {
+  flex-wrap: wrap;
+}
+
+.dashboard-filters .range-tabs button {
+  padding-inline: 10px;
+  white-space: nowrap;
+}
+
 .range-tabs {
   display: flex;
   overflow: hidden;

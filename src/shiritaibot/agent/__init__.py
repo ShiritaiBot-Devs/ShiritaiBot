@@ -24,6 +24,7 @@ from shiritaibot.core import (
     current_reply,
     fingerprint,
     now,
+    record_usage_for,
     uid,
 )
 from shiritaibot.core.logs import Logger, brief, describe_session, get_logger
@@ -419,7 +420,8 @@ class AgentRuntime:
                 return "ignored"
         if text.strip().startswith("/"):
             loop_logger(ctx).log(f"{'主人' if ctx.owner else ctx.actor} 执行指令 {brief(text, 80)}")
-            return await command(self, ctx, text)
+            with record_usage_for(ctx.session):
+                return await command(self, ctx, text)
         if ctx.session not in self.actors or self.actors[ctx.session].task.done():
             actor = SessionActor(self, ctx.session)
             self.actors[ctx.session] = actor
@@ -584,14 +586,16 @@ class AgentRuntime:
         async with self.context_locks.setdefault(ctx.session, asyncio.Lock()):
             token = current_reply.set(ctx.reply_anchor)
             try:
-                await self._turn(actor, ctx, text)
+                with record_usage_for(ctx.session):
+                    await self._turn(actor, ctx, text)
             finally:
                 current_reply.reset(token)
 
     async def interjection_candidate(self, ctx: Context, text: str) -> str | None:
         """Generate without acquiring the passive actor, writing chat history or delivering."""
         assert ctx.interject and ctx.group and not ctx.owner
-        return await self._turn(None, ctx, text)
+        with record_usage_for(ctx.session):
+            return await self._turn(None, ctx, text)
 
     async def _turn(self, actor: SessionActor | None, ctx: Context, text: str) -> str | None:
         turn_started = now()

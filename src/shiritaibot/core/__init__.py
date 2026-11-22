@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import uuid
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -85,6 +86,16 @@ class ReplyAnchor:
 
 
 current_reply: ContextVar[ReplyAnchor | None] = ContextVar("current_reply", default=None)
+model_usage_session: ContextVar[str] = ContextVar("model_usage_session", default="")
+
+
+@contextmanager
+def record_usage_for(session: str):
+    token = model_usage_session.set(session)
+    try:
+        yield
+    finally:
+        model_usage_session.reset(token)
 
 
 @dataclass(frozen=True, slots=True)

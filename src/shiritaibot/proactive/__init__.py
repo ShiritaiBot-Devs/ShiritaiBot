@@ -21,6 +21,7 @@ from shiritaibot.core import (
     canonical,
     fingerprint,
     now,
+    record_usage_for,
 )
 from shiritaibot.core.logs import brief, get_logger
 from shiritaibot.memory.judge import remember_question
@@ -454,7 +455,8 @@ class ProactiveEngine:
                 reason="记忆系统内部确认事项，汇总后再告知主人",
             )
         else:
-            decision = await self.judge(event)
+            with record_usage_for(PREPARE_SESSION + key):
+                decision = await self.judge(event)
         if view is not None and self.hooks is not None:
             decision = await self.hooks.proactive_judged(view, decision)
             if requested:

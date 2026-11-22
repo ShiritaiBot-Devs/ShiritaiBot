@@ -50,16 +50,24 @@ export function formatTime(value: string): string {
   }).format(date);
 }
 
-export function formatHour(value: string): string {
+const bucketDay = new Intl.DateTimeFormat("zh-CN", {
+  timeZone: TIME_ZONE,
+  month: "2-digit",
+  day: "2-digit",
+});
+const bucketHour = new Intl.DateTimeFormat("zh-CN", {
+  timeZone: TIME_ZONE,
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  hour12: false,
+});
+
+export function formatBucketTime(value: string, daily: boolean): string {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: TIME_ZONE,
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    hour12: false,
-  }).format(date);
+  return Number.isNaN(date.getTime())
+    ? value
+    : (daily ? bucketDay : bucketHour).format(date);
 }
 
 export function formatNumber(value: number): string {

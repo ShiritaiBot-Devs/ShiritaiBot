@@ -38,7 +38,7 @@ from shiritaibot.meme.core import MAX_MEME_BYTES
 from shiritaibot.plugin.core.packages import MAX_ARCHIVE, download_github, validate_id
 from shiritaibot.routine import RoutineItem
 from shiritaibot.skill import MAX_ARCHIVE as MAX_SKILL_ARCHIVE
-from shiritaibot.store.statistics import statistics
+from shiritaibot.store.statistics import MAX_STATS_HOURS, statistics, statistics_sessions
 from shiritaibot.tools.builtin import register_builtin
 from shiritaibot.updater import Updater
 from shiritaibot.web.exchange_rates import ExchangeRates
@@ -196,10 +196,15 @@ def create_app(
         return await runtime.llm.discover(body)
 
     @api.get("/api/stats", dependencies=protected)
-    async def stats(hours: int = 24):
-        if hours not in {24, 72, 168}:
-            raise HTTPException(422, "统计范围必须是 24、72 或 168 小时")
-        return await statistics(runtime.store, hours, models=runtime.config.value.models)
+    async def stats(
+        hours: int = Query(default=24, ge=1, le=MAX_STATS_HOURS),
+        session: str | None = Query(default=None, max_length=400),
+    ):
+        return await statistics(runtime.store, hours, models=runtime.config.value.models, session=session)
+
+    @api.get("/api/stats/sessions", dependencies=protected)
+    async def stats_sessions():
+        return await statistics_sessions(runtime.store)
 
     @api.get("/api/exchange-rate", dependencies=protected)
     async def exchange_rate():

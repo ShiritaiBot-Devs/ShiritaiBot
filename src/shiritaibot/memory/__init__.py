@@ -5,7 +5,7 @@ import json
 from datetime import timedelta
 
 from shiritaibot.agent.context import transcript
-from shiritaibot.core import Context, PublicError, canonical, now
+from shiritaibot.core import Context, PublicError, canonical, now, record_usage_for
 from shiritaibot.core.logs import brief, describe_session, get_logger
 from shiritaibot.memory.longterm import MemoryManager
 from shiritaibot.memory.recall import MemoryRecall
@@ -134,9 +134,10 @@ class ShortTermMemory:
 
         async def summarize(content: str) -> str:
             async with asyncio.timeout(60):
-                reply = await self.llm.complete(
-                    "light", system, [{"role": "user", "content": content}], []
-                )
+                with record_usage_for(row["session"]):
+                    reply = await self.llm.complete(
+                        "light", system, [{"role": "user", "content": content}], []
+                    )
             if not reply.text.strip() or reply.calls:
                 raise PublicError("短期记忆摘要无效")
             return reply.text.strip()[:4000]

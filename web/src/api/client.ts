@@ -100,7 +100,8 @@ export interface ApiClient {
     pageSize: number,
     approvalFilter?: "pending" | "history",
   ): Promise<Paginated<RecordMap[K]>>;
-  stats(hours: number): Promise<Statistics>;
+  stats(hours: number, session?: string): Promise<Statistics>;
+  statsSessions(): Promise<string[]>;
   exchangeRate(): Promise<ExchangeRate>;
   commands(session: string): Promise<CommandInfo[]>;
   helpMenuSections(): Promise<HelpMenuSection[]>;
@@ -342,7 +343,12 @@ export function createClient(getToken: () => string): ApiClient {
             approval_filter: approvalFilter,
           }),
       ),
-    stats: (hours) => request<Statistics>("/stats?hours=" + hours),
+    stats: (hours, session) => {
+      const params = new URLSearchParams({ hours: String(hours) });
+      if (session !== undefined) params.set("session", session);
+      return request<Statistics>("/stats?" + params);
+    },
+    statsSessions: () => request<string[]>("/stats/sessions"),
     exchangeRate: () => request<ExchangeRate>("/exchange-rate"),
     commands: (session) =>
       request<CommandInfo[]>("/commands?" + new URLSearchParams({ session })),

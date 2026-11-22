@@ -2,7 +2,7 @@ import { Activity, Timer, Zap } from "lucide-react";
 import { useId, useState } from "react";
 import type { ModelPerformance, TokenBucket } from "../api/types";
 import { smoothLine, type ChartModel } from "../lib/charts";
-import { formatHour } from "../lib/utils";
+import { formatBucketTime } from "../lib/utils";
 
 const metrics = [
   {
@@ -77,10 +77,12 @@ function PerformanceCard({
   metric,
   rows,
   models,
+  daily,
 }: {
   metric: (typeof metrics)[number];
   rows: TokenBucket[];
   models: ChartModel[];
+  daily: boolean;
 }) {
   const id = useId();
   const [hover, setHover] = useState<number | null>(null);
@@ -114,7 +116,13 @@ function PerformanceCard({
           <Icon size={16} aria-hidden="true" />
           {metric.title}
         </h4>
-        <span title="所选小时，默认显示最后一小时">
+        <span
+          title={
+            daily
+              ? "所选日期，默认显示最后一天"
+              : "所选小时，默认显示最后一小时"
+          }
+        >
           {headerValue != null && <b>{display(headerValue, metric.key)} </b>}
           {metric.unit}
         </span>
@@ -125,7 +133,7 @@ function PerformanceCard({
             viewBox="0 0 316 154"
             role="group"
             tabIndex={0}
-            aria-label={metric.title + "逐小时趋势，使用左右方向键查看数值"}
+            aria-label={`${metric.title}逐${daily ? "日" : "小时"}趋势，使用左右方向键查看数值`}
             onFocus={() => setHover(rows.length - 1)}
             onBlur={() => setHover(null)}
             onKeyDown={(e) => {
@@ -190,7 +198,7 @@ function PerformanceCard({
                       : "middle"
                 }
               >
-                {(rows.length > 48 ? dayLabel : hourLabel).format(
+                {(daily || rows.length > 48 ? dayLabel : hourLabel).format(
                   new Date(rows[i].hour),
                 )}
               </text>
@@ -261,7 +269,7 @@ function PerformanceCard({
           </svg>
           {active !== null && (
             <div className="performance-tooltip" role="status">
-              <strong>{formatHour(rows[active].hour)}</strong>
+              <strong>{formatBucketTime(rows[active].hour, daily)}</strong>
               {series.map((s) => (
                 <span key={s.id}>
                   <i style={{ background: s.color }} />
@@ -294,9 +302,11 @@ function PerformanceCard({
 export function ModelPerformanceCharts({
   rows,
   models: catalog,
+  daily,
 }: {
   rows: TokenBucket[];
   models: Map<string, ChartModel>;
+  daily: boolean;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const present = new Set(
@@ -344,6 +354,7 @@ export function ModelPerformanceCharts({
             metric={metric}
             rows={rows}
             models={focused ? [focused] : models}
+            daily={daily}
           />
         ))}
       </div>

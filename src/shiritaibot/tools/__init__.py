@@ -7,7 +7,15 @@ from itertools import islice
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
-from shiritaibot.core import Context, InteractionRequired, PublicError, Tool, canonical, uid
+from shiritaibot.core import (
+    Context,
+    InteractionRequired,
+    PublicError,
+    Tool,
+    canonical,
+    record_usage_for,
+    uid,
+)
 from shiritaibot.core.logs import describe_session, get_logger
 from shiritaibot.core.text import redact_secrets
 
@@ -58,17 +66,18 @@ class ToolRegistry:
                 details.append(detail if len(detail) <= 512 else detail[:511] + "…")
             if details:
                 return canonical({"error": "工具参数不符合 JSON Schema：" + "\n".join(details)})
-            await self.permissions.check(ctx, tool, args)
-            async with asyncio.timeout(tool.timeout):
-                try:
-                    value = await tool.handler(ctx, args)
-                except InteractionRequired as request:
-                    reason = redact_secrets(request.reason, self.secrets)
-                    if not ctx.background:
-                        raise PublicError(reason) from None
-                    raise InteractionRequired(
-                        f"{tool.plugin}:{request.key}", reason, request.ttl
-                    ) from None
+            with record_usage_for(ctx.session):
+                await self.permissions.check(ctx, tool, args)
+                async with asyncio.timeout(tool.timeout):
+                    try:
+                        value = await tool.handler(ctx, args)
+                    except InteractionRequired as request:
+                        reason = redact_secrets(request.reason, self.secrets)
+                        if not ctx.background:
+                            raise PublicError(reason) from None
+                        raise InteractionRequired(
+                            f"{tool.plugin}:{request.key}", reason, request.ttl
+                        ) from None
             result = redact_secrets(canonical(value), self.secrets)
             if len(result) > 16000:
                 key = uid()

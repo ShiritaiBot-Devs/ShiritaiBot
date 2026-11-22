@@ -10,7 +10,7 @@ from time import monotonic
 from zoneinfo import ZoneInfo
 
 from shiritaibot.config import HeartflowConfig
-from shiritaibot.core import Context, canonical, now, uid
+from shiritaibot.core import Context, canonical, now, record_usage_for, uid
 from shiritaibot.core.logs import get_logger
 from shiritaibot.proactive import quiet_hours
 
@@ -313,7 +313,8 @@ class Heartflow:
                     log.debug(f"群情绪读取失败（{type(exc).__name__}）", session)
             if not self.valid(session, obs.id):
                 return
-            scores = await judge(self.runtime.llm, material)
+            with record_usage_for(session):
+                scores = await judge(self.runtime.llm, material)
             if not self.valid(session, obs.id):
                 return
             focused = group.phase == "FOCUS"

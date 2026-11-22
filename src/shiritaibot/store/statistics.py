@@ -7,6 +7,18 @@ from datetime import datetime, timezone
 from shiritaibot.core import now
 
 TOKEN_FIELDS = ("input_tokens", "output_tokens", "cached_tokens", "total_tokens")
+MAX_STATS_HOURS = 30 * 24
+
+
+async def statistics_sessions(store) -> list[str]:
+    end = now().timestamp()
+    rows = await store.query(
+        "SELECT id AS session FROM records WHERE kind='session' AND id NOT GLOB 'background:*' "
+        "UNION SELECT scope FROM records WHERE kind='usage' AND scope!='' AND created BETWEEN ? AND ? "
+        "ORDER BY session",
+        (end - MAX_STATS_HOURS * 3600, end),
+    )
+    return [row["session"] for row in rows]
 
 
 @dataclass
@@ -87,11 +99,18 @@ def cost(counts: dict, model) -> float | None:
     ) / 1_000_000
 
 
-async def statistics(store, hours: int, end: datetime | None = None, models=()):
-    """`models` are the configured ModelConfig rows; they price the per-model breakdown."""
+async def statistics(
+    store, hours: int, end: datetime | None = None, models=(), *, session: str | None = None
+):
+    """None includes all sessions, and the empty scope selects unattributed calls."""
     end_stamp = (end or now()).timestamp()
     start = end_stamp - hours * 3600
-    first, last = int(start // 3600), int(end_stamp // 3600)
+    bucket_hours = 24 if hours > 7 * 24 else 1
+    seconds = bucket_hours * 3600
+    # Daily buckets start at midnight in Asia/Shanghai.
+    offset = 8 * 3600 if bucket_hours == 24 else 0
+    first = int((start + offset) // seconds)
+    last = int((end_stamp + offset) // seconds)
     fields = [
         "input_tokens",
         "output_tokens",
@@ -105,20 +124,22 @@ async def statistics(store, hours: int, end: datetime | None = None, models=()):
     ]
     buckets = [
         {
-            "hour": datetime.fromtimestamp(hour * 3600, timezone.utc).isoformat(),
+            "hour": datetime.fromtimestamp(bucket * seconds - offset, timezone.utc).isoformat(),
             **dict.fromkeys(fields, 0),
             "models": {},
             "model_performance": {},
         }
-        for hour in range(first, last + 1)
+        for bucket in range(first, last + 1)
     ]
+    args = (start, end_stamp) if session is None else (start, end_stamp, session)
     rows = await store.query(
-        "SELECT kind,data,created FROM records WHERE kind IN ('usage','turn') AND created>=? AND created<=?",
-        (start, end_stamp),
+        "SELECT kind,data,created FROM records WHERE kind IN ('usage','turn') AND created BETWEEN ? AND ?"
+        + (" AND scope=?" if session is not None else ""),
+        args,
     )
     per_model: dict[str, dict] = {}
     for row in rows:
-        bucket = buckets[int(row["created"] // 3600) - first]
+        bucket = buckets[int((row["created"] + offset) // seconds) - first]
         data = json.loads(row["data"])
         if row["kind"] == "usage":
             bucket["llm_calls"] += 1
@@ -146,17 +167,21 @@ async def statistics(store, hours: int, end: datetime | None = None, models=()):
             name: performance.metrics() for name, performance in bucket["model_performance"].items()
         }
     rows = await store.query(
-        "SELECT data,created FROM messages WHERE turn!='handoff' AND created>=? AND created<=?",
-        (start, end_stamp),
+        "SELECT CAST((created + ?) / ? AS INTEGER) AS bucket, "
+        "json_extract(data,'$.role') AS role, count(*) AS count "
+        "FROM messages WHERE created BETWEEN ? AND ? AND turn!='handoff' "
+        "AND json_extract(data,'$.role') IN ('user','assistant') "
+        "AND coalesce(json_array_length(data,'$.tool_calls'),0)=0"
+        + (" AND session=?" if session is not None else "")
+        + " GROUP BY bucket,role",
+        (offset, seconds, *args),
     )
     for row in rows:
-        data = json.loads(row["data"])
-        role = data.get("role")
-        if role not in {"user", "assistant"} or data.get("tool_calls"):
-            continue
-        bucket = buckets[int(row["created"] // 3600) - first]
-        bucket["incoming_messages" if role == "user" else "outgoing_messages"] += 1
-        bucket["messages"] += 1
+        bucket = buckets[row["bucket"] - first]
+        bucket["incoming_messages" if row["role"] == "user" else "outgoing_messages"] += row[
+            "count"
+        ]
+        bucket["messages"] += row["count"]
     configured = {model.id: model for model in models}
     costs: dict[str, float] = {}
     for entry in per_model.values():
@@ -172,6 +197,7 @@ async def statistics(store, hours: int, end: datetime | None = None, models=()):
             costs[currency] = costs.get(currency, 0) + price
     return {
         "hours": hours,
+        "bucket_hours": bucket_hours,
         "timezone": "Asia/Shanghai",
         "buckets": buckets,
         "start": datetime.fromtimestamp(start, timezone.utc).isoformat(),
