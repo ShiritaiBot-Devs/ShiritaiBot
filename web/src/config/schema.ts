@@ -789,6 +789,22 @@ export const IDENTITY_FIELDS: FieldSpec[] = [
   },
 ];
 
+export const OUTBOUND_MESSAGE_FIELDS: FieldSpec[] = [
+  {
+    key: "onebot_forward_long_messages",
+    label: "OneBot 长消息折叠",
+    kind: "boolean",
+    help: "在 OneBot 群聊及私聊中，将过长的回复发为一条合并转发。需要协议端支持合并转发。",
+  },
+  {
+    key: "onebot_forward_threshold",
+    label: "折叠触发长度（字符）",
+    kind: "number",
+    min: 1,
+    help: "开启长消息折叠后，回复正文超过这个长度时触发。",
+  },
+];
+
 export const PERSONA_FIELDS: FieldSpec[] = [
   {
     key: "id",

@@ -506,6 +506,8 @@ export interface Settings {
   wake_keyword_mode: "contains" | "prefix";
   group_command_require_wake: boolean;
   private_require_keyword: boolean;
+  onebot_forward_long_messages: boolean;
+  onebot_forward_threshold: number;
   context: ContextConfig;
   group_context: GroupContextConfig;
   memory: MemoryConfig;

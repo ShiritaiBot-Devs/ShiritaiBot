@@ -80,6 +80,13 @@ def describe(parts: list[dict]) -> str:
     return "".join(out).strip()[:2000]
 
 
+def forward_node(message: list[dict], user_id: str, nickname: str) -> dict:
+    return {
+        "type": "node",
+        "data": {"user_id": user_id, "nickname": nickname, "content": message},
+    }
+
+
 def qq_download_url(url: str) -> bool:
     """Only QQ's own HTTPS CDNs; never protocol-side local paths or arbitrary hosts."""
     parsed = urlparse(url)
@@ -764,11 +771,20 @@ class AdapterHub:
             return
         text = clean_outbound(text)
         official = is_qq_official_session(session)
-        if (official or is_feishu_session(session)) and injector is not None:
+        feishu = is_feishu_session(session)
+        if (official or feishu) and injector is not None:
             text = injector.plain(text)
             injector = None
         # <meme> markers become their own sticker messages, splitting the text around them.
         pieces = injector.split(text) if injector is not None else [text]
+        cfg = self.config.value
+        fold = (
+            not official
+            and not feishu
+            and cfg.onebot_forward_long_messages
+            and sum(len(piece) for piece in pieces if isinstance(piece, str))
+            > cfg.onebot_forward_threshold
+        )
         expires = now().timestamp() + 86400
         delivery = {
             "status": "pending",
@@ -800,13 +816,20 @@ class AdapterHub:
                     observation.rows.discard(key)
                 raise
 
+        rows = []
+        chunk = 600 if official else 3500
         for piece in pieces:
             if not isinstance(piece, str):
-                await put({"text": MemeInjector.label(piece), "meme": piece["id"]})
+                rows.append({"text": MemeInjector.label(piece), "meme": piece["id"]})
                 continue
-            chunk = 600 if official else 3500
-            for index in range(0, len(piece), chunk):
-                await put({"text": piece[index : index + chunk]})
+            rows.extend(
+                {"text": piece[index : index + chunk]} for index in range(0, len(piece), chunk)
+            )
+        if fold:
+            await put({"text": "".join(row["text"] for row in rows), "forward": rows})
+        else:
+            for row in rows:
+                await put(row)
 
     async def outgoing(self, row: dict) -> list[dict] | None:
         """OneBot message segments for an outbox row; None when its sticker is gone."""
@@ -889,6 +912,14 @@ class AdapterHub:
                 elif isinstance(bot, Feishu):
                     await self.flush_feishu(bot, row, kind, target)
                     continue
+                elif row.get("forward"):
+                    nodes = [
+                        forward_node(content, bot.self_id, self.config.value.assistant_name)
+                        for piece in row["forward"]
+                        if (content := await self.outgoing(piece)) is not None
+                    ]
+                    await self.flush_onebot(bot, row, kind, target, nodes)
+                    continue
                 elif (message := await self.outgoing(row)) is None:
                     row["status"] = "failed"
                     get_logger(adapter_id).warning(f"表情 {row['meme']} 已被删除，跳过发送")
@@ -923,10 +954,14 @@ class AdapterHub:
                 self.heartflow.settled(row["scope"], row)
             return
         try:
-            receipt = await bot.call(
-                "send_group_msg" if group else "send_private_msg",
-                {"group_id" if group else "user_id": int(target), "message": message},
-            )
+            params: dict[str, Any] = {"group_id" if group else "user_id": int(target)}
+            if row.get("forward"):
+                action = "send_group_forward_msg" if group else "send_private_forward_msg"
+                params["messages"] = message
+            else:
+                action = "send_group_msg" if group else "send_private_msg"
+                params["message"] = message
+            receipt = await bot.call(action, params)
             if not isinstance(receipt, dict) or receipt.get("message_id") is None:
                 raise PublicError("OneBot 回包未包含 message_id")
         except OneBotNotConnected:

@@ -11,7 +11,14 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from shiritaibot.adapters.onebot11 import OneBot, describe, file_ref, qq_download_url, segments
+from shiritaibot.adapters.onebot11 import (
+    OneBot,
+    describe,
+    file_ref,
+    forward_node,
+    qq_download_url,
+    segments,
+)
 from shiritaibot.config import is_feishu_session
 from shiritaibot.core import Context, PublicError, Tool
 from shiritaibot.core import session_dir as session_dir
@@ -328,14 +335,11 @@ def qq_tools(app) -> list[Tool]:
                 nodes.append({"type": "node", "data": {"id": str(node["message_id"])}})
             elif node.get("text"):
                 nodes.append(
-                    {
-                        "type": "node",
-                        "data": {
-                            "user_id": str(node.get("user_id") or bot.self_id),
-                            "nickname": node.get("name") or app.config.value.assistant_name,
-                            "content": [{"type": "text", "data": {"text": node["text"]}}],
-                        },
-                    }
+                    forward_node(
+                        [{"type": "text", "data": {"text": node["text"]}}],
+                        str(node.get("user_id") or bot.self_id),
+                        node.get("name") or app.config.value.assistant_name,
+                    )
                 )
             else:
                 raise PublicError("每个转发节点需要 message_id 或 text")

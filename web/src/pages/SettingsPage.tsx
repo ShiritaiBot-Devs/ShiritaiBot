@@ -17,6 +17,7 @@ import {
   HEARTFLOW_ADVANCED_FIELDS,
   MEMORY_FIELDS,
   MESSAGE_MERGE_FIELDS,
+  OUTBOUND_MESSAGE_FIELDS,
   WEB_SEARCH_FIELDS,
   WEB_SEARCH_PROVIDER_FIELDS,
   createPersona,
@@ -101,6 +102,14 @@ export function SettingsPage({ config, setConfig }: ConfigPageProps) {
             value={config.policy}
             fields={MESSAGE_MERGE_FIELDS}
             onChange={(policy) => setConfig({ ...config, policy })}
+          />
+        </section>
+        <section className="settings-group">
+          <h2>消息发送</h2>
+          <FieldForm
+            value={config}
+            fields={OUTBOUND_MESSAGE_FIELDS}
+            onChange={setConfig}
           />
         </section>
         <section className="settings-group">
