@@ -197,7 +197,8 @@ def memory_tools(app) -> list[Tool]:
             "memory_resolve",
             "按主人的答复处理记忆中的待确认冲突（编号 c 开头）。decision：keep:<编号> 保留其中一条，"
             "both_valid 都成立，neither 都不成立，same_entity 确认是同一人/物并合并，"
-            "different_entity 确认不是同一个。owner_quote 必须原样摘自主人本轮的答复。",
+            "different_entity 确认不是同一个。owner_quote 必须原样摘自主人本轮的答复。"
+            "主人仅回复超短确认词时，owner_quote 可直接原样摘录该词。",
             schema(
                 {
                     "conflict": {"type": "string", "pattern": "^c[0-9]+$"},

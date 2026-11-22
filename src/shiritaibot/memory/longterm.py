@@ -289,11 +289,11 @@ class MemoryManager:
     # ---- evidence ----------------------------------------------------------
 
     async def evidence(
-        self, ctx: Context, quote: str, *, strict: bool = False
+        self, ctx: Context, quote: str, *, strict: bool = False, min_len: int = 2
     ) -> tuple[str, str, str]:
         """Return authority, source and an actual span of this turn's archived text."""
         target = normalize(quote)
-        if len(target) < 2:
+        if len(target) < min_len:
             raise PublicError("evidence 太短，请原样摘录支持这条记忆的原文")
         rows = await self.history_store.query(
             f"SELECT data FROM messages WHERE session=? AND turn=? AND {MEMORY_PROFILE_FILTER} ORDER BY seq",
@@ -344,7 +344,7 @@ class MemoryManager:
         )
 
     async def owner_words(self, ctx: Context, quote: str) -> str:
-        authority, source, _ = await self.evidence(ctx, quote, strict=True)
+        authority, source, _ = await self.evidence(ctx, quote, strict=True, min_len=1)
         if authority != "owner":
             raise PublicError("owner_quote 必须原样摘自主人本轮的消息")
         return source

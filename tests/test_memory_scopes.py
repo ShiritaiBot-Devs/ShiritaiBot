@@ -10,8 +10,9 @@ import pytest
 from shiritaibot.agent import AgentRuntime
 from shiritaibot.auth import Permissions
 from shiritaibot.config import Settings
-from shiritaibot.core import Context, EventBus, Reply
+from shiritaibot.core import Context, EventBus, PublicError, Reply
 from shiritaibot.memory import MemoryManager, ShortTermMemory
+from shiritaibot.memory.tools import memory_tools
 from shiritaibot.store import Store
 from shiritaibot.tools import ToolRegistry
 from shiritaibot.tools.builtin import register_builtin
@@ -101,6 +102,51 @@ def test_group_tools_read_only_bound_store(tmp_path, mode):
             assert "error" in await call(rebound, "memory_get", id="f1")
             owner = Context(OWNER, "99", "agent", owner=True)
             assert "default" in (await call(owner, "memory_get", id="f1"))["text"]
+
+    asyncio.run(run())
+
+
+def test_memory_resolve_accepts_single_character_owner_quote(tmp_path):
+    async def run():
+        config = config_for()
+        config.value.policy.owner_default.mode = "agent"
+        store = Store(tmp_path, EventBus())
+        await store.open()
+        try:
+            memory = MemoryManager(store, config)
+            app = SimpleNamespace(
+                config=config, permissions=Permissions(config, store), memory_for=lambda _: memory
+            )
+            tools = {tool.name: tool.handler for tool in memory_tools(app)}
+            ctx = Context(OWNER, "99", "agent", owner=True, turn="confirm")
+            await store.append(ctx.session, "previous", {"role": "user", "content": "好"})
+            await store.append(ctx.session, ctx.turn, {"role": "user", "content": "对"})
+            await store.append(ctx.session, ctx.turn, {"role": "tool", "content": "嗯"})
+            await store.execute(
+                "INSERT INTO mem_entity(kind,name,status,created,updated) VALUES "
+                "('person','小林','confirmed',1,1),('person','小林','confirmed',1,1)"
+            )
+            async with memory.tx() as db:
+                conflict = await memory.open_conflict(db, "identity", ["e1", "e2"], "同名人物")
+
+            args = {"conflict": conflict, "decision": "different_entity"}
+            for quote in ("", "“”"):
+                with pytest.raises(PublicError, match="evidence 太短"):
+                    await tools["memory_resolve"](ctx, dict(args, owner_quote=quote))
+            with pytest.raises(PublicError, match="evidence 必须原样摘自本轮"):
+                await tools["memory_resolve"](ctx, dict(args, owner_quote="好"))
+            with pytest.raises(PublicError, match="owner_quote 必须原样摘自主人本轮的消息"):
+                await tools["memory_resolve"](ctx, dict(args, owner_quote="嗯"))
+            with pytest.raises(PublicError, match="evidence 太短"):
+                await tools["memory_save"](
+                    ctx, {"kind": "fact", "content": "喜欢读书", "evidence": "对"}
+                )
+
+            result = await tools["memory_resolve"](ctx, dict(args, owner_quote="对"))
+            assert result == {"id": conflict, "result": "已处理", "resolution": "different_entity"}
+            assert (await memory.get(conflict))["status"] == "resolved"
+        finally:
+            await store.close()
 
     asyncio.run(run())
 
