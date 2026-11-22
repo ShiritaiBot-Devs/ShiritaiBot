@@ -68,15 +68,25 @@ class ChatStream:
         return {"choices": [{"message": self.message}], "usage": self.usage}
 
 
+class ResponseStreamError(ValueError):
+    def __init__(self, code):
+        super().__init__("response failed")
+        self.code = code
+
+
 class ResponsesStream:
-    def __init__(self):
+    def __init__(self, require_completed=False):
         self.response = {}
         self.finished = False
+        self.require_completed = require_completed
 
     def add(self, event):
         kind = event["type"]
         if kind in {"response.failed", "response.cancelled"}:
-            raise ValueError("response failed")
+            error = event.get("response", {}).get("error") or {}
+            raise ResponseStreamError(error.get("code"))
+        if self.require_completed and kind == "response.incomplete":
+            raise ResponseStreamError(None)
         if kind in {"response.completed", "response.incomplete"}:
             self.response = event["response"]
             self.finished = True
@@ -158,6 +168,7 @@ async def collect_stream(protocol, response, started):
     collector = {
         "chat_completions": ChatStream,
         "responses": ResponsesStream,
+        "openai_subscription": lambda: ResponsesStream(require_completed=True),
         "anthropic": AnthropicStream,
         "gemini": GeminiStream,
     }[protocol]()
@@ -167,7 +178,8 @@ async def collect_stream(protocol, response, started):
             break
         event = json.loads(payload)
         if event.get("error") or event.get("type") == "error":
-            raise ValueError("provider stream error")
+            error = event.get("error") or event
+            raise ResponseStreamError(error.get("code") if isinstance(error, dict) else None)
         if collector.add(event):
             last = arrived
             if first is None:

@@ -90,6 +90,12 @@ shiritaibot token             # 一键安装（macOS / Linux）
 
 两种部署都会构建 WebUI、同步 Python 依赖，并在重启前用新版代码检查当前配置；配置不兼容时取消重启并尝试恢复旧版，具体原因见更新日志。
 
+### 使用 ChatGPT 套餐
+
+在 WebUI 的「模型与服务 → 新增提供商」选 **OpenAI Subscription** 并保存，再点 **Continue with ChatGPT**。在打开 WebUI 的电脑运行下载的 `shiritaibot-chatgpt-login.py`（Windows 可用 `py shiritaibot-chatgpt-login.py`，macOS/Linux 可用 `python3 shiritaibot-chatgpt-login.py`）。用符合条件的 ChatGPT Plus / Pro 账号授权套餐用量，将助手显示的回调地址粘贴回 WebUI 完成连接。
+
+Bot 跑在 Docker 或远程服务器时，仍在操作浏览器的电脑运行授权助手。公开访问 WebUI 时请使用 HTTPS。连接后可获取该账号的模型列表，只有路由到这个提供商的请求才使用部署者的套餐额度。卡片显示本实例的请求和 Token 用量，并链接到 ChatGPT 用量设置查询官方用量。 [OpenAI 自托管接入说明](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms)
+
 ## 消息发送
 
 在 WebUI「设置 → 通用设定 → 消息发送」可以配置 OneBot 长消息折叠，以及 `/help` 的文字、亮色图片或暗色图片样式。图片菜单优先使用系统中文字体，缺少时使用随程序附带的 Noto Sans SC 2.004，可离线渲染。飞书发送图片需要应用开通 `im:resource` 权限。 [字体来源](https://github.com/notofonts/noto-cjk/blob/Sans2.004/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf) · [SIL Open Font License 1.1](src/shiritaibot/agent/fonts/OFL-NotoSansSC.txt)

@@ -2,7 +2,12 @@
 // Keep this file in sync with config/__init__.py, core/__init__.py and web/__init__.py.
 
 export type Protocol =
-  "chat_completions" | "responses" | "anthropic" | "gemini" | "systemone";
+  | "chat_completions"
+  | "responses"
+  | "openai_subscription"
+  | "anthropic"
+  | "gemini"
+  | "systemone";
 export type CodexSandbox =
   "read-only" | "workspace-write" | "danger-full-access";
 export type ClaudePermissionMode =
@@ -31,6 +36,22 @@ export interface ProviderConfig extends Instance {
   max_retries: number;
   proxy: string;
 }
+
+export interface SubscriptionUsage {
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+}
+
+export type SubscriptionStatus =
+  | { saved: false }
+  | {
+      saved: true;
+      account: string;
+      status: "connected" | "disconnected" | "reauthorize";
+      limit_reached: boolean;
+      usage: { today: SubscriptionUsage; last_7_days: SubscriptionUsage };
+    };
 
 export interface ModelConfig extends Instance {
   provider: string;

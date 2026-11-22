@@ -55,6 +55,7 @@ export function useConfigDraft(client: ApiClient | null) {
       ["commands"],
       ["help-menu-sections"],
       ["diagnostics"],
+      ["openai-subscription"],
       ["memory-profiles"],
       ["knowledge-libraries"],
       ["knowledge"],

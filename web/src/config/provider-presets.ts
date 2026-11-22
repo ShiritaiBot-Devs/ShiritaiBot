@@ -34,6 +34,12 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     base_url: "https://api.openai.com/v1",
   },
   {
+    id: "openai-subscription",
+    label: "OpenAI Subscription",
+    protocol: "openai_subscription",
+    base_url: "https://api.openai.com/v1",
+  },
+  {
     id: "anthropic",
     label: "Anthropic API",
     protocol: "anthropic",

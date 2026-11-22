@@ -87,14 +87,21 @@ def check_proxy(value: str) -> str:
 class ProviderConfig(Instance):
     id: str = Field(pattern=r"^[a-zA-Z0-9_.-]{1,128}$")
     # systemone: TypeSafe decision models (e.g. Jev); they classify and never generate text.
-    protocol: Literal["chat_completions", "responses", "anthropic", "gemini", "systemone"] = (
-        "chat_completions"
-    )
+    protocol: Literal[
+        "chat_completions", "responses", "openai_subscription", "anthropic", "gemini", "systemone"
+    ] = "chat_completions"
     base_url: str = "https://api.openai.com/v1"
     api_key: str = "env:OPENAI_API_KEY"
     timeout: int = Field(default=120, ge=5, le=600)
     max_retries: int = Field(default=2, ge=0, le=10)
     proxy: str = ""
+
+    @model_validator(mode="after")
+    def pin_subscription_endpoint(self):
+        if self.protocol == "openai_subscription":
+            self.base_url = "https://api.openai.com/v1"
+            self.api_key = ""
+        return self
 
     @field_validator("proxy")
     @classmethod

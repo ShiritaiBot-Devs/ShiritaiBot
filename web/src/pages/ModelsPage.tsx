@@ -24,6 +24,7 @@ import { configuredModelName, modelName, modelNameById } from "../lib/models";
 import { isMainSession } from "../lib/sessions";
 import { EmptyState } from "../components/EmptyState";
 import { ProviderPresetMenu } from "../components/ProviderPresetMenu";
+import { SubscriptionPanel } from "../components/SubscriptionPanel";
 import {
   EMBEDDING_MODEL_FIELDS,
   MODEL_FIELDS,
@@ -100,6 +101,7 @@ const EMBEDDING_PROTOCOLS: Protocol[] = [
 const TEXT_PROTOCOLS: Protocol[] = [
   "chat_completions",
   "responses",
+  "openai_subscription",
   "anthropic",
   "gemini",
 ];
@@ -184,6 +186,7 @@ export function ModelsPage({
     visible[0]?.position ??
     -1;
   const provider = index >= 0 ? config.providers[index] : undefined;
+  const subscription = provider?.protocol === "openai_subscription";
   const status = useQuery({
     queryKey: ["memory-status"],
     queryFn: () => client.memoryStatus(),
@@ -649,7 +652,9 @@ export function ModelsPage({
               <div className="panel-head">
                 <div>
                   <h2>{provider.id || "未命名提供商"}</h2>
-                  <p className="muted">{provider.protocol}</p>
+                  <p className="muted">
+                    {subscription ? "OpenAI Subscription" : provider.protocol}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -677,23 +682,45 @@ export function ModelsPage({
                   移除
                 </button>
               </div>
+              {subscription && (
+                <SubscriptionPanel
+                  key={provider.id}
+                  id={provider.id}
+                  client={client}
+                  act={act}
+                  onConnectionChange={() => setRemote(null)}
+                />
+              )}
               <div className="field-grid">
-                {PROVIDER_FIELDS.map((spec) =>
-                  spec.key === "protocol"
-                    ? { ...spec, options: current.protocols }
-                    : spec,
-                ).map((spec) => (
-                  <Field
-                    key={spec.key}
-                    spec={spec}
-                    value={provider[spec.key as keyof ProviderConfig]}
-                    onChange={(next) =>
-                      updateProvider({
-                        [spec.key]: next,
-                      } as Partial<ProviderConfig>)
-                    }
-                  />
-                ))}
+                {PROVIDER_FIELDS.filter(
+                  (spec) =>
+                    !subscription ||
+                    !["id", "protocol", "base_url", "api_key"].includes(
+                      spec.key,
+                    ),
+                )
+                  .map((spec) =>
+                    spec.key === "protocol"
+                      ? {
+                          ...spec,
+                          options: current.protocols.filter(
+                            (protocol) => protocol !== "openai_subscription",
+                          ),
+                        }
+                      : spec,
+                  )
+                  .map((spec) => (
+                    <Field
+                      key={spec.key}
+                      spec={spec}
+                      value={provider[spec.key as keyof ProviderConfig]}
+                      onChange={(next) =>
+                        updateProvider({
+                          [spec.key]: next,
+                        } as Partial<ProviderConfig>)
+                      }
+                    />
+                  ))}
               </div>
               <section className="model-section">
                 <div className="panel-head">
@@ -729,8 +756,9 @@ export function ModelsPage({
                   </div>
                 </div>
                 <p className="muted">
-                  使用当前填写的地址和密钥获取，无需先保存。点击右侧 ＋
-                  添加，再保存配置。
+                  {subscription
+                    ? "连接账号后可获取套餐可用的模型。点击右侧 ＋ 添加，再保存配置。"
+                    : "使用当前填写的地址和密钥获取，无需先保存。点击右侧 ＋ 添加，再保存配置。"}
                 </p>
                 {results && (
                   <div className="remote-models">
@@ -821,16 +849,42 @@ export function ModelsPage({
                         {(category === "embedding"
                           ? EMBEDDING_MODEL_FIELDS
                           : MODEL_FIELDS
-                        ).map((spec) => (
-                          <Field
-                            key={spec.key}
-                            spec={spec}
-                            value={model[spec.key as keyof typeof model]}
-                            onChange={(next) =>
-                              updateModel(position, { [spec.key]: next })
-                            }
-                          />
-                        ))}
+                        )
+                          .filter(
+                            (spec) =>
+                              !subscription ||
+                              ![
+                                "currency",
+                                "price_input",
+                                "price_cached",
+                                "price_output",
+                              ].includes(spec.key),
+                          )
+                          .map((spec) => (
+                            <Field
+                              key={spec.key}
+                              spec={
+                                subscription && spec.key === "max_output"
+                                  ? {
+                                      ...spec,
+                                      label: "预留输出 tokens",
+                                      help: "用于本地上下文估算。实际输出上限由 ChatGPT 套餐接口决定。",
+                                    }
+                                  : subscription && spec.key === "extra_body"
+                                    ? {
+                                        ...spec,
+                                        placeholder:
+                                          '{"reasoning":{"effort":"medium"}}',
+                                        help: "填写套餐 Responses 接口支持的附加参数。请求始终使用流式响应，且 store 为 false。",
+                                      }
+                                    : spec
+                              }
+                              value={model[spec.key as keyof typeof model]}
+                              onChange={(next) =>
+                                updateModel(position, { [spec.key]: next })
+                              }
+                            />
+                          ))}
                       </div>
                       <div className="inline">
                         <ModelTestButton
@@ -838,28 +892,30 @@ export function ModelsPage({
                           act={act}
                           disabled={Boolean(jsonObjectError(model.extra_body))}
                         />
-                        <button
-                          type="button"
-                          disabled={pricing !== null || !model.model}
-                          aria-busy={pricing === position}
-                          onClick={() => {
-                            setPricing(position);
-                            void act(async () => {
-                              try {
-                                return await fetchPricing(model, provider);
-                              } finally {
-                                setPricing(null);
-                              }
-                            }, "已从提供商获取单价");
-                          }}
-                        >
-                          <BadgeDollarSign size={15} aria-hidden="true" />
-                          {pricing === position ? (
-                            <LoadingBar compact label="获取中…" />
-                          ) : (
-                            "从提供商获取单价"
-                          )}
-                        </button>
+                        {!subscription && (
+                          <button
+                            type="button"
+                            disabled={pricing !== null || !model.model}
+                            aria-busy={pricing === position}
+                            onClick={() => {
+                              setPricing(position);
+                              void act(async () => {
+                                try {
+                                  return await fetchPricing(model, provider);
+                                } finally {
+                                  setPricing(null);
+                                }
+                              }, "已从提供商获取单价");
+                            }}
+                          >
+                            <BadgeDollarSign size={15} aria-hidden="true" />
+                            {pricing === position ? (
+                              <LoadingBar compact label="获取中…" />
+                            ) : (
+                              "从提供商获取单价"
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ) : null,

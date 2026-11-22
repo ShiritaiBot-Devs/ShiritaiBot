@@ -20,7 +20,15 @@ from shiritaibot.core import (
 )
 from shiritaibot.core.logs import get_logger
 from shiritaibot.llm.media import ImageResolver
-from shiritaibot.llm.streaming import collect_stream
+from shiritaibot.llm.streaming import ResponseStreamError, collect_stream
+from shiritaibot.llm.subscription import (
+    LIMIT_EXCEEDED,
+    PROTOCOL,
+    RESOURCE,
+    UNSUPPORTED_FIELDS,
+    SubscriptionAccounts,
+    SubscriptionError,
+)
 
 log = get_logger("模型")
 
@@ -126,9 +134,16 @@ def content_parts(protocol: str, content: str | list[dict]) -> list[dict]:
 
 
 def request_payload(
-    protocol: str, model: str, system: str, messages: list[dict], tools: list[dict], max_output: int
+    protocol: str,
+    model: str,
+    system: str,
+    messages: list[dict],
+    tools: list[dict],
+    max_output: int,
+    *,
+    opaque_key: str | None = None,
 ) -> tuple[str, dict]:
-    key = f"{protocol}:{model}"
+    key = opaque_key or f"{protocol}:{model}"
     if protocol == "chat_completions":
         history = []
         for message in messages:
@@ -288,10 +303,10 @@ def request_payload(
     raise PublicError("不支持的 LLM 协议")
 
 
-def parse_reply(protocol: str, model: str, data: dict) -> Reply:
+def parse_reply(protocol: str, model: str, data: dict, *, opaque_key: str | None = None) -> Reply:
     if data.get("error") or data.get("status") in ("failed", "cancelled"):
         raise ValueError("provider returned an unsuccessful completion")
-    key = f"{protocol}:{model}"
+    key = opaque_key or f"{protocol}:{model}"
     calls, text = [], ""
     if protocol == "chat_completions":
         msg = data["choices"][0]["message"]
@@ -357,11 +372,47 @@ def failure(provider_id: str, exc: Exception) -> str:
     return f"{provider_id}: {type(exc).__name__}"
 
 
+def response_error_code(response: httpx.Response) -> str | None:
+    try:
+        return response.json()["error"]["code"]
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def subscription_body(body: dict, model: str) -> dict:
+    for field in UNSUPPORTED_FIELDS:
+        body.pop(field, None)
+    body.update(model=model, store=False, stream=True)
+    if body.get("tools"):
+        functions = []
+        supported = []
+        for tool in body["tools"]:
+            if tool.get("type") in {"function", "custom"}:
+                functions.append(tool)
+            elif tool.get("type") in {"namespace", "web_search", "web_search_preview"}:
+                supported.append(tool)
+        if functions:
+            supported.append(
+                {
+                    "type": "namespace",
+                    "name": "shiritaibot",
+                    "description": "Tools available in ShiritaiBot.",
+                    "tools": functions,
+                }
+            )
+            choice = body.get("tool_choice")
+            if isinstance(choice, dict) and choice.get("type") in {"function", "custom"}:
+                body["tool_choice"] = {**choice, "namespace": "shiritaibot"}
+        body["tools"] = supported
+    return body
+
+
 class ProviderManager:
     def __init__(self, config, vault, store):
         self.config, self.vault, self.store = config, vault, store
         self.client = httpx.AsyncClient(follow_redirects=False, timeout=120)
         self.semaphore = asyncio.Semaphore(config.value.concurrency)
+        self.subscriptions = SubscriptionAccounts(vault, store)
         # Recent call failures per provider, so the WebUI can warn before extraction
         # quietly backs off for half an hour with no visible sign.
         self.failures: dict[str, deque[float]] = defaultdict(deque)
@@ -410,6 +461,8 @@ class ProviderManager:
                                 request=response.request,
                                 extensions={"model_timing": timing},
                             )
+                        if stream_protocol == PROTOCOL and response.is_success:
+                            raise ResponseStreamError(None)
                         await response.aread()
                 except httpx.TimeoutException:
                     if attempt == provider.max_retries:
@@ -418,6 +471,10 @@ class ProviderManager:
                     if (
                         response.status_code not in {429, 500, 502, 503, 504}
                         or attempt == provider.max_retries
+                        or (
+                            provider.protocol == PROTOCOL
+                            and response_error_code(response) == LIMIT_EXCEEDED
+                        )
                     ):
                         response.raise_for_status()
                         return response
@@ -437,6 +494,15 @@ class ProviderManager:
         return await send(self.client)
 
     async def _generate(self, provider, path, body, headers, stream):
+        if provider.protocol == PROTOCOL:
+            return await self._request(
+                provider,
+                "POST",
+                RESOURCE + path,
+                json=body,
+                headers=headers,
+                stream_protocol=PROTOCOL,
+            )
         base = provider.base_url.rstrip("/")
         if provider.protocol == "gemini":
             body.pop("stream", None)  # Gemini selects the mode in the URL.
@@ -484,6 +550,7 @@ class ProviderManager:
             {
                 "model": model.id,
                 "model_label": model.display_name,
+                "provider": model.provider,
                 "protocol": protocol,
                 "status": status,
                 "usage": usage or {},
@@ -493,6 +560,32 @@ class ProviderManager:
         )
 
     async def discover(self, provider) -> list[dict]:
+        if provider.protocol == PROTOCOL:
+            token = await self.subscriptions.access_token(provider)
+            try:
+                response = await self._request(
+                    provider,
+                    "GET",
+                    RESOURCE + "/models",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                rows = response.json()["models"]
+                if not isinstance(rows, list):
+                    raise TypeError
+                return [
+                    {
+                        "id": row["slug"],
+                        "name": row.get("display_name") or row["slug"],
+                        "max_output": 4096,
+                    }
+                    for row in rows
+                    if isinstance(row, dict)
+                    and row.get("visibility") == "list"
+                    and isinstance(row.get("slug"), str)
+                    and row["slug"]
+                ]
+            except (httpx.HTTPError, KeyError, TypeError, ValueError):
+                raise PublicError("无法获取 ChatGPT 套餐的模型列表，请检查授权和网络。") from None
         ref = provider.api_key
         token = await self.vault.resolve(ref) if ref.startswith(("env:", "secret:")) else ref
         headers = {}
@@ -582,6 +675,7 @@ class ProviderManager:
         if images and not images.present(messages):
             images = None
         context_skipped = decision_only = False
+        subscription_error = ""
         for model_id in candidates:
             model = next((m for m in cfg.models if m.id == model_id and m.enabled), None)
             provider = next(
@@ -598,8 +692,11 @@ class ProviderManager:
             if images:
                 with record_usage_for(images.scope):
                     sent = await images.render(messages, model)
+            subscription = provider.protocol == PROTOCOL
+            protocol = "responses" if subscription else provider.protocol
+            opaque_key = f"{PROTOCOL}:{provider.id}:{model.model}" if subscription else None
             path, body = request_payload(
-                provider.protocol, model.model, system, sent, tools, model.max_output
+                protocol, model.model, system, sent, tools, model.max_output, opaque_key=opaque_key
             )
             body = merge_body(body, model.extra_body)
             if tool_free:
@@ -613,6 +710,8 @@ class ProviderManager:
                     body.pop(field, None)
             if provider.protocol == "chat_completions" and "max_tokens" in model.extra_body:
                 body.pop("max_completion_tokens", None)
+            if subscription:
+                body = subscription_body(body, model.model)
             generation = body.get("generationConfig")
             output_limit = {
                 "chat_completions": body.get("max_tokens", body.get("max_completion_tokens")),
@@ -621,7 +720,7 @@ class ProviderManager:
                 "gemini": generation.get("maxOutputTokens")
                 if isinstance(generation, dict)
                 else None,
-            }[provider.protocol]
+            }[protocol]
             reserved_output = (
                 output_limit
                 if isinstance(output_limit, int) and output_limit > 0
@@ -634,22 +733,31 @@ class ProviderManager:
                 )
                 await self.store.activity("provider.context_limit", model.display_name)
                 continue
-            ref = provider.api_key
-            token = await self.vault.resolve(ref) if ref.startswith(("env:", "secret:")) else ref
-            headers = {"Content-Type": "application/json"}
-            if provider.protocol == "anthropic":
-                headers.update({"x-api-key": token, "anthropic-version": "2023-06-01"})
-            elif provider.protocol == "gemini":
-                headers["x-goog-api-key"] = token
-            elif token:
-                headers["Authorization"] = f"Bearer {token}"
             started = time.monotonic()
             try:
+                if subscription:
+                    token = await self.subscriptions.access_token(provider, inference=True)
+                else:
+                    ref = provider.api_key
+                    token = (
+                        await self.vault.resolve(ref)
+                        if ref.startswith(("env:", "secret:"))
+                        else ref
+                    )
+                headers = {"Content-Type": "application/json"}
+                if protocol == "anthropic":
+                    headers.update({"x-api-key": token, "anthropic-version": "2023-06-01"})
+                elif protocol == "gemini":
+                    headers["x-goog-api-key"] = token
+                elif token:
+                    headers["Authorization"] = f"Bearer {token}"
                 async with self.semaphore:
                     response = await self._generate(
                         provider, path, body, headers, model.extra_body.get("stream") is not False
                     )
-                reply = parse_reply(provider.protocol, model.model, response.json())
+                reply = parse_reply(protocol, model.model, response.json(), opaque_key=opaque_key)
+                if subscription:
+                    self.subscriptions.clear_limit(provider.id, started)
                 await self._record_call(
                     model,
                     provider.protocol,
@@ -664,6 +772,8 @@ class ProviderManager:
                     route,
                 )
                 return reply
+            except SubscriptionError as exc:
+                subscription_error = str(exc)
             except (
                 httpx.HTTPError,
                 ValueError,
@@ -672,6 +782,15 @@ class ProviderManager:
                 TypeError,
                 AttributeError,
             ) as exc:
+                if subscription and (
+                    (isinstance(exc, ResponseStreamError) and exc.code == LIMIT_EXCEEDED)
+                    or (
+                        isinstance(exc, httpx.HTTPStatusError)
+                        and response_error_code(exc.response) == LIMIT_EXCEEDED
+                    )
+                ):
+                    self.subscriptions.mark_limit(provider.id)
+                    subscription_error = "ChatGPT 套餐用量已达上限，请在 ChatGPT 用量设置中查看。"
                 await self._record_call(model, provider.protocol, "failed", scope=scope)
                 log.warning(
                     f"{model.display_name} 调用失败（{failure(provider.id, exc)}），尝试下一个候选模型",
@@ -679,6 +798,8 @@ class ProviderManager:
                 )
                 await self.store.activity("provider.failed", failure(provider.id, exc))
                 self.record_failure(provider.id)
+        if subscription_error:
+            raise SubscriptionError(subscription_error)
         if context_skipped:
             raise PublicError(
                 "候选模型调用失败，部分模型的估算上下文超过上限，请减少输入或调整模型上下文配置"
@@ -701,7 +822,8 @@ class ProviderManager:
                 (p for p in cfg.providers if model and p.id == model.provider and p.enabled), None
             )
             if model and provider:
-                return model, provider
+                if provider.protocol != PROTOCOL:
+                    return model, provider
         return None
 
     @staticmethod

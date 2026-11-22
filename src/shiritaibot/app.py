@@ -20,6 +20,7 @@ from shiritaibot.emotion import EmotionManager
 from shiritaibot.heartflow import Heartflow
 from shiritaibot.knowledge import KnowledgeBase
 from shiritaibot.llm import ProviderManager
+from shiritaibot.llm.subscription import PROTOCOL as SUBSCRIPTION_PROTOCOL
 from shiritaibot.mcp import McpManager
 from shiritaibot.meme import MemeManager
 from shiritaibot.memory import MemoryManager, ShortTermMemory
@@ -273,6 +274,15 @@ class Application:
 
         provider_ok: dict[str, bool] = {}
         for provider in settings.providers:
+            if provider.protocol == SUBSCRIPTION_PROTOCOL:
+                status = await self.llm.subscriptions.status(provider.id)
+                connected = status["status"] == "connected"
+                provider_ok[provider.id] = provider.enabled and connected
+                if provider.enabled and not connected and any(
+                    model.enabled and model.provider == provider.id for model in settings.models
+                ):
+                    warnings.append(f"提供商「{provider.id}」需要连接 ChatGPT 账号")
+                continue
             provider_ok[provider.id] = provider.enabled and await resolves(provider.api_key)
             if provider.enabled and not provider_ok[provider.id]:
                 warnings.append(f"提供商「{provider.id}」没有可用的 API Key")
@@ -300,10 +310,10 @@ class Application:
                 and provider_ok.get(cfg_model.provider, False)
             ]
             if not usable:
-                warnings.append(f"{label}的模型都不可用：检查模型是否启用、提供商 Key 是否填好")
+                warnings.append(f"{label}的模型都不可用：检查模型是否启用、提供商认证是否可用")
         for provider_id, count in self.llm.failing().items():
             warnings.append(
-                f"提供商「{provider_id}」最近 15 分钟调用失败 {count} 次，请检查 Key 和网络/代理"
+                f"提供商「{provider_id}」最近 15 分钟调用失败 {count} 次，请检查认证和网络/代理"
             )
         search = settings.web_search
         if search.enabled:
@@ -374,6 +384,15 @@ class Application:
         await self.open_memory_profiles(settings)
         await self.open_knowledge_libraries(settings)
         await self.config.save(settings, expected_version=expected_version)
+        subscription_ids = {
+            provider.id
+            for provider in settings.providers
+            if provider.protocol == SUBSCRIPTION_PROTOCOL
+        }
+        for provider in previous.providers:
+            if provider.protocol == SUBSCRIPTION_PROTOCOL and provider.id not in subscription_ids:
+                if not await self.llm.subscriptions.disconnect(provider, remove=True):
+                    log.warning("已移除 ChatGPT 订阅凭据，请到 ChatGPT 设置确认远端授权已撤销")
         flow = self.adapters.heartflow
         if flow:
             await flow.reset(

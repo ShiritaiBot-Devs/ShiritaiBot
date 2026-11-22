@@ -34,11 +34,18 @@ from shiritaibot.config import (
 )
 from shiritaibot.core import Context, ExternalEvent, Model, PublicError, canonical, logs
 from shiritaibot.core.process import run_process
+from shiritaibot.llm.subscription import LOGIN_SECONDS
+from shiritaibot.llm.subscription import PROTOCOL as SUBSCRIPTION_PROTOCOL
 from shiritaibot.meme.core import MAX_MEME_BYTES
 from shiritaibot.plugin.core.packages import MAX_ARCHIVE, download_github, validate_id
 from shiritaibot.routine import RoutineItem
 from shiritaibot.skill import MAX_ARCHIVE as MAX_SKILL_ARCHIVE
-from shiritaibot.store.statistics import MAX_STATS_HOURS, statistics, statistics_sessions
+from shiritaibot.store.statistics import (
+    MAX_STATS_HOURS,
+    statistics,
+    statistics_sessions,
+    subscription_usage,
+)
 from shiritaibot.tools.builtin import register_builtin
 from shiritaibot.updater import Updater
 from shiritaibot.web.exchange_rates import ExchangeRates
@@ -85,6 +92,10 @@ class ApprovalInput(Model):
 class ModelTestInput(Model):
     provider: ProviderConfig
     model: ModelConfig
+
+
+class SubscriptionCallback(Model):
+    callback: str = Field(min_length=1, max_length=16000)
 
 
 class MemeInput(Model):
@@ -194,6 +205,55 @@ def create_app(
     @api.post("/api/providers/discover", dependencies=protected)
     async def discover(body: ProviderConfig):
         return await runtime.llm.discover(body)
+
+    def subscription_provider(provider_id: str) -> ProviderConfig | None:
+        return next(
+            (
+                provider
+                for provider in runtime.config.value.providers
+                if provider.id == provider_id and provider.protocol == SUBSCRIPTION_PROTOCOL
+            ),
+            None,
+        )
+
+    def saved_subscription(provider_id: str) -> ProviderConfig:
+        provider = subscription_provider(provider_id)
+        if provider is None:
+            raise PublicError("请先保存 OpenAI Subscription 提供商。")
+        return provider
+
+    @api.get("/api/providers/subscriptions/{provider_id}", dependencies=protected)
+    async def subscription_status(provider_id: str):
+        if subscription_provider(provider_id) is None:
+            return {"saved": False}
+        return {
+            "saved": True,
+            **await runtime.llm.subscriptions.status(provider_id),
+            "usage": await subscription_usage(runtime.store, provider_id),
+        }
+
+    @api.post("/api/providers/subscriptions/{provider_id}/start", dependencies=protected)
+    async def subscription_start(provider_id: str):
+        async with runtime.configure_lock:
+            url = await runtime.llm.subscriptions.start(saved_subscription(provider_id))
+        helper = Path(__file__).with_name("chatgpt_login_helper.py")
+        source = await asyncio.to_thread(helper.read_text, encoding="utf-8")
+        return {
+            "script": source + f"\nif __name__ == '__main__':\n    main({url!r})\n",
+            "expires_in": LOGIN_SECONDS,
+        }
+
+    @api.post("/api/providers/subscriptions/{provider_id}/finish", dependencies=protected)
+    async def subscription_finish(provider_id: str, body: SubscriptionCallback):
+        async with runtime.configure_lock:
+            await runtime.llm.subscriptions.finish(saved_subscription(provider_id), body.callback)
+        return {"ok": True}
+
+    @api.delete("/api/providers/subscriptions/{provider_id}", dependencies=protected)
+    async def subscription_disconnect(provider_id: str):
+        async with runtime.configure_lock:
+            revoked = await runtime.llm.subscriptions.disconnect(saved_subscription(provider_id))
+        return {"revoked": revoked}
 
     @api.get("/api/stats", dependencies=protected)
     async def stats(

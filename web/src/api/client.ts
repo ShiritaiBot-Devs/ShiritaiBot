@@ -34,6 +34,7 @@ import type {
   SkillDetail,
   SkillInfo,
   Statistics,
+  SubscriptionStatus,
   ExchangeRate,
   ToolCatalog,
   Paginated,
@@ -191,6 +192,12 @@ export interface ApiClient {
   mcpServers(): Promise<McpServerStatus[]>;
   reconnectMcp(id: string): Promise<McpServerStatus[]>;
   discoverModels(provider: ProviderConfig): Promise<DiscoveredModel[]>;
+  subscriptionStatus(id: string): Promise<SubscriptionStatus>;
+  startSubscription(
+    id: string,
+  ): Promise<{ script: string; expires_in: number }>;
+  finishSubscription(id: string, callback: string): Promise<unknown>;
+  disconnectSubscription(id: string): Promise<{ revoked: boolean }>;
   testModel(
     provider: ProviderConfig,
     model: ModelConfig,
@@ -545,6 +552,26 @@ export function createClient(getToken: () => string): ApiClient {
       ),
     discoverModels: (provider) =>
       request<DiscoveredModel[]>("/providers/discover", "POST", provider),
+    subscriptionStatus: (id) =>
+      request<SubscriptionStatus>(
+        "/providers/subscriptions/" + encodeURIComponent(id),
+      ),
+    startSubscription: (id) =>
+      request<{ script: string; expires_in: number }>(
+        "/providers/subscriptions/" + encodeURIComponent(id) + "/start",
+        "POST",
+      ),
+    finishSubscription: (id, callback) =>
+      request(
+        "/providers/subscriptions/" + encodeURIComponent(id) + "/finish",
+        "POST",
+        { callback },
+      ),
+    disconnectSubscription: (id) =>
+      request<{ revoked: boolean }>(
+        "/providers/subscriptions/" + encodeURIComponent(id),
+        "DELETE",
+      ),
     testModel: (provider, model) =>
       request<ModelTestResult>("/models/test", "POST", { provider, model }),
   };

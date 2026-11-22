@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from shiritaibot.core import now
 
@@ -97,6 +98,34 @@ def cost(counts: dict, model) -> float | None:
         + cached * (model.price_cached or model.price_input)
         + counts["output_tokens"] * model.price_output
     ) / 1_000_000
+
+
+async def subscription_usage(store, provider_id: str) -> dict:
+    end = now()
+    today = (
+        end.astimezone(ZoneInfo("Asia/Shanghai"))
+        .replace(hour=0, minute=0, second=0, microsecond=0)
+        .timestamp()
+    )
+    end_stamp = end.timestamp()
+    rows = await store.query(
+        "SELECT data,created FROM records WHERE kind='usage' AND created BETWEEN ? AND ? "
+        "AND json_extract(data,'$.provider')=? AND json_extract(data,'$.protocol')='openai_subscription'",
+        (end_stamp - 7 * 24 * 3600, end_stamp, provider_id),
+    )
+    usage = {
+        period: dict.fromkeys(("calls", "input_tokens", "output_tokens"), 0)
+        for period in ("today", "last_7_days")
+    }
+    for row in rows:
+        data = json.loads(row["data"])
+        counts = tokens(data.get("usage") or {})
+        periods = ("today", "last_7_days") if row["created"] >= today else ("last_7_days",)
+        for period in periods:
+            usage[period]["calls"] += 1
+            usage[period]["input_tokens"] += counts["input_tokens"]
+            usage[period]["output_tokens"] += counts["output_tokens"]
+    return usage
 
 
 async def statistics(
