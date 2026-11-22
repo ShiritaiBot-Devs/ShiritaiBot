@@ -172,6 +172,7 @@ export interface ApiClient {
   knowledgeSearch(query: string, library?: string): Promise<KnowledgeHit[]>;
   uploadKnowledge(file: File, library?: string): Promise<KnowledgeDocument>;
   deleteKnowledge(id: string, library?: string): Promise<unknown>;
+  routines(): Promise<RoutineRecord[]>;
   createRoutine(draft: RoutineDraft): Promise<RoutineRecord>;
   setRoutineStatus(id: string, status: string): Promise<RoutineRecord>;
   cancelSubagent(id: string): Promise<unknown>;
@@ -490,6 +491,7 @@ export function createClient(getToken: () => string): ApiClient {
           new URLSearchParams({ library }),
         "DELETE",
       ),
+    routines: () => request<RoutineRecord[]>("/routines"),
     createRoutine: (draft) =>
       request<RoutineRecord>("/routines", "POST", draft),
     setRoutineStatus: (id, status) =>

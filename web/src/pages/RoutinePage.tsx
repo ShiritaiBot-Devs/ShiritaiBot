@@ -4,7 +4,9 @@ import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { EmptyState } from "../components/EmptyState";
+import { SessionOptions } from "../components/SessionPicker";
 import type { RoutineKind, RoutineRecord } from "../api/types";
+import { isMainSession, sessionTitle } from "../lib/sessions";
 import { TIME_ZONE, formatDateTime, localInputToIso } from "../lib/utils";
 import type { PageProps } from "./common";
 
@@ -33,6 +35,8 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
+const DEFAULT_SESSION = "web:owner";
+const LEGACY_SCOPE = "owner";
 /** Guard against runaway multi-day events. */
 const MAX_SPAN_DAYS = 62;
 
@@ -111,9 +115,13 @@ function sortByDue(a: RoutineRecord, b: RoutineRecord): number {
 
 function RoutineItem({
   row,
+  names,
   client,
   act,
-}: { row: RoutineRecord } & Pick<PageProps, "client" | "act">) {
+}: { row: RoutineRecord; names: ReadonlyMap<string, string> } & Pick<
+  PageProps,
+  "client" | "act"
+>) {
   const timeText = row.due
     ? row.end
       ? `${formatDateTime(row.due)} – ${formatDateTime(row.end)}`
@@ -127,7 +135,9 @@ function RoutineItem({
     >
       <div className="routine-item-main">
         <strong>{row.title}</strong>
-        <span className="muted">{timeText}</span>
+        <span className="muted" title={row.scope}>
+          {names.get(row.scope) ?? sessionTitle(row.scope)} · {timeText}
+        </span>
       </div>
       <span className="tag">
         {KIND_LABEL[row.kind] ?? row.kind} ·{" "}
@@ -165,9 +175,13 @@ function RoutineItem({
 
 function RoutineCalendar({
   rows,
+  names,
   client,
   act,
-}: { rows: RoutineRecord[] } & Pick<PageProps, "client" | "act">) {
+}: { rows: RoutineRecord[]; names: ReadonlyMap<string, string> } & Pick<
+  PageProps,
+  "client" | "act"
+>) {
   const today = dayKey(new Date()) ?? utcToKey(new Date());
   const [cursor, setCursor] = useState(() => {
     const [y, m] = today.split("-").map(Number);
@@ -284,7 +298,7 @@ function RoutineCalendar({
                     <span
                       key={row.id}
                       className={`calendar-chip kind-${row.kind}${isDone(row) ? " done" : ""}`}
-                      title={row.title}
+                      title={`${names.get(row.scope) ?? sessionTitle(row.scope)} · ${row.title}`}
                     >
                       {row.due && dayKey(row.due) === key && (
                         <span className="calendar-chip-time">
@@ -331,6 +345,7 @@ function RoutineCalendar({
           anchor={selection.anchor}
           rows={byDay.get(selection.day) ?? []}
           onClose={() => setSelection(null)}
+          names={names}
           client={client}
           act={act}
         />
@@ -339,7 +354,13 @@ function RoutineCalendar({
         <section className="panel">
           <h2>未排期待办与定时任务</h2>
           {undated.map((row) => (
-            <RoutineItem key={row.id} row={row} client={client} act={act} />
+            <RoutineItem
+              key={row.id}
+              row={row}
+              names={names}
+              client={client}
+              act={act}
+            />
           ))}
         </section>
       )}
@@ -352,6 +373,7 @@ function RoutineDayPopover({
   anchor,
   rows,
   onClose,
+  names,
   client,
   act,
 }: {
@@ -359,6 +381,7 @@ function RoutineDayPopover({
   anchor: HTMLButtonElement;
   rows: RoutineRecord[];
   onClose: () => void;
+  names: ReadonlyMap<string, string>;
 } & Pick<PageProps, "client" | "act">) {
   const popover = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -460,7 +483,13 @@ function RoutineDayPopover({
       </div>
       {rows.length ? (
         rows.map((row) => (
-          <RoutineItem key={row.id} row={row} client={client} act={act} />
+          <RoutineItem
+            key={row.id}
+            row={row}
+            names={names}
+            client={client}
+            act={act}
+          />
         ))
       ) : (
         <EmptyState text="这一天没有安排。" />
@@ -471,20 +500,51 @@ function RoutineDayPopover({
 }
 
 export function RoutinePage({ client, act }: PageProps) {
+  const [filter, setFilter] = useState("");
+  const [session, setSession] = useState(DEFAULT_SESSION);
   const [kind, setKind] = useState<RoutineKind>("todo");
   const [title, setTitle] = useState("");
   const [due, setDue] = useState("");
   const [cron, setCron] = useState("30 7 * * *");
   const routines = useQuery({
     queryKey: ["records", "routine"],
-    queryFn: () => client.records("routine"),
+    queryFn: () => client.routines(),
     refetchInterval: 4000,
   });
+  const sessions = useQuery({
+    queryKey: ["records", "session"],
+    queryFn: () => client.records("session"),
+    refetchInterval: 10000,
+  });
+  const chats = useQuery({
+    queryKey: ["web-chats"],
+    queryFn: () => client.webChats(),
+  });
+  const names = new Map(chats.data?.map((chat) => [chat.id, chat.title]));
+  names.set(LEGACY_SCOPE, "历史未归属");
+
+  const rows = useMemo(
+    () =>
+      (routines.data ?? []).filter((row) => !filter || row.scope === filter),
+    [routines.data, filter],
+  );
+  const routineScopes = (routines.data ?? []).map((row) => row.scope);
+  const destinations = [
+    DEFAULT_SESSION,
+    session,
+    ...(sessions.data ?? []).map((row) => row.id),
+    ...(chats.data ?? []).map((chat) => chat.id),
+    ...routineScopes,
+  ].filter(isMainSession);
+  const filterScopes = [...destinations, ...routineScopes, filter].filter(
+    (scope) => scope && scope !== LEGACY_SCOPE,
+  );
 
   function create(event: React.FormEvent) {
     event.preventDefault();
     void act(async () => {
       await client.createRoutine({
+        session,
         kind,
         title,
         due: localInputToIso(due),
@@ -493,15 +553,47 @@ export function RoutinePage({ client, act }: PageProps) {
       });
       setTitle("");
       setDue("");
+      setFilter((current) =>
+        current && current === filter ? session : current,
+      );
     }, "已创建");
   }
 
   return (
     <>
       <section className="panel">
+        <label className="inline">
+          <span className="field-name">查看会话</span>
+          <select
+            value={filter}
+            onChange={(event) => {
+              const scope = event.target.value;
+              setFilter(scope);
+              if (isMainSession(scope)) setSession(scope);
+            }}
+          >
+            <option value="">全部会话</option>
+            {(filter === LEGACY_SCOPE ||
+              routineScopes.includes(LEGACY_SCOPE)) && (
+              <option value={LEGACY_SCOPE}>{names.get(LEGACY_SCOPE)}</option>
+            )}
+            <SessionOptions ids={filterScopes} titles={names} />
+          </select>
+        </label>
+      </section>
+      <section className="panel">
         <h2>安排下一件事</h2>
         <form onSubmit={create}>
           <div className="field-grid">
+            <label className="field">
+              <span className="field-name">所属会话</span>
+              <select
+                value={session}
+                onChange={(event) => setSession(event.target.value)}
+              >
+                <SessionOptions ids={destinations} titles={names} />
+              </select>
+            </label>
             <div className="field">
               <span className="field-name">类型</span>
               <select
@@ -567,7 +659,10 @@ export function RoutinePage({ client, act }: PageProps) {
           />
         </section>
       )}
-      <RoutineCalendar rows={routines.data ?? []} client={client} act={act} />
+      <RoutineCalendar rows={rows} names={names} client={client} act={act} />
+      {filter && routines.isSuccess && rows.length === 0 && (
+        <EmptyState text="此会话暂无日程。" />
+      )}
     </>
   );
 }

@@ -14,7 +14,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, 
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import Field
+from pydantic import Field, field_validator
 from starlette.background import BackgroundTask
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -24,6 +24,7 @@ from shiritaibot.agent.commands import help_section_titles, visible_builtin_comm
 from shiritaibot.api.event import MessageEvent
 from shiritaibot.app import Application
 from shiritaibot.config import (
+    MAIN_SESSION,
     ConfigRevisionConflict,
     ModelConfig,
     ProviderConfig,
@@ -64,6 +65,17 @@ WebChatId = Annotated[str, Field(pattern=r"^web:[a-zA-Z0-9_-]{1,80}$")]
 class WebChatUpdate(Model):
     title: str | None = Field(default=None, min_length=1, max_length=100)
     pinned: bool | None = None
+
+
+class RoutineInput(RoutineItem):
+    session: str = "web:owner"
+
+    @field_validator("session")
+    @classmethod
+    def validate_session(cls, value: str) -> str:
+        if not MAIN_SESSION.fullmatch(value):
+            raise ValueError("会话标识无效")
+        return value
 
 
 class ApprovalInput(Model):
@@ -714,16 +726,18 @@ def create_app(
         await runtime.knowledge_for(library).delete(key)
         return {"ok": True}
 
+    @api.get("/api/routines", dependencies=protected)
+    async def routines():
+        return await runtime.store.list("routine", limit=-1)
+
     @api.post("/api/routines", dependencies=protected)
-    async def routine(body: RoutineItem):
-        return await runtime.routine.create(body)
+    async def routine(body: RoutineInput):
+        item = RoutineItem.model_validate(body.model_dump(exclude={"session"}))
+        return await runtime.routine.create(item, session=body.session)
 
     @api.post("/api/routines/{key}/{status}", dependencies=protected)
     async def routine_status(key: str, status: str):
-        try:
-            return await runtime.routine.update_status(key, status)
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from None
+        return await runtime.routine.update_status(key, status)
 
     @api.post("/api/events", dependencies=protected)
     async def event(body: ExternalEvent):

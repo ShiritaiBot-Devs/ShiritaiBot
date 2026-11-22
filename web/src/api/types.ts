@@ -683,7 +683,7 @@ export interface EventRecord {
 
 export interface RoutineRecord {
   id: string;
-  scope?: string;
+  scope: string;
   kind: RoutineKind;
   title: string;
   due: string | null;
@@ -825,6 +825,7 @@ export interface MemoryStatus {
 }
 
 export interface RoutineDraft {
+  session?: string;
   kind: RoutineKind;
   title: string;
   due: string | null;

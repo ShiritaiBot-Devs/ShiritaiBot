@@ -120,13 +120,17 @@ class Store:
         return {"items": items, "total": total, "page": page, "page_size": page_size}
 
     async def with_status(
-        self, kind: str, statuses: tuple[str, ...], limit: int = 1000
+        self, kind: str, statuses: tuple[str, ...], limit: int = 1000, *, scope: str | None = None
     ) -> list[dict]:
         marks = ",".join("?" for _ in statuses)
-        rows = await self.query(
-            f"SELECT data FROM records WHERE kind=? AND json_extract(data,'$.status') IN ({marks}) ORDER BY created LIMIT ?",
-            (kind, *statuses, limit),
+        sql = (
+            f"SELECT data FROM records WHERE kind=? AND json_extract(data,'$.status') IN ({marks})"
         )
+        args = (kind, *statuses)
+        if scope is not None:
+            sql += " AND scope=?"
+            args += (scope,)
+        rows = await self.query(sql + " ORDER BY created LIMIT ?", (*args, limit))
         return [json.loads(row["data"]) for row in rows]
 
     async def append(

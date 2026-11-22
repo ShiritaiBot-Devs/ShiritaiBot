@@ -7,12 +7,18 @@ import {
   sessionGroups,
 } from "../lib/sessions";
 
-export function SessionOptions({ ids }: { ids: string[] }) {
+export function SessionOptions({
+  ids,
+  titles,
+}: {
+  ids: string[];
+  titles?: ReadonlyMap<string, string>;
+}) {
   return sessionGroups([...new Set(ids)], {}).map((group) => (
     <optgroup key={group.key} label={group.label}>
       {group.items.map(({ id, title }) => (
         <option key={id} value={id} title={id}>
-          {title}
+          {titles?.get(id) ?? title}
         </option>
       ))}
     </optgroup>

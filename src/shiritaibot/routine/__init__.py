@@ -60,11 +60,12 @@ def schedule(item: RoutineItem) -> float | None:
 class RoutineManager:
     def __init__(self, store, emit):
         self.store, self.emit = store, emit
+        self.lock = asyncio.Lock()
         self.wake = asyncio.Event()
         self.pruned = 0.0
         self.retries: dict[tuple[str, float], tuple[float, float]] = {}
 
-    async def create(self, item: RoutineItem) -> dict:
+    async def create(self, item: RoutineItem, *, session: str) -> dict:
         key = uid()
         next_fire = schedule(item)
         body = {
@@ -72,7 +73,7 @@ class RoutineManager:
             "status": "scheduled" if next_fire else "open",
             "next_fire": next_fire,
         }
-        result = await self.store.put("routine", key, body, "owner")
+        result = await self.store.put("routine", key, body, session)
         log.log(
             f"新建{KINDS[item.kind]}「{brief(item.title, 60)}」"
             + (f"，cron {item.cron}" if item.cron else "")
@@ -85,27 +86,38 @@ class RoutineManager:
         self.wake.set()
         return result
 
-    async def update_status(self, key: str, status: str) -> dict:
-        if status not in {"completed", "cancelled", "open"}:
-            raise ValueError("invalid status")
+    async def _get(self, key: str, session: str | None) -> dict:
         row = await self.store.get("routine", key)
-        if not row:
-            raise ValueError("routine not found")
-        row.update(status=status, next_fire=None)
-        log.log(
-            f"{KINDS.get(row['kind'], row['kind'])}「{brief(row['title'], 60)}」状态改为 {status}"
-        )
-        self.wake.set()
-        return await self.store.put("routine", key, row, "owner")
+        if not row or (session is not None and row.get("scope") != session):
+            raise PublicError("日程不存在或已删除")
+        return row
 
-    async def update(self, key: str, changes: dict) -> dict:
+    async def update_status(self, key: str, status: str) -> dict:
+        return await self.update(key, {}, session=None, status=status)
+
+    async def update(
+        self, key: str, changes: dict, *, session: str | None, status: str | None = None
+    ) -> dict:
         """Edit an item in place. Changing the time of a reminder or job reschedules it,
         unless it was completed or cancelled."""
-        row = await self.store.get("routine", key)
-        if not row:
-            raise PublicError("日程不存在或已删除")
-        if not changes or set(changes) - set(EDITABLE):
+        if (not changes and status is None) or set(changes) - set(EDITABLE):
             raise PublicError("只能修改 " + "、".join(EDITABLE))
+        if status is not None and status not in {"completed", "cancelled", "open"}:
+            raise PublicError("日程状态无效")
+        async with self.lock:
+            row = await self._get(key, session)
+            if changes:
+                self._edit(row, changes)
+            if status is not None:
+                row.update(status=status, next_fire=None)
+                log.log(
+                    f"{KINDS.get(row['kind'], row['kind'])}「{brief(row['title'], 60)}」状态改为 {status}"
+                )
+            result = await self.store.put("routine", key, row, row["scope"])
+        self.wake.set()
+        return result
+
+    def _edit(self, row: dict, changes: dict) -> None:
         current = {field: row.get(field) for field in ("kind", *EDITABLE)}
         try:
             item = RoutineItem.model_validate({**current, **changes})
@@ -124,14 +136,11 @@ class RoutineManager:
             f"修改{KINDS.get(row['kind'], row['kind'])}「{brief(row['title'], 60)}」："
             + "、".join(sorted(changes))
         )
-        self.wake.set()
-        return await self.store.put("routine", key, row, "owner")
 
-    async def delete(self, key: str) -> dict:
-        row = await self.store.get("routine", key)
-        if not row:
-            raise PublicError("日程不存在或已删除")
-        await self.store.delete("routine", key)
+    async def delete(self, key: str, *, session: str) -> dict:
+        async with self.lock:
+            row = await self._get(key, session)
+            await self.store.delete("routine", key)
         log.log(f"删除{KINDS.get(row['kind'], row['kind'])}「{brief(row['title'], 60)}」")
         self.wake.set()
         return {"deleted": key, "kind": row["kind"], "title": row["title"]}
@@ -141,24 +150,26 @@ class RoutineManager:
 
         Open todos are never pruned, however overdue: they still need doing.
         """
-        stale = []
-        for record in await self.store.query(
-            "SELECT id, data, updated FROM records WHERE kind='routine'"
-        ):
-            row = json.loads(record["data"])
-            if row["status"] in FINISHED:
-                finished = record["updated"]
-            elif row["kind"] == "event" and row.get("due"):
-                finished = datetime.fromisoformat(row.get("end") or row["due"]).timestamp()
-            else:
-                continue
-            if finished < stamp - KEEP_FINISHED:
-                stale.append(record["id"])
+        async with self.lock:
+            stale = []
+            for record in await self.store.query(
+                "SELECT id, data, updated FROM records WHERE kind='routine'"
+            ):
+                row = json.loads(record["data"])
+                if row["status"] in FINISHED:
+                    finished = record["updated"]
+                elif row["kind"] == "event" and row.get("due"):
+                    finished = datetime.fromisoformat(row.get("end") or row["due"]).timestamp()
+                else:
+                    continue
+                if finished < stamp - KEEP_FINISHED:
+                    stale.append(record["id"])
+            if stale:
+                marks = ",".join("?" * len(stale))
+                await self.store.execute(
+                    f"DELETE FROM records WHERE kind='routine' AND id IN ({marks})", tuple(stale)
+                )
         if stale:
-            marks = ",".join("?" * len(stale))
-            await self.store.execute(
-                f"DELETE FROM records WHERE kind='routine' AND id IN ({marks})", tuple(stale)
-            )
             log.log(f"自动清理 {len(stale)} 条结束超过 {KEEP_FINISHED // DAY} 天的日程")
         return len(stale)
 
@@ -191,7 +202,7 @@ class RoutineManager:
         else:
             changes = {"status": "fired", "next_fire": None}
         await self.emit(event)
-        await self.store.put("routine", key, {**row, **changes}, "owner")
+        await self.store.put("routine", key, {**row, **changes}, row["scope"])
         log.log(
             f"{KINDS.get(row['kind'], row['kind'])}触发：{brief(row['title'], 80)}"
             + (f"（延迟 {delay:.0f} 秒）" if delay > 60 else "")
@@ -200,14 +211,14 @@ class RoutineManager:
     async def tick(self) -> float:
         rows = await self.store.with_status("routine", ("scheduled",), limit=10000)
         scheduled = sorted(
-            (row["next_fire"], row["id"], row)
+            (row["next_fire"], row["id"])
             for row in rows
             if row.get("next_fire") is not None and row["status"] == "scheduled"
         )
         stamp = now().timestamp()
         wake_at = stamp + 30
         retries = {}
-        for fire, key, row in scheduled:
+        for fire, key in scheduled:
             if fire > stamp:
                 wake_at = min(wake_at, fire)
                 break
@@ -215,7 +226,10 @@ class RoutineManager:
             retry_at, backoff = self.retries.get(occurrence, (0.0, 0.0))
             if retry_at <= stamp:
                 try:
-                    await self._fire(row, stamp)
+                    async with self.lock:
+                        row = await self.store.get("routine", key)
+                        if row and row["status"] == "scheduled" and row["next_fire"] == fire:
+                            await self._fire(row, stamp)
                     continue
                 except Exception as exc:
                     backoff = min(300, max(5, backoff * 2))
