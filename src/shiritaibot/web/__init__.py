@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hmac
 import os
 import secrets
@@ -19,7 +20,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from shiritaibot import __version__ as BOT_VERSION
 from shiritaibot.adapters.qq_official import MAX_CALLBACK_BYTES, CallbackError, QQOfficial
-from shiritaibot.agent.commands import COMMANDS
+from shiritaibot.agent.commands import visible_builtin_commands
 from shiritaibot.api.event import MessageEvent
 from shiritaibot.app import Application
 from shiritaibot.config import (
@@ -193,14 +194,14 @@ def create_app(
         return await exchange_rates.get()
 
     @api.get("/api/commands", dependencies=protected)
-    async def commands():
-        event = MessageEvent("web:owner", "", "owner", platform="web", is_owner=True)
+    async def commands(session: WebChatId = "web:owner"):
+        ctx = Context(session, "owner", owner=True, memory_profile=runtime.config.value.session_memory(session))
         return [
-            {"name": name, "description": description} for name, description in COMMANDS.items()
+            {"name": name, "description": description}
+            for name, description in visible_builtin_commands(ctx, runtime.registry).items()
         ] + [
             {"name": handler.command[1:], "description": handler.description or handler.plugin}
-            for handler in runtime.plugins.hooks.of("command")
-            if runtime.plugins.hooks.matches(handler, event)
+            for handler in runtime.plugins.hooks.commands_for_context(ctx)
         ]
 
     @api.get("/api/health", dependencies=protected)
@@ -476,6 +477,13 @@ def create_app(
     @api.get("/api/web-chats", dependencies=protected)
     async def web_chats():
         return await runtime.store.web_chats()
+
+    @api.get("/api/help-images/{key}", dependencies=protected)
+    async def help_image(key: str):
+        row = await runtime.store.get("help_image", key)
+        if row is None:
+            raise HTTPException(404)
+        return Response(base64.b64decode(row["png"]), media_type="image/png")
 
     @api.put("/api/web-chats/{session}", dependencies=protected)
     async def update_web_chat(session: WebChatId, body: WebChatUpdate):

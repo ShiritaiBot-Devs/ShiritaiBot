@@ -791,6 +791,14 @@ export const IDENTITY_FIELDS: FieldSpec[] = [
 
 export const OUTBOUND_MESSAGE_FIELDS: FieldSpec[] = [
   {
+    key: "help_menu_style",
+    label: "/help 菜单样式",
+    kind: "select",
+    options: ["text", "light", "dark"],
+    optionLabels: { text: "文字", light: "亮色图片", dark: "暗色图片" },
+    help: "图片按内置功能和插件分区，只显示当前会话可用的命令。",
+  },
+  {
     key: "onebot_forward_long_messages",
     label: "OneBot 长消息折叠",
     kind: "boolean",

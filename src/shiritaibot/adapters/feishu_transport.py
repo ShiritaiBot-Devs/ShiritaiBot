@@ -325,14 +325,15 @@ class FeishuTransport:
             request_id,
         )
 
-    async def send_file(self, name: str, data: bytes, *, open_id: str) -> dict:
-        channel = self._connected_channel()
+    async def _upload(
+        self, channel: FeishuChannel, data: bytes, kind: Literal["image", "file"], name: str | None = None
+    ) -> dict:
         try:
-            file_key = await channel.upload_media(
+            key = await channel.upload_media(
                 MediaSource(kind="buffer", buffer=data),
-                kind="file",
+                kind=kind,
                 file_name=name,
-                file_type="stream",
+                file_type="stream" if kind == "file" else None,
             )
         except FeishuChannelError as exc:
             code = exc.context.get("raw_code")
@@ -341,8 +342,19 @@ class FeishuTransport:
             ) from None
         if self._connected_channel() is not channel:
             raise FeishuSendError("not_connected", uncertain=False)
-        file = {"file": {"source": MediaSource(kind="key", key=file_key)}}
-        return await self._send(channel, open_id, "open_id", file)
+        return {kind: {"source": MediaSource(kind="key", key=key)}}
+
+    async def send_image(
+        self, data: bytes, recipient: str, receive_id_type: Literal["chat_id", "open_id"], request_id: str
+    ) -> dict:
+        channel = self._connected_channel()
+        message = await self._upload(channel, data, "image")
+        return await self._send(channel, recipient, receive_id_type, message, request_id)
+
+    async def send_file(self, name: str, data: bytes, *, open_id: str) -> dict:
+        channel = self._connected_channel()
+        message = await self._upload(channel, data, "file", name)
+        return await self._send(channel, open_id, "open_id", message)
 
     def _connected_channel(self) -> FeishuChannel:
         channel = self._channel

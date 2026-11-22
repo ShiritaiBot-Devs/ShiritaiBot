@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from datetime import datetime
 
+from shiritaibot.agent.help_menu import HelpSection, render_help_menu
 from shiritaibot.auth.menu import RISK_LABELS
 from shiritaibot.config import SessionPolicy, preset_risks
 from shiritaibot.core import PublicError, uid
+from shiritaibot.core.logs import get_logger
 
 COMMANDS = {
     "help": "查看命令帮助",
@@ -32,6 +35,13 @@ BUILTIN_COMMANDS = frozenset({*COMMANDS, "cancel", "reset"})
 PRIVATE_COMMANDS = {"tasks", "memory", "approve", "deny", "grants"}
 OWNER_COMMANDS = {"new", "clear"}
 COMMAND_TOOLS = {"memory": "memory_search", "tasks": "subagent_list"}
+COMMAND_GROUPS = {
+    "会话": ("help", "status", "new", "clear", "stop", "mode"),
+    "模型与人格": ("models", "model", "personas", "persona"),
+    "工具与审批": ("tools", "permissions", "approve", "deny", "grants"),
+    "记忆与任务": ("memory", "tasks"),
+}
+log = get_logger("指令")
 
 
 def builtin_slash(text: str) -> bool:
@@ -39,6 +49,38 @@ def builtin_slash(text: str) -> bool:
         return False
     parts = text[1:].split(maxsplit=1)
     return bool(parts) and parts[0].lower() in BUILTIN_COMMANDS
+
+
+def visible_builtin_commands(ctx, registry) -> dict[str, str]:
+    private = ctx.owner and not ctx.group and not ctx.background
+    visible = {}
+    for name, description in COMMANDS.items():
+        if name in PRIVATE_COMMANDS and not private:
+            continue
+        if name in OWNER_COMMANDS and (not ctx.owner or ctx.background):
+            continue
+        if tool_name := COMMAND_TOOLS.get(name):
+            tool = registry.tools.get(tool_name)
+            if tool is None or registry.permissions.decision(ctx, tool) == "deny":
+                continue
+        visible[name] = description
+    return visible
+
+
+def help_sections(runtime, ctx) -> list[HelpSection]:
+    from shiritaibot.plugin.core.hooks import usage
+
+    commands = visible_builtin_commands(ctx, runtime.registry)
+    sections = [
+        (title, [(f"/{name}", commands[name]) for name in names if name in commands])
+        for title, names in COMMAND_GROUPS.items()
+    ]
+    plugins: dict[str, list[tuple[str, str]]] = {}
+    if hooks := getattr(runtime, "hooks", None):
+        for handler in hooks.commands_for_context(ctx):
+            plugins.setdefault(handler.plugin, []).append((usage(handler), handler.description))
+    sections.extend((f"插件 · {name}", entries) for name, entries in plugins.items())
+    return [(title, entries) for title, entries in sections if entries]
 
 
 async def command(runtime, ctx, text):
@@ -49,6 +91,7 @@ async def command(runtime, ctx, text):
     cfg = runtime.config.value
     private = ctx.owner and not ctx.group and not ctx.background
     actor = runtime.actors.get(ctx.session)
+    image = None
     try:
         if name in PRIVATE_COMMANDS and not private:
             raise PublicError("此命令仅限主人私聊或 WebUI 使用。")
@@ -59,23 +102,21 @@ async def command(runtime, ctx, text):
             if not ctx.owner or ctx.background:
                 raise PublicError("只有主人可以重置会话、切换模型或人格。")
         if name == "help":
-            def available(key: str) -> bool:
-                if key in PRIVATE_COMMANDS and not private:
-                    return False
-                if key in OWNER_COMMANDS and (not ctx.owner or ctx.background):
-                    return False
-                if tool_name := COMMAND_TOOLS.get(key):
-                    tool = runtime.registry.tools.get(tool_name)
-                    return tool is not None and runtime.registry.permissions.decision(ctx, tool) != "deny"
-                return True
-
-            answer = f"{cfg.assistant_name} 命令（直接执行，不消耗模型 tokens）\n" + "\n".join(
-                f"/{key} — {value}" for key, value in COMMANDS.items() if available(key)
+            sections = help_sections(runtime, ctx)
+            answer = f"{cfg.assistant_name} 命令帮助\n\n" + "\n\n".join(
+                title + "\n" + "\n".join(
+                    f"{usage} — {description}" if description else usage
+                    for usage, description in entries
+                )
+                for title, entries in sections
             )
-            hooks = getattr(runtime, "hooks", None)
-            plugin_lines = hooks.help_lines(ctx) if hooks is not None else []
-            if plugin_lines:
-                answer += "\n\n插件指令\n" + "\n".join(plugin_lines)
+            if cfg.help_menu_style != "text" and not ctx.background:
+                try:
+                    image = await asyncio.to_thread(
+                        render_help_menu, cfg.assistant_name, sections, cfg.help_menu_style
+                    )
+                except (OSError, ValueError) as exc:
+                    log.warning(f"帮助菜单图片渲染失败，已改发文字（{exc}）")
         elif name in {"new", "clear"}:
             if actor:
                 actor.task.cancel()
@@ -311,11 +352,21 @@ async def command(runtime, ctx, text):
         },
         memory_profile=ctx.memory_profile,
     )
+    reply = {"role": "assistant", "content": answer, "_command": True}
+    if image is not None and ctx.session.startswith("web:"):
+        await runtime.store.put(
+            "help_image", turn, {"png": base64.b64encode(image).decode("ascii")}, ctx.session
+        )
+        reply["_help_image"] = turn
+        image = None
     await runtime.store.append(
         ctx.session,
         turn,
-        {"role": "assistant", "content": answer, "_command": True},
+        reply,
         memory_profile=ctx.memory_profile,
     )
-    await runtime.deliver(ctx.session, answer)
+    if image is None:
+        await runtime.deliver(ctx.session, answer)
+    else:
+        await runtime.deliver(ctx.session, answer, image=image)
     return "command"

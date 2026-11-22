@@ -9,7 +9,7 @@ FROM ghcr.io/astral-sh/uv:0.12.7 AS uv
 
 FROM python:3.13-slim-bookworm
 COPY --from=uv /uv /usr/local/bin/uv
-RUN apt-get update && apt-get install -y --no-install-recommends git
+RUN apt-get update && apt-get install -y --no-install-recommends git fonts-noto-cjk
 WORKDIR /app
 ENV PATH="/app/.venv/bin:${PATH}" \
     UV_PYTHON_DOWNLOADS=never \

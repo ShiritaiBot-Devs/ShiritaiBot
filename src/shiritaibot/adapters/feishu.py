@@ -253,6 +253,15 @@ class Feishu:
             request_id=request_id,
         )
 
+    async def send_image(self, kind: str, target: str, data: bytes, request_id: str) -> dict:
+        assert self.transport is not None
+        return await self.transport.send_image(
+            data,
+            target.partition("/")[2],
+            "chat_id" if kind == "group" else "open_id",
+            request_id,
+        )
+
     async def send_owner_file(self, name: str, data: bytes) -> dict:
         transport = self.transport
         if transport is None or not self.config.owner_id:

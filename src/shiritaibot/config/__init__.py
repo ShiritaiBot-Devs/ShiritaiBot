@@ -858,6 +858,7 @@ class Settings(Model):
     private_require_keyword: bool = False
     onebot_forward_long_messages: bool = False
     onebot_forward_threshold: int = Field(default=1000, ge=1)
+    help_menu_style: Literal["text", "light", "dark"] = "text"
     context: ContextConfig = Field(default_factory=ContextConfig)
     group_context: GroupContextConfig = Field(default_factory=GroupContextConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)

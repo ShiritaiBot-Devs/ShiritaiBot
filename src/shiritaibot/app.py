@@ -243,14 +243,14 @@ class Application:
                 ]
             )
 
-    async def deliver(self, session: str, text: str) -> None:
+    async def deliver(self, session: str, text: str, *, image: bytes | None = None) -> None:
         if session.startswith(PREPARE_SESSION):
             # Proactive turns return to PE, which owns the final notification decision.
             await self.proactive.prepared(session, text)
         elif session.startswith("background:"):
             await self.adapters.notify_owner(text)
         else:
-            await self.adapters.enqueue(session, text)
+            await self.adapters.enqueue(session, text, image=image)
 
     async def notify_approval(
         self, text: str, *, session: str | None = None, batch_id: str = ""

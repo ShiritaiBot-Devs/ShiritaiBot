@@ -221,7 +221,7 @@ class HookBus:
                 clashes |= handler.path[0] & (BUILTIN_COMMANDS | others)
         return sorted(clashes)
 
-    def help_lines(self, ctx: Context) -> list[str]:
+    def commands_for_context(self, ctx: Context) -> list[Handler]:
         platform = "qq"
         if ctx.session.startswith("web:"):
             platform = "web"
@@ -231,10 +231,7 @@ class HookBus:
             platform = "qq_official"
         elif ctx.background:
             return []
-        return [
-            f"{usage(h)} — {h.description or '插件指令'}（{h.plugin}）"
-            for h in self.available_commands(platform, group=ctx.group, owner=ctx.owner)
-        ]
+        return self.available_commands(platform, group=ctx.group, owner=ctx.owner)
 
     def describe(self, plugin: str) -> tuple[list[dict], list[dict]]:
         """(commands, hooks) of a plugin for the WebUI listing."""

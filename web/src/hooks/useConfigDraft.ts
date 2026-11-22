@@ -52,6 +52,7 @@ export function useConfigDraft(client: ApiClient | null) {
     const keys = [
       ["config"],
       ["tools"],
+      ["commands"],
       ["diagnostics"],
       ["memory-profiles"],
       ["knowledge-libraries"],

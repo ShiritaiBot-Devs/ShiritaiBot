@@ -64,8 +64,8 @@ export function ChatComposer({
     queryFn: () => client.tools(session),
   });
   const commands = useQuery({
-    queryKey: ["commands"],
-    queryFn: () => client.commands(),
+    queryKey: ["commands", session],
+    queryFn: () => client.commands(session),
   });
 
   useEffect(() => {

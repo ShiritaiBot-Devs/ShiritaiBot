@@ -508,6 +508,7 @@ export interface Settings {
   private_require_keyword: boolean;
   onebot_forward_long_messages: boolean;
   onebot_forward_threshold: number;
+  help_menu_style: "text" | "light" | "dark";
   context: ContextConfig;
   group_context: GroupContextConfig;
   memory: MemoryConfig;
@@ -739,6 +740,7 @@ export interface ToolCall {
 }
 
 export interface HistoryMessage {
+  _help_image?: string;
   _file_diffs?: FileDiff[];
   _shell_output?: {
     exit_code: number;

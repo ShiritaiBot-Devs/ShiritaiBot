@@ -219,26 +219,53 @@ class QQOfficial:
     async def send_text(
         self, kind: str, target: str, text: str, message_id: str, sequence: int
     ) -> dict[str, Any]:
-        assert self.client is not None
+        return await self._send(kind, target, {"content": text, "msg_type": 0}, message_id, sequence)
+
+    async def send_image(
+        self, kind: str, target: str, image: str, message_id: str, sequence: int
+    ) -> dict[str, Any]:
+        return await self._send(kind, target, {"msg_type": 7}, message_id, sequence, image=image)
+
+    async def _send(
+        self, kind: str, target: str, payload: dict, message_id: str, sequence: int, *, image: str = ""
+    ) -> dict[str, Any]:
         token = await self.access_token()
         domain = "sandbox.api.sgroup.qq.com" if self.config.qq_sandbox else "api.bot.qq.com"
         segment = "groups" if kind == "group" else "users"
+        url = f"https://{domain}/v2/{segment}/{target}"
+        if image:
+            upload = await self._post(
+                f"{url}/files", token,
+                {"file_type": 1, "file_data": image, "srv_send_msg": False},
+                "file_info", sends_message=False,
+            )
+            payload["media"] = {"file_info": upload["file_info"]}
+        response = await self._post(
+            f"{url}/messages", token, {**payload, "msg_id": message_id, "msg_seq": sequence},
+            "id", sends_message=True,
+        )
+        return {"message_id": response["id"]}
+
+    async def _post(
+        self, url: str, token: str, payload: dict, expected: str, *, sends_message: bool
+    ) -> dict:
+        assert self.client is not None
         try:
             response = await self.client.post(
-                f"https://{domain}/v2/{segment}/{target}/messages",
+                url,
                 headers={"Authorization": f"QQBot {token}"},
-                json={"content": text, "msg_type": 0, "msg_id": message_id, "msg_seq": sequence},
+                json=payload,
             )
         except httpx.HTTPError as exc:
-            raise QQOfficialSendError(type(exc).__name__, uncertain=True) from None
+            raise QQOfficialSendError(type(exc).__name__, uncertain=sends_message) from None
         try:
             data = response.json()
         except ValueError:
             data = {}
         if not isinstance(data, dict):
             data = {}
-        if response.is_success and data.get("id"):
-            return {"message_id": data["id"]}
+        if response.is_success and data.get(expected):
+            return data
         code = data.get("code")
         detail = f"HTTP {response.status_code}"
         if type(code) is int:
@@ -248,5 +275,5 @@ class QQOfficial:
                 if self._access_token == token:
                     self._renew_at = 0
         raise QQOfficialSendError(
-            detail, uncertain=response.is_success or response.status_code >= 500
+            detail, uncertain=sends_message and (response.is_success or response.status_code >= 500)
         )

@@ -344,6 +344,13 @@
   border-radius: 16px 16px 0 16px;
   padding: 9px 15px;
 }
+.help-menu-image {
+  display: block;
+  width: min(100%, 880px);
+  height: auto;
+  border-radius: 12px;
+}
+
 .chat-stream .message.outgoing {
   animation: chat-arrive 220ms ease-out both;
 }

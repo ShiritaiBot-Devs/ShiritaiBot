@@ -1,4 +1,5 @@
-﻿import { lazy, Suspense } from "react";
+﻿import { lazy, Suspense, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { ApiClient } from "../api/client";
 import type { HistoryMessage } from "../api/types";
 import { buildTimeline } from "../lib/timeline";
@@ -9,6 +10,35 @@ const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 function elapsed(seconds: number) {
   const minutes = Math.floor(seconds / 60);
   return minutes ? `${minutes}m ${seconds % 60}s` : `${seconds}s`;
+}
+
+function HelpMenuImage({
+  client,
+  id,
+  text,
+}: {
+  client: ApiClient;
+  id: string;
+  text: string;
+}) {
+  const image = useQuery({
+    queryKey: ["help-menu-image", id],
+    queryFn: () => client.helpMenuImage(id),
+    staleTime: Infinity,
+    retry: false,
+  });
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    if (!image.data) return;
+    const next = URL.createObjectURL(image.data);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [image.data]);
+  return url ? (
+    <img className="help-menu-image" src={url} alt={text} loading="lazy" />
+  ) : (
+    <div className="chat-plain">{text}</div>
+  );
 }
 
 export function AgentTimeline({
@@ -47,9 +77,18 @@ export function AgentTimeline({
             {msg._turn_status === "failed" && (
               <span className="turn-failed">本轮失败</span>
             )}
-            <Suspense fallback={<div className="chat-plain">{text}</div>}>
-              <ChatMarkdown client={client} text={text ?? ""} />
-            </Suspense>
+            {msg._help_image ? (
+              <HelpMenuImage
+                key={msg._help_image}
+                client={client}
+                id={msg._help_image}
+                text={text ?? ""}
+              />
+            ) : (
+              <Suspense fallback={<div className="chat-plain">{text}</div>}>
+                <ChatMarkdown client={client} text={text ?? ""} />
+              </Suspense>
+            )}
             {"sendFailed" in msg && msg.sendFailed === true && (
               <small role="status">发送失败</small>
             )}

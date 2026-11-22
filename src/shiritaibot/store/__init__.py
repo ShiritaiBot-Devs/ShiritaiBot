@@ -283,7 +283,7 @@ class Store:
             try:
                 await self.db.execute("DELETE FROM messages WHERE session=?", (session,))
                 await self.db.execute(
-                    "DELETE FROM records WHERE kind IN ('tool_diff','artifact') AND scope=?",
+                    "DELETE FROM records WHERE kind IN ('tool_diff','artifact','help_image') AND scope=?",
                     (session,),
                 )
                 await self.db.execute(

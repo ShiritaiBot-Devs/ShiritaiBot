@@ -101,7 +101,8 @@ export interface ApiClient {
   ): Promise<Paginated<RecordMap[K]>>;
   stats(hours: number): Promise<Statistics>;
   exchangeRate(): Promise<ExchangeRate>;
-  commands(): Promise<CommandInfo[]>;
+  commands(session: string): Promise<CommandInfo[]>;
+  helpMenuImage(id: string): Promise<Blob>;
   history(session: string): Promise<HistoryMessage[]>;
   webChats(): Promise<WebChat[]>;
   updateWebChat(
@@ -258,6 +259,20 @@ export function createClient(getToken: () => string): ApiClient {
     return (await requestSnapshot<T>(path, method, body, revision)).data;
   }
 
+  async function requestBlob(path: string): Promise<Blob> {
+    let response: Response;
+    try {
+      response = await fetch("/api" + path, {
+        headers: { Authorization: "Bearer " + getToken() },
+      });
+    } catch {
+      throw new ApiError("无法连接后端服务，请确认进程仍在运行。", 0);
+    }
+    if (!response.ok)
+      throw new ApiError(messageFor(response.status, null), response.status);
+    return response.blob();
+  }
+
   return {
     health: () => request<Health>("/health"),
     restart: () => request("/restart", "POST"),
@@ -326,7 +341,10 @@ export function createClient(getToken: () => string): ApiClient {
       ),
     stats: (hours) => request<Statistics>("/stats?hours=" + hours),
     exchangeRate: () => request<ExchangeRate>("/exchange-rate"),
-    commands: () => request<CommandInfo[]>("/commands"),
+    commands: (session) =>
+      request<CommandInfo[]>("/commands?" + new URLSearchParams({ session })),
+    helpMenuImage: (id) =>
+      requestBlob("/help-images/" + encodeURIComponent(id)),
     webChats: () => request<WebChat[]>("/web-chats"),
     updateWebChat: (id, patch) =>
       request("/web-chats/" + encodeURIComponent(id), "PUT", patch),
@@ -395,20 +413,8 @@ export function createClient(getToken: () => string): ApiClient {
             page_size: String(pageSize),
           }),
       ),
-    memeImage: async (id) => {
-      let response: Response;
-      try {
-        response = await fetch(
-          "/api/memes/" + encodeURIComponent(id) + "/image",
-          { headers: { Authorization: "Bearer " + getToken() } },
-        );
-      } catch {
-        throw new ApiError("无法连接后端服务，请确认进程仍在运行。", 0);
-      }
-      if (!response.ok)
-        throw new ApiError(messageFor(response.status, null), response.status);
-      return response.blob();
-    },
+    memeImage: (id) =>
+      requestBlob("/memes/" + encodeURIComponent(id) + "/image"),
     uploadMeme: (file, category, description) =>
       request<MemeRecord>(
         "/memes?" + new URLSearchParams({ category, description }),

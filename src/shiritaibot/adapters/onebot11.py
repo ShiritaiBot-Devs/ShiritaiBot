@@ -736,6 +736,7 @@ class AdapterHub:
         approval_batch: str = "",
         observation: Observation | None = None,
         group_wake: str = "",
+        image: bytes | None = None,
     ) -> None:
         if decorate and self.hooks is not None:
             decorated = await self.hooks.decorate(session, text)
@@ -750,6 +751,7 @@ class AdapterHub:
             approval_batch=approval_batch,
             observation=observation,
             group_wake=group_wake,
+            image=image,
         )
         if self.hooks is not None:
             self.hooks.sent(session, text)
@@ -762,6 +764,7 @@ class AdapterHub:
         approval_batch: str = "",
         observation: Observation | None = None,
         group_wake: str = "",
+        image: bytes | None = None,
     ) -> None:
         injector = self.memes.injector if self.memes is not None else None
         if session.startswith(("web:", "background:")):
@@ -776,15 +779,7 @@ class AdapterHub:
             text = injector.plain(text)
             injector = None
         # <meme> markers become their own sticker messages, splitting the text around them.
-        pieces = injector.split(text) if injector is not None else [text]
         cfg = self.config.value
-        fold = (
-            not official
-            and not feishu
-            and cfg.onebot_forward_long_messages
-            and sum(len(piece) for piece in pieces if isinstance(piece, str))
-            > cfg.onebot_forward_threshold
-        )
         expires = now().timestamp() + 86400
         delivery = {
             "status": "pending",
@@ -816,6 +811,17 @@ class AdapterHub:
                     observation.rows.discard(key)
                 raise
 
+        if image is not None:
+            await put({"text": text, "image": base64.b64encode(image).decode("ascii")})
+            return
+        pieces = injector.split(text) if injector is not None else [text]
+        fold = (
+            not official
+            and not feishu
+            and cfg.onebot_forward_long_messages
+            and sum(len(piece) for piece in pieces if isinstance(piece, str))
+            > cfg.onebot_forward_threshold
+        )
         rows = []
         chunk = 600 if official else 3500
         for piece in pieces:
@@ -833,6 +839,8 @@ class AdapterHub:
 
     async def outgoing(self, row: dict) -> list[dict] | None:
         """OneBot message segments for an outbox row; None when its sticker is gone."""
+        if image := row.get("image"):
+            return [{"type": "image", "data": {"file": "base64://" + image}}]
         if not row.get("meme"):
             return [{"type": "text", "data": {"text": row["text"]}}]
         data = await self.memes.core.image(row["meme"]) if self.memes is not None else None
@@ -973,6 +981,7 @@ class AdapterHub:
             bot.log.warning(f"发送未确认（{reason}），为避免重复不再重试", where)
         else:
             row.update(status="sent", receipt=receipt)
+            row.pop("image", None)
             await self.store.put("outbox", row["id"], row, row["scope"])
             if row.get("group_wake") and self.heartflow:
                 self.heartflow.passive_sent(row["scope"], row["group_wake"], row["text"])
@@ -1014,7 +1023,10 @@ class AdapterHub:
         row["status"] = "uncertain"
         await self.store.put("outbox", row["id"], row, row["scope"])
         try:
-            receipt = await bot.send_text(kind, target, row["text"], message_id, seq["sequence"])
+            if image := row.get("image"):
+                receipt = await bot.send_image(kind, target, image, message_id, seq["sequence"])
+            else:
+                receipt = await bot.send_text(kind, target, row["text"], message_id, seq["sequence"])
         except PublicError as exc:
             if not isinstance(exc, QQOfficialSendError) or not exc.uncertain:
                 row["status"] = "failed"
@@ -1024,6 +1036,7 @@ class AdapterHub:
             bot.log.warning(f"QQ 官方回复未确认（{type(exc).__name__}）", row["scope"])
         else:
             row.update(status="sent", receipt=receipt)
+            row.pop("image", None)
             await self.store.put("outbox", row["id"], row, row["scope"])
             await self.record_sent_group(
                 bot.self_id, row, kind, enabled=self.config.value.group_context.enabled
@@ -1072,7 +1085,10 @@ class AdapterHub:
             await self.store.put("outbox", row["id"], row, row["scope"])
             return
         try:
-            receipt = await bot.send_text(kind, target, row["text"], row["id"])
+            if image := row.get("image"):
+                receipt = await bot.send_image(kind, target, base64.b64decode(image), row["id"])
+            else:
+                receipt = await bot.send_text(kind, target, row["text"], row["id"])
         except FeishuSendError as exc:
             if not exc.uncertain:
                 row["status"] = "pending" if exc.code == "not_connected" else "failed"
@@ -1082,6 +1098,7 @@ class AdapterHub:
             bot.log.warning(f"飞书发送未确认（{type(exc).__name__}）。")
         else:
             row.update(status="sent", receipt=receipt)
+            row.pop("image", None)
             await self.store.put("outbox", row["id"], row, row["scope"])
             await self.record_sent_group(
                 bot.self_id, row, kind, enabled=bot.config.feishu_group_context

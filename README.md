@@ -90,6 +90,9 @@ shiritaibot token             # 一键安装（macOS / Linux）
 
 两种部署都会构建 WebUI、同步 Python 依赖，并在重启前用新版代码检查当前配置；配置不兼容时取消重启并尝试恢复旧版，具体原因见更新日志。
 
+## 消息发送
+
+在 WebUI「设置 → 通用设定 → 消息发送」可以配置 OneBot 长消息折叠，以及 `/help` 的文字、亮色图片或暗色图片样式。Docker 镜像包含中文字体，Debian/Ubuntu 裸机可安装 `fonts-noto-cjk`。飞书发送图片需要应用开通 `im:resource` 权限。
 
 ## 许可证
 
