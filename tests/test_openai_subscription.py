@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
+import pytest
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from fastapi.testclient import TestClient
@@ -27,7 +28,12 @@ from shiritaibot.llm.subscription import (
 from shiritaibot.web import chatgpt_login_helper, create_app
 
 
-def test_subscription_web_flow_rotates_credentials_and_tracks_inference(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "content_type", ["text/event-stream", None], ids=["sse-header", "no-header"]
+)
+def test_subscription_web_flow_rotates_credentials_and_tracks_inference(
+    tmp_path, monkeypatch, content_type
+):
     monkeypatch.setattr(RuntimeEnvironment, "prepare", AsyncMock())
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     public = key.public_key().public_numbers()
@@ -40,7 +46,7 @@ def test_subscription_web_flow_rotates_credentials_and_tracks_inference(tmp_path
     params = {}
     refreshes = 0
     calls = 0
-    limit = False
+    event_type = "response.completed"
 
     def make_id_token():
         header = b64url(canonical({"alg": "RS256", "kid": "fixture"}).encode())
@@ -110,24 +116,22 @@ def test_subscription_web_flow_rotates_credentials_and_tracks_inference(tmp_path
             )
         calls += 1
         assert str(request.url) == RESOURCE + "/responses"
+        assert request.headers["accept"] == "text/event-stream"
         assert b'"stream":true' in request.content and b'"store":false' in request.content
         assert (
             b'"max_output_tokens"' not in request.content
             and b'"temperature"' not in request.content
         )
-        event = (
-            {"type": "response.failed", "response": {"error": {"code": LIMIT_EXCEEDED}}}
-            if limit
-            else {
-                "type": "response.completed",
-                "response": {
-                    "output": [{"type": "message", "content": [{"text": "OK"}]}],
-                    "usage": {"input_tokens": 11, "output_tokens": 2},
-                },
-            }
-        )
+        response = {
+            "output": [{"type": "message", "content": [{"text": "OK"}]}],
+            "usage": {"input_tokens": 11, "output_tokens": 2},
+        }
+        if event_type == "response.failed":
+            response = {"error": {"code": LIMIT_EXCEEDED}}
+        event = {"type": event_type, "response": response}
+        headers = {"content-type": content_type} if content_type else {}
         return httpx.Response(
-            200, headers={"content-type": "text/event-stream"}, text=f"data: {canonical(event)}\n\n"
+            200, headers=headers, content=f"data: {canonical(event)}\n\n".encode()
         )
 
     monkeypatch.setattr(
@@ -195,14 +199,18 @@ def test_subscription_web_flow_rotates_credentials_and_tracks_inference(tmp_path
             "extra_body": {"stream": False, "store": True, "temperature": 1},
         }
         payload = {"provider": provider, "model": model}
-        assert client.post("/api/models/test", json=payload).json()["text"] == "OK"
-        limit = True
+        result = client.post("/api/models/test", json=payload)
+        assert result.status_code == 200, result.text
+        assert result.json()["text"] == "OK"
+        event_type = "response.incomplete"
+        assert client.post("/api/models/test", json=payload).status_code == 400
+        event_type = "response.failed"
         assert client.post("/api/models/test", json=payload).status_code == 400
         assert client.post("/api/models/test", json=payload).status_code == 400
         status = client.get(path).json()
         assert status["limit_reached"]
-        assert status["usage"]["today"] == {"calls": 2, "input_tokens": 11, "output_tokens": 2}
-        assert calls == 2
+        assert status["usage"]["today"] == {"calls": 3, "input_tokens": 11, "output_tokens": 2}
+        assert calls == 3
 
         assert client.delete(path).json() == {"revoked": True}
         assert client.get(path).json()["status"] == "disconnected"

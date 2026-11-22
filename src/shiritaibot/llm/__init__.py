@@ -382,7 +382,7 @@ def response_error_code(response: httpx.Response) -> str | None:
 def subscription_body(body: dict, model: str) -> dict:
     for field in UNSUPPORTED_FIELDS:
         body.pop(field, None)
-    body.update(model=model, store=False, stream=True)
+    body["model"] = model
     if body.get("tools"):
         functions = []
         supported = []
@@ -448,11 +448,15 @@ class ProviderManager:
                     async with client.stream(
                         method, url, timeout=provider.timeout, **kwargs
                     ) as response:
+                        content_type = response.headers.get("content-type", "").strip().lower()
+                        # Subscription requests always use SSE, including when the header is absent.
                         if (
                             stream_protocol
                             and response.is_success
-                            and "text/event-stream"
-                            in response.headers.get("content-type", "").lower()
+                            and (
+                                "text/event-stream" in content_type
+                                or (stream_protocol == PROTOCOL and not content_type)
+                            )
                         ):
                             data, timing = await collect_stream(stream_protocol, response, started)
                             return httpx.Response(
@@ -499,8 +503,8 @@ class ProviderManager:
                 provider,
                 "POST",
                 RESOURCE + path,
-                json=body,
-                headers=headers,
+                json={**body, "store": False, "stream": True},
+                headers={**headers, "Accept": "text/event-stream"},
                 stream_protocol=PROTOCOL,
             )
         base = provider.base_url.rstrip("/")
