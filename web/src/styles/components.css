@@ -747,6 +747,30 @@
   overflow-wrap: anywhere;
 }
 
+button.subscription-sign-in {
+  min-height: 36px;
+  gap: 9px;
+  padding: 0 15px;
+  border: 1px solid #000;
+  border-radius: 999px;
+  background: #000;
+  color: #fff;
+  font:
+    400 0.875rem/1.25 Arial,
+    Helvetica,
+    sans-serif;
+}
+
+button.subscription-sign-in:hover:not(:disabled) {
+  border-color: #242424;
+  background: #242424;
+  color: #fff;
+}
+
+.subscription-sign-in img {
+  flex: none;
+}
+
 .subscription-auth {
   display: grid;
   gap: 10px;

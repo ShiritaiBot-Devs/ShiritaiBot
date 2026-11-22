@@ -62,6 +62,7 @@ export function SubscriptionPanel({
     refetchInterval: 30000,
   });
   const details = query.data?.saved ? query.data : null;
+  const showSignIn = details && details.status !== "connected" && !expiresIn;
 
   function run(work: () => Promise<unknown>, success = "") {
     setWorking(true);
@@ -110,11 +111,7 @@ export function SubscriptionPanel({
               <button
                 type="button"
                 data-oai-siwc-button=""
-                className={
-                  details.status === "connected" || expiresIn
-                    ? undefined
-                    : "primary"
-                }
+                className={showSignIn ? "subscription-sign-in" : undefined}
                 disabled={working}
                 onClick={() =>
                   run(async () => {
@@ -126,11 +123,22 @@ export function SubscriptionPanel({
                   })
                 }
               >
-                {expiresIn
-                  ? "重新下载授权助手"
-                  : details.status === "connected"
-                    ? "重新连接"
-                    : "Continue with ChatGPT"}
+                {showSignIn ? (
+                  <>
+                    {/* Mark from the OpenAI Sign in with ChatGPT website guide. */}
+                    <img
+                      src="/chatgpt-sign-in-white.svg"
+                      alt=""
+                      width={16}
+                      height={16}
+                    />
+                    Continue with ChatGPT
+                  </>
+                ) : expiresIn ? (
+                  "重新下载授权助手"
+                ) : (
+                  "重新连接"
+                )}
               </button>
               {details.status === "connected" && (
                 <button
