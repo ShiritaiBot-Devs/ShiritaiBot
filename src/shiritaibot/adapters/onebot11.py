@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from websockets.asyncio.client import connect
+from websockets.exceptions import ConnectionClosed, WebSocketException
 
 from shiritaibot.adapters.feishu import Feishu
 from shiritaibot.adapters.feishu_transport import FeishuSendError
@@ -164,11 +165,46 @@ class OneBot:
             await self.ws.send(canonical({"action": action, "params": params, "echo": key}))
             async with asyncio.timeout(30):
                 result = await future
-            if result.get("status") != "ok" or result.get("retcode", 0) != 0:
-                raise OneBotActionError(action, result)
-            return result.get("data") or {}
+            return self.action_data(action, result)
         finally:
             self.pending.pop(key, None)
+
+    @staticmethod
+    def action_data(action: str, result: dict) -> Any:
+        if result.get("status") != "ok" or result.get("retcode", 0) != 0:
+            raise OneBotActionError(action, result)
+        return result.get("data") or {}
+
+    async def get_file(self, file_id: str, max_bytes: int) -> dict:
+        # NapCat may return the whole file as base64 in one response. A separate
+        # connection keeps large replies away from the main 1 MiB event socket.
+        token = await self.vault.resolve(self.config.token)
+        key = uid()
+        message = {"action": "get_file", "params": {"file_id": file_id}, "echo": key}
+        try:
+            async with asyncio.timeout(60):
+                async with connect(
+                    self.config.url,
+                    additional_headers={"Authorization": f"Bearer {token}"} if token else {},
+                    max_size=4 * ((max_bytes + 2) // 3) + 65536,
+                    max_queue=1,
+                ) as ws:
+                    await ws.send(canonical(message))
+                    while True:
+                        result = json.loads(await ws.recv())
+                        if result.get("echo") == key:
+                            data = self.action_data("get_file", result)
+                            if isinstance(data, dict):
+                                return data
+                            raise PublicError("OneBot 文件响应格式无效")
+        except TimeoutError:
+            raise PublicError("OneBot 下载文件超时") from None
+        except ConnectionClosed as exc:
+            if exc.sent and exc.sent.code == 1009:
+                raise PublicError("OneBot 文件响应超过大小上限") from None
+            raise PublicError("OneBot 文件连接已断开") from None
+        except (WebSocketException, OSError, ValueError):
+            raise PublicError("OneBot 文件接口不可用") from None
 
     async def friend_ids(self) -> frozenset[str]:
         """协议端好友列表，缓存 300 秒；拉取失败时沿用旧缓存。"""
