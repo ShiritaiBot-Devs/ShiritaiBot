@@ -1,0 +1,16 @@
+{
+  "runs": {
+    "empty": "Delegate a task in a chat; after approval, it shows up here.",
+    "stop": "Stop",
+    "stopRequested": "Stop requested.",
+    "waiting": "Waiting for a reply: ",
+    "failed": "Couldn't load tasks: {error}",
+    "title": "Task history"
+  },
+  "detect": "Detect CLIs",
+  "detected": "CLIs detected.",
+  "skillsFailed": "Couldn't load Skills: {error}",
+  "toolsFailed": "Couldn't load tools: {error}",
+  "empty": "Add a ShiritaiBot built-in subagent or an external CLI instance.",
+  "instances": "Subagent instances"
+}

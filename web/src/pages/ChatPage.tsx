@@ -8,6 +8,7 @@ import { EmptyState } from "../components/EmptyState";
 import { SessionOptions } from "../components/SessionPicker";
 import { useChatOutbox } from "../hooks/useChatOutbox";
 import type { PageProps } from "./common";
+import i18n from "../i18n";
 
 export function ChatPage({
   client,
@@ -45,7 +46,7 @@ export function ChatPage({
     <>
       <div className="inline chat-toolbar">
         <select
-          aria-label="会话"
+          aria-label={i18n.t("chat:page.session")}
           value={session}
           onChange={(event) => selectSession(event.target.value)}
         >
@@ -56,17 +57,22 @@ export function ChatPage({
           onClick={() => selectSession("web:" + Date.now())}
         >
           <Plus size={14} />
-          新会话
+          {i18n.t("chat:page.new")}
         </button>
       </div>
-      <section className="panel chat-panel" aria-label="会话记录">
+      <section
+        className="panel chat-panel"
+        aria-label={i18n.t("chat:page.history")}
+      >
         {history.error && (
           <QueryErrorNotice
-            message={`读取会话失败：${history.error.message}`}
+            message={i18n.t("chat:page.historyFailed", {
+              error: history.error.message,
+            })}
           />
         )}
         {!history.data?.length && !pending.length && (
-          <EmptyState text="从一句话开始。请先在「模型与服务」里配置模型路由。" />
+          <EmptyState text={i18n.t("chat:page.empty")} />
         )}
         <AgentTimeline
           client={client}
@@ -83,9 +89,7 @@ export function ChatPage({
           assistantName={assistantName}
         />
       ) : (
-        <p className="muted">
-          这里只发送 WebUI 会话。其他会话请返回原平台对话。
-        </p>
+        <p className="muted">{i18n.t("chat:webOnly")}</p>
       )}
     </>
   );

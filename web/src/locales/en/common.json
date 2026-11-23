@@ -7,5 +7,73 @@
     "unauthorized": "The admin token is invalid or has expired. Please sign in again.",
     "requestFailed": "Request failed (HTTP {status}). Please check the backend service.",
     "offline": "Can't reach the backend service. Make sure the process is still running."
+  },
+  "done": "Done.",
+  "listSeparator": "; ",
+  "empty": "Nothing here yet",
+  "loading": "Loading",
+  "showDetails": "Show details",
+  "onePerLine": "One value per line",
+  "unknownProvider": "Unknown provider",
+  "unknownModel": "Unknown model",
+  "toast": {
+    "dismiss": "Dismiss notification"
+  },
+  "pagination": {
+    "region": "{label} pages",
+    "loading": "Loading {label}",
+    "summary_one": "{count} item · Page {current} of {pages}",
+    "summary_other": "{count} items · Page {current} of {pages}",
+    "previous": "Previous",
+    "previousLabel": "Previous page of {label}",
+    "next": "Next",
+    "nextLabel": "Next page of {label}"
+  },
+  "saveBar": {
+    "region": "Unsaved settings",
+    "message": "You have unsaved changes",
+    "discard": "Discard",
+    "save": "Save and apply"
+  },
+  "secret": {
+    "help": "Stored encrypted. A saved key is never shown again.",
+    "label": "Secret",
+    "saved": "Saved · type a new value to replace it",
+    "empty": "Enter the key",
+    "hide": "Hide key",
+    "show": "Show key",
+    "clear": "Clear"
+  },
+  "json": {
+    "objectRequired": "Enter a JSON object, for example {example}",
+    "invalid": "Invalid JSON. Check the quotes, commas, and brackets."
+  },
+  "field": {
+    "slider": "{label} slider"
+  },
+  "meme": {
+    "unavailable": "Sticker unavailable",
+    "alt": "Sticker {id}",
+    "label": "Sticker"
+  },
+  "image": "Image",
+  "modelTest": {
+    "done": "Test request finished.",
+    "testing": "Testing…",
+    "run": "Test this configuration"
+  },
+  "cancel": "Cancel",
+  "close": "Close",
+  "enumSeparator": ", ",
+  "collection": {
+    "list": "{title} list",
+    "remove": "Remove",
+    "new": "New instance",
+    "unnamed": "Unnamed",
+    "add": "Add"
+  },
+  "sessionPicker": {
+    "reset": "Restore defaults",
+    "session": "Session"
   }
 }

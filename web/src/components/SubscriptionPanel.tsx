@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Trans } from "react-i18next";
 import type { ApiClient } from "../api/client";
 import type { SubscriptionUsage } from "../api/types";
 import type { Action } from "../pages/common";
 import { QueryErrorNotice } from "./QueryErrorNotice";
 import { formatNumber } from "../lib/utils";
+import i18n from "../i18n";
 
 const HELPER_NAME = "shiritaibot-chatgpt-login.py";
 const USAGE_URL = "https://chatgpt.com/settings/usage";
@@ -20,10 +22,17 @@ function UsagePeriod({
   return (
     <div className="metric">
       <span>{label}</span>
-      <strong>{number.format(usage.calls)} 次请求</strong>
+      <strong>
+        {i18n.t("subscription:calls", {
+          count: usage.calls,
+          calls: number.format(usage.calls),
+        })}
+      </strong>
       <small>
-        输入 {number.format(usage.input_tokens)} · 输出{" "}
-        {number.format(usage.output_tokens)} Token
+        {i18n.t("subscription:tokens", {
+          input: number.format(usage.input_tokens),
+          output: number.format(usage.output_tokens),
+        })}
       </small>
     </div>
   );
@@ -77,36 +86,37 @@ export function SubscriptionPanel({
   }
 
   return (
-    <section className="model-section" aria-label="ChatGPT 套餐连接与用量">
+    <section
+      className="model-section"
+      aria-label={i18n.t("subscription:region")}
+    >
       <div className="model-card">
         <div className="panel-head">
           <div>
-            <h3>ChatGPT 套餐</h3>
+            <h3>{i18n.t("subscription:title")}</h3>
             {details && (
               <p className="muted" role="status">
                 {details.status === "connected"
-                  ? "已连接，使用 ChatGPT 套餐"
+                  ? i18n.t("subscription:connected")
                   : details.status === "reauthorize"
-                    ? "授权已失效，请重新连接"
-                    : "未连接"}
+                    ? i18n.t("subscription:expired")
+                    : i18n.t("subscription:disconnected")}
                 {details.account && " · " + details.account}
               </p>
             )}
           </div>
           <a href={USAGE_URL} target="_blank" rel="noreferrer">
-            查看 ChatGPT 用量
+            {i18n.t("subscription:viewUsage")}
           </a>
         </div>
         {query.isError && <QueryErrorNotice message={query.error.message} />}
         {query.data?.saved === false && (
-          <p className="muted">保存配置后即可连接部署者的 ChatGPT 账号。</p>
+          <p className="muted">{i18n.t("subscription:saveFirst")}</p>
         )}
         {details && (
           <>
             {details.limit_reached && (
-              <p role="status">
-                最近一次调用达到使用上限，请在 ChatGPT 查看适用的限额。
-              </p>
+              <p role="status">{i18n.t("subscription:limitHit")}</p>
             )}
             <div className="inline">
               <button
@@ -136,9 +146,9 @@ export function SubscriptionPanel({
                     Continue with ChatGPT
                   </>
                 ) : expiresIn ? (
-                  "重新下载授权助手"
+                  i18n.t("subscription:redownload")
                 ) : (
-                  "重新连接"
+                  i18n.t("subscription:reconnect")
                 )}
               </button>
               {details.status === "connected" && (
@@ -153,18 +163,15 @@ export function SubscriptionPanel({
                       setCallback("");
                       setRevokeUnconfirmed(!revoked);
                       onConnectionChange();
-                    }, "已断开 ChatGPT 账号")
+                    }, i18n.t("subscription:disconnectedDone"))
                   }
                 >
-                  断开连接
+                  {i18n.t("subscription:disconnect")}
                 </button>
               )}
             </div>
             {revokeUnconfirmed && (
-              <p role="status">
-                已断开本实例。远端撤销未确认，可在 ChatGPT
-                用量设置中移除应用授权。
-              </p>
+              <p role="status">{i18n.t("subscription:revokeHint")}</p>
             )}
             {!!expiresIn && (
               <form
@@ -178,18 +185,22 @@ export function SubscriptionPanel({
                     setExpiresIn(0);
                     setRevokeUnconfirmed(false);
                     onConnectionChange();
-                  }, "已授权使用 ChatGPT 套餐");
+                  }, i18n.t("subscription:authorized"));
                 }}
               >
                 <p>
-                  在打开 WebUI 的电脑运行下载的授权助手。Windows 用{" "}
-                  <code>py {HELPER_NAME}</code>， macOS / Linux 用{" "}
-                  <code>python3 {HELPER_NAME}</code>。完成 ChatGPT
-                  登录后，把助手页面显示的回调地址粘贴到这里。授权请求在{" "}
-                  {Math.ceil(expiresIn / 60)} 分钟后过期。
+                  <Trans
+                    ns="subscription"
+                    i18nKey="helperSteps"
+                    values={{
+                      helper: HELPER_NAME,
+                      minutes: Math.ceil(expiresIn / 60),
+                    }}
+                    components={{ code: <code /> }}
+                  />
                 </p>
                 <label>
-                  一次性回调地址
+                  {i18n.t("subscription:callbackUrl")}
                   <input
                     autoComplete="off"
                     spellCheck={false}
@@ -200,14 +211,20 @@ export function SubscriptionPanel({
                   />
                 </label>
                 <button type="submit" disabled={working || !callback.trim()}>
-                  完成授权
+                  {i18n.t("subscription:finish")}
                 </button>
               </form>
             )}
-            <h3>本实例用量</h3>
+            <h3>{i18n.t("subscription:usage.title")}</h3>
             <div className="subscription-usage">
-              <UsagePeriod label="今日" usage={details.usage.today} />
-              <UsagePeriod label="近 7 天" usage={details.usage.last_7_days} />
+              <UsagePeriod
+                label={i18n.t("subscription:usage.today")}
+                usage={details.usage.today}
+              />
+              <UsagePeriod
+                label={i18n.t("subscription:usage.last7")}
+                usage={details.usage.last_7_days}
+              />
             </div>
           </>
         )}

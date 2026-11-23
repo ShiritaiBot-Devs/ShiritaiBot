@@ -4,6 +4,7 @@ import type { ApiClient } from "../api/client";
 import type { HistoryMessage } from "../api/types";
 import { buildTimeline } from "../lib/timeline";
 import { ToolGroup } from "./ToolGroup";
+import i18n from "../i18n";
 
 const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 
@@ -71,11 +72,15 @@ export function AgentTimeline({
           >
             {!user && msg._elapsed_seconds !== undefined && (
               <div className="turn-elapsed">
-                用时 {elapsed(msg._elapsed_seconds)}
+                {i18n.t("chat:timeline.elapsed", {
+                  time: elapsed(msg._elapsed_seconds),
+                })}
               </div>
             )}
             {msg._turn_status === "failed" && (
-              <span className="turn-failed">本轮失败</span>
+              <span className="turn-failed">
+                {i18n.t("chat:timeline.failed")}
+              </span>
             )}
             {msg._help_image ? (
               <HelpMenuImage
@@ -90,7 +95,7 @@ export function AgentTimeline({
               </Suspense>
             )}
             {"sendFailed" in msg && msg.sendFailed === true && (
-              <small role="status">发送失败</small>
+              <small role="status">{i18n.t("chat:timeline.sendFailed")}</small>
             )}
           </div>
         );

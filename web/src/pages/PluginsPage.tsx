@@ -8,11 +8,12 @@ import { PluginSettingsForm } from "../components/PluginSettingsForm";
 import { CONFIG_SNAPSHOT_KEY } from "../hooks/useConfigDraft";
 import type { PluginInfo } from "../api/types";
 import type { ConfigPageProps } from "./common";
+import i18n, { tx } from "../i18n";
 
 const statuses = {
-  loaded: "运行中",
-  disabled: "未启用",
-  error: "加载失败",
+  loaded: "plugins:status.loaded",
+  disabled: "plugins:status.disabled",
+  error: "plugins:status.error",
 };
 
 const platforms: Record<string, string> = { qq: "QQ", web: "WebUI" };
@@ -26,19 +27,23 @@ function PluginCapabilities({ metadata }: { metadata: PluginInfo }) {
     <div className="plugin-capabilities">
       {commands.length > 0 && (
         <details>
-          <summary>指令（{commands.length}）</summary>
+          <summary>
+            {i18n.t("plugins:commands", { count: commands.length })}
+          </summary>
           {commands.map((item) => (
             <div key={item.command} className="list-row">
               <code>{item.command}</code>
               <span className="muted">{item.description}</span>
-              {item.owner_only && <span className="tag">仅主人</span>}
+              {item.owner_only && (
+                <span className="tag">{i18n.t("plugins:ownerOnly")}</span>
+              )}
             </div>
           ))}
         </details>
       )}
       {tools.length > 0 && (
         <details>
-          <summary>工具（{tools.length}）</summary>
+          <summary>{i18n.t("plugins:tools", { count: tools.length })}</summary>
           {tools.map((item) => (
             <div key={item.name} className="list-row">
               <code>{item.name}</code>
@@ -49,13 +54,15 @@ function PluginCapabilities({ metadata }: { metadata: PluginInfo }) {
       )}
       {hooks.length > 0 && (
         <details>
-          <summary>Hook（{hooks.length}）</summary>
+          <summary>{i18n.t("plugins:hooks", { count: hooks.length })}</summary>
           {hooks.map((item) => (
             <div key={`${item.event}:${item.handler}`} className="list-row">
               <code>{item.event}</code>
               <span className="muted">{item.handler}</span>
               {item.priority !== 0 && (
-                <span className="tag">优先级 {item.priority}</span>
+                <span className="tag">
+                  {i18n.t("plugins:priority", { priority: item.priority })}
+                </span>
               )}
             </div>
           ))}
@@ -136,7 +143,7 @@ export function PluginsPage({
   return (
     <section className="panel">
       <div className="panel-head">
-        <h2>插件管理</h2>
+        <h2>{i18n.t("plugins:title")}</h2>
         <div className="actions">
           <button
             type="button"
@@ -144,12 +151,12 @@ export function PluginsPage({
             onClick={() =>
               void mutate(
                 () => client.reloadPlugins(),
-                "已重新扫描并重载插件，请查看各插件状态",
+                i18n.t("plugins:reloaded"),
               )
             }
           >
             <RefreshCw size={14} />
-            重载插件
+            {i18n.t("plugins:reload")}
           </button>
           <button
             type="button"
@@ -157,7 +164,7 @@ export function PluginsPage({
             onClick={() => setInstalling(!installing)}
           >
             <Plus size={14} />
-            安装插件
+            {i18n.t("plugins:install.title")}
           </button>
         </div>
       </div>
@@ -171,41 +178,39 @@ export function PluginsPage({
                 source === "github"
                   ? client.installPluginGithub(id, url)
                   : client.installPluginZip(id, file!),
-              "插件已安装，请配置并启用",
+              i18n.t("plugins:installed"),
             );
           }}
         >
-          <p className="muted">
-            插件与主程序同进程运行，只安装信任的插件。新插件默认停用，配置后启用并保存。
-          </p>
+          <p className="muted">{i18n.t("plugins:install.hint")}</p>
           <label className="field">
-            插件标识
+            {i18n.t("plugins:install.id")}
             <input
-              aria-label="安装插件标识"
+              aria-label={i18n.t("plugins:install.idLabel")}
               value={id}
               required
               pattern="[a-z0-9_]{1,64}"
-              placeholder="例如 hello_world"
+              placeholder={i18n.t("plugins:install.idPlaceholder")}
               onChange={(event) => setId(event.target.value)}
             />
           </label>
           <label className="field">
-            安装来源
+            {i18n.t("plugins:install.source")}
             <select
-              aria-label="安装来源"
+              aria-label={i18n.t("plugins:install.source")}
               value={source}
               onChange={(event) => setSource(event.target.value)}
             >
-              <option value="zip">上传 ZIP 插件包</option>
-              <option value="github">公开 GitHub 仓库</option>
+              <option value="zip">{i18n.t("plugins:install.zip")}</option>
+              <option value="github">{i18n.t("plugins:install.github")}</option>
             </select>
           </label>
           {source === "github" ? (
             <label className="field">
-              GitHub 仓库地址
+              {i18n.t("plugins:install.repo")}
               <input
                 key="github"
-                aria-label="GitHub 仓库地址"
+                aria-label={i18n.t("plugins:install.repo")}
                 type="url"
                 required
                 value={url}
@@ -215,10 +220,10 @@ export function PluginsPage({
             </label>
           ) : (
             <label className="field">
-              ZIP 插件包（最大 20 MiB）
+              {i18n.t("plugins:install.zipFile")}
               <input
                 key="zip"
-                aria-label="ZIP 插件包"
+                aria-label={i18n.t("plugins:install.zipLabel")}
                 type="file"
                 accept=".zip"
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}
@@ -230,14 +235,14 @@ export function PluginsPage({
               type="submit"
               disabled={working || !id || (source === "zip" ? !file : !url)}
             >
-              安装并扫描
+              {i18n.t("plugins:install.submit")}
             </button>
             <button
               type="button"
               disabled={working}
               onClick={() => setInstalling(false)}
             >
-              取消安装
+              {i18n.t("plugins:install.cancel")}
             </button>
           </div>
         </form>
@@ -246,13 +251,11 @@ export function PluginsPage({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="确认移除插件"
+          aria-label={i18n.t("plugins:remove.dialog")}
           className="config-editor"
         >
-          <h3>确认移除 {removing}？</h3>
-          <p>
-            将停止插件、撤销工具和通知通道，删除插件代码目录及配置。插件数据和历史记录会保留。
-          </p>
+          <h3>{i18n.t("plugins:remove.title", { name: removing })}</h3>
+          <p>{i18n.t("plugins:remove.hint")}</p>
           <div className="actions">
             <button
               type="button"
@@ -261,31 +264,34 @@ export function PluginsPage({
               onClick={() =>
                 void mutate(
                   () => client.removePlugin(removing),
-                  "插件已移除，插件列表已更新",
+                  i18n.t("plugins:removed"),
                 )
               }
             >
-              确认移除
+              {i18n.t("plugins:remove.confirm")}
             </button>
             <button
               type="button"
               disabled={working}
               onClick={() => setRemoving(null)}
             >
-              取消
+              {i18n.t("plugins:cancel")}
             </button>
           </div>
         </div>
       )}
       {discovery.isPending ? (
-        <LoadingBar label="正在扫描插件目录…" />
+        <LoadingBar label={i18n.t("plugins:scanning")} />
       ) : discovery.isError ? (
         <p role="alert">{discovery.error.message}</p>
       ) : !rows.length ? (
-        <EmptyState text="尚未发现插件。可以上传 ZIP、从 GitHub 安装，或放入插件目录后点击重载插件。" />
+        <EmptyState text={i18n.t("plugins:empty")} />
       ) : (
         <div className="config-workspace">
-          <section className="config-sidebar" aria-label="插件列表">
+          <section
+            className="config-sidebar"
+            aria-label={i18n.t("plugins:list")}
+          >
             {rows.map((item) => (
               <button
                 type="button"
@@ -304,7 +310,7 @@ export function PluginsPage({
                     {item.version
                       ? `v${item.version.replace(/^v/, "")} · `
                       : ""}
-                    {statuses[item.status]}
+                    {tx(statuses[item.status])}
                     {item.short_description
                       ? ` · ${item.short_description}`
                       : ` · ${item.id}`}
@@ -328,9 +334,9 @@ export function PluginsPage({
                       {metadata.api === 1 && (
                         <span
                           className="tag beta"
-                          title="使用 plugin.toml 的旧版插件接口"
+                          title={i18n.t("plugins:legacyHint")}
                         >
-                          旧版 API
+                          {i18n.t("plugins:legacy")}
                         </span>
                       )}
                     </h2>
@@ -343,19 +349,30 @@ export function PluginsPage({
                     onClick={() => setRemoving(plugin.id)}
                   >
                     <Trash2 size={14} />
-                    移除
+                    {i18n.t("plugins:remove.button")}
                   </button>
                 </div>
                 <p className="muted plugin-meta">
-                  插件标识：{plugin.id} · {statuses[metadata.status]}
-                  {metadata.author && <> · 作者：{metadata.author}</>}
+                  {i18n.t("plugins:meta.id", { id: plugin.id })} ·{" "}
+                  {tx(statuses[metadata.status])}
+                  {metadata.author && (
+                    <>
+                      {" "}
+                      ·{" "}
+                      {i18n.t("plugins:meta.author", {
+                        author: metadata.author,
+                      })}
+                    </>
+                  )}
                   {!!metadata.support_platforms?.length && (
                     <>
                       {" "}
-                      · 平台：
-                      {metadata.support_platforms
-                        .map((item) => platforms[item] ?? item)
-                        .join("、")}
+                      ·{" "}
+                      {i18n.t("plugins:meta.platforms", {
+                        platforms: metadata.support_platforms
+                          .map((item) => platforms[item] ?? item)
+                          .join(i18n.t("common:enumSeparator")),
+                      })}
                     </>
                   )}
                   {/^https?:\/\//i.test(metadata.repo ?? "") && (
@@ -363,7 +380,7 @@ export function PluginsPage({
                       {" "}
                       ·{" "}
                       <a href={metadata.repo} target="_blank" rel="noreferrer">
-                        仓库
+                        {i18n.t("plugins:repo")}
                       </a>
                     </>
                   )}
@@ -373,21 +390,21 @@ export function PluginsPage({
                   <p role="alert">
                     {metadata.error}
                     {metadata.status === "error" && metadata.enabled
-                      ? "；若此前已运行，旧实例会继续保留。"
+                      ? i18n.t("plugins:keepOld")
                       : ""}
                   </p>
                 )}
                 <Field
                   spec={{
                     key: "enabled",
-                    label: "启用插件",
+                    label: i18n.t("plugins:enable.label"),
                     kind: "boolean",
-                    help: "保存后加载插件，注册其工具和通知通道。",
+                    help: i18n.t("plugins:enable.help"),
                   }}
                   value={plugin.enabled}
                   onChange={(enabled) => update({ enabled })}
                 />
-                <h3>插件设置</h3>
+                <h3>{i18n.t("plugins:settings.title")}</h3>
                 <PluginSettingsForm
                   key={plugin.id}
                   plugin={plugin}
@@ -402,7 +419,7 @@ export function PluginsPage({
                       update({ settings: { ...metadata.defaults } })
                     }
                   >
-                    填入配置模板
+                    {i18n.t("plugins:settings.fillTemplate")}
                   </button>
                   <button
                     type="button"
@@ -410,17 +427,15 @@ export function PluginsPage({
                     onClick={() =>
                       void mutate(
                         () => client.reloadPlugin(plugin.id),
-                        "插件已重载",
+                        i18n.t("plugins:reloadedOne"),
                       )
                     }
                   >
                     <RefreshCw size={14} />
-                    重载当前插件
+                    {i18n.t("plugins:reloadOne")}
                   </button>
                 </div>
-                <p className="muted">
-                  配置修改后请保存；手动重载使用已保存的配置，并重新读取插件代码和配置项定义。
-                </p>
+                <p className="muted">{i18n.t("plugins:settings.hint")}</p>
               </>
             )}
           </section>

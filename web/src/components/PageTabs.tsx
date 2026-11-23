@@ -1,3 +1,5 @@
+import { tx } from "../i18n";
+
 export function PageTabs<T extends string>({
   tabs,
   active,
@@ -12,7 +14,7 @@ export function PageTabs<T extends string>({
   label: string;
 }) {
   return (
-    <div className="settings-tabs" role="tablist" aria-label={label}>
+    <div className="settings-tabs" role="tablist" aria-label={tx(label)}>
       {tabs.map(({ id, label }, index) => (
         <button
           key={id}
@@ -36,7 +38,7 @@ export function PageTabs<T extends string>({
             document.getElementById(`${prefix}-tab-${tabs[next].id}`)?.focus();
           }}
         >
-          {label}
+          {tx(label)}
         </button>
       ))}
     </div>

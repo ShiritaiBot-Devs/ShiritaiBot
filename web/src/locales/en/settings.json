@@ -12,5 +12,58 @@
     "useDefault": "Use default",
     "cleared": "{session} now uses the default language.",
     "loadFailed": "Couldn't load the session language settings."
+  },
+  "tokens": {
+    "admin": "<strong>Admin token</strong>: signs in to this WebUI. It's stored in data/web.token, and you can also see it with <code>shiritaibot token</code>. When you're signed out, the home page is the sign-in page (you can also go to /login).",
+    "adapter": "<strong>Adapter access token</strong>: the password the bot uses to connect to the OneBot protocol client, entered on the Connections page. It must match the access token set in NapCat. Leave it empty if you didn't set one.",
+    "napcat": "<strong>NapCat WebUI token</strong>: only for opening NapCat's own admin page (http://127.0.0.1:6099 by default). It has nothing to do with the two above.",
+    "title": "About tokens"
+  },
+  "sections": {
+    "emotion": "Emotion (developer option)",
+    "proactive": "Proactive behavior and interruptions",
+    "memory": "Long-term memory",
+    "webSearch": "Web search",
+    "basePersona": "Base persona",
+    "heartflowAdvanced": "Advanced Heartflow settings",
+    "groupContext": "Group chat awareness",
+    "context": "Context management",
+    "outbound": "Message sending",
+    "messageMerge": "Message merging",
+    "runtime": "Runtime",
+    "identity": "Names and wake words"
+  },
+  "persona": {
+    "collectionHint": "Add several personas and switch between them with slash commands.",
+    "collection": "Persona settings",
+    "default": "Default persona",
+    "defaultHint": "Use /personas to see names and IDs, /persona <ID> to switch persona for the current session, and /persona default to go back. Only the owner can switch, and it takes effect from the next turn."
+  },
+  "context": {
+    "maxChars": "Context character limit",
+    "useLight": "Use the light route",
+    "model": "Context compression model",
+    "compress": "Compress old turns into a summary",
+    "discard": "Drop old turns when over the limit",
+    "strategy": "Context strategy"
+  },
+  "tabsLabel": "Settings categories",
+  "tabs": {
+    "extensions": "Extensions",
+    "persona": "Persona",
+    "general": "General"
+  },
+  "webSearch": {
+    "providerSettings": "{provider} settings"
+  },
+  "helpMenu": {
+    "loadFailed": "Couldn't load sections: {error}",
+    "moveDown": "Move {title} down",
+    "moveUp": "Move {title} up",
+    "show": "Show {title}",
+    "loading": "Loading sections…",
+    "hint": "The text and image menus share these section settings. Use the arrows on the right to reorder them.",
+    "reset": "Restore defaults",
+    "title": "/help menu sections"
   }
 }

@@ -9,6 +9,7 @@ import {
   subagentSummary,
 } from "../config/schema";
 import type { ConfigPageProps } from "./common";
+import i18n from "../i18n";
 
 const commands = {
   shiritaibot: "",
@@ -55,7 +56,7 @@ export function SubagentsPage({
   return (
     <>
       <InstanceCollection
-        title="子代理实例"
+        title={i18n.t("subagents:instances")}
         items={config.subagents}
         create={() => createSubagent(config.subagents)}
         onChange={(items) => {
@@ -97,18 +98,22 @@ export function SubagentsPage({
           )
         }
         subtitle={subagentSummary}
-        emptyText="添加 ShiritaiBot 内置子代理或外部 CLI 实例。"
+        emptyText={i18n.t("subagents:empty")}
         renderExtra={(item) =>
           item.kind === "shiritaibot" && (
             <>
               {tools.error && (
                 <QueryErrorNotice
-                  message={`读取工具失败：${tools.error.message}`}
+                  message={i18n.t("subagents:toolsFailed", {
+                    error: tools.error.message,
+                  })}
                 />
               )}
               {skills.error && (
                 <QueryErrorNotice
-                  message={`读取技能失败：${skills.error.message}`}
+                  message={i18n.t("subagents:skillsFailed", {
+                    error: skills.error.message,
+                  })}
                 />
               )}
             </>
@@ -119,18 +124,25 @@ export function SubagentsPage({
             <button
               type="button"
               onClick={() =>
-                void act(() => client.detectSubagent(item.id), "已检测到 CLI")
+                void act(
+                  () => client.detectSubagent(item.id),
+                  i18n.t("subagents:detected"),
+                )
               }
             >
-              检测 CLI
+              {i18n.t("subagents:detect")}
             </button>
           )
         }
       />
       <section className="panel">
-        <h2>任务记录</h2>
+        <h2>{i18n.t("subagents:runs.title")}</h2>
         {runs.error && (
-          <QueryErrorNotice message={`读取任务失败：${runs.error.message}`} />
+          <QueryErrorNotice
+            message={i18n.t("subagents:runs.failed", {
+              error: runs.error.message,
+            })}
+          />
         )}
         {runs.data?.map((row) => (
           <article className="record" key={row.id}>
@@ -140,7 +152,7 @@ export function SubagentsPage({
             </div>
             {row.status === "needs_input" && row.question && (
               <p>
-                <strong>等待回复：</strong>
+                <strong>{i18n.t("subagents:runs.waiting")}</strong>
                 {row.question}
               </p>
             )}
@@ -149,17 +161,20 @@ export function SubagentsPage({
               <button
                 type="button"
                 onClick={() =>
-                  void act(() => client.cancelSubagent(row.id), "已请求停止")
+                  void act(
+                    () => client.cancelSubagent(row.id),
+                    i18n.t("subagents:runs.stopRequested"),
+                  )
                 }
               >
-                停止
+                {i18n.t("subagents:runs.stop")}
               </button>
             )}
             <Details value={row} />
           </article>
         ))}
         {!runs.data?.length && !runs.error && (
-          <EmptyState text="在对话中委派任务，审批后会出现在这里。" />
+          <EmptyState text={i18n.t("subagents:runs.empty")} />
         )}
       </section>
     </>

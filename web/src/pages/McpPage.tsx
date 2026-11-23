@@ -6,12 +6,13 @@ import { QueryErrorNotice } from "../components/QueryErrorNotice";
 import { createMcpServer, mcpFields, mcpSummary } from "../config/schema";
 import type { McpServerStatus } from "../api/types";
 import type { ConfigPageProps } from "./common";
+import i18n, { tx } from "../i18n";
 
 const statuses: Record<McpServerStatus["status"], string> = {
-  connected: "已连接",
-  connecting: "连接中",
-  error: "连接失败",
-  disabled: "未启用",
+  connected: "mcp:status.connected",
+  connecting: "mcp:status.connecting",
+  error: "mcp:status.error",
+  disabled: "mcp:status.disabled",
 };
 
 export function McpPage({ client, config, setConfig, act }: ConfigPageProps) {
@@ -26,13 +27,13 @@ export function McpPage({ client, config, setConfig, act }: ConfigPageProps) {
   return (
     <>
       <InstanceCollection
-        title="MCP 服务器"
+        title={i18n.t("mcp:servers")}
         items={config.mcp_servers}
         create={() => createMcpServer(config.mcp_servers)}
         onChange={(mcp_servers) => setConfig({ ...config, mcp_servers })}
         fields={mcpFields}
         subtitle={mcpSummary}
-        emptyText="添加 stdio 本地进程或 Streamable HTTP 远程 MCP 服务，保存后可在「工具」中管理其权限。"
+        emptyText={i18n.t("mcp:hint")}
         renderActions={(item) => (
           <button
             type="button"
@@ -40,23 +41,20 @@ export function McpPage({ client, config, setConfig, act }: ConfigPageProps) {
               void act(async () => {
                 const result = await client.reconnectMcp(item.id);
                 queryClient.setQueryData(["mcp"], result);
-              }, "已重新连接，请查看连接状态")
+              }, i18n.t("mcp:reconnected"))
             }
           >
             <RefreshCw size={14} />
-            重新连接
+            {i18n.t("mcp:reconnect")}
           </button>
         )}
       />
       <section className="panel">
-        <h2>连接状态</h2>
-        <p className="muted">
-          MCP 工具以 mcp_服务名_工具名
-          注册，受各会话的工具权限与审批控制。状态反映已保存的配置。
-        </p>
+        <h2>{i18n.t("mcp:statusTitle")}</h2>
+        <p className="muted">{i18n.t("mcp:statusHint")}</p>
         {status.error && (
           <QueryErrorNotice
-            message={`读取 MCP 状态失败：${status.error.message}`}
+            message={i18n.t("mcp:loadFailed", { error: status.error.message })}
           />
         )}
         {rows.map((row) => (
@@ -68,7 +66,7 @@ export function McpPage({ client, config, setConfig, act }: ConfigPageProps) {
                   ? ` · ${row.server.name}${row.server.version ? " " + row.server.version : ""}`
                   : ""}
               </strong>
-              <span className="tag">{statuses[row.status]}</span>
+              <span className="tag">{tx(statuses[row.status])}</span>
             </div>
             {row.error && <p role="alert">{row.error}</p>}
             {row.instructions && <p className="muted">{row.instructions}</p>}
@@ -78,9 +76,11 @@ export function McpPage({ client, config, setConfig, act }: ConfigPageProps) {
                   <li key={tool.name}>
                     <code>{tool.name}</code>
                     <span className="tag">{tool.risk}</span>
-                    {!tool.enabled && <span className="tag">已隐藏</span>}
+                    {!tool.enabled && (
+                      <span className="tag">{i18n.t("mcp:hidden")}</span>
+                    )}
                     {tool.read_only_hint && (
-                      <span className="tag">服务声明只读</span>
+                      <span className="tag">{i18n.t("mcp:readOnly")}</span>
                     )}
                     {tool.error && <span role="alert"> {tool.error}</span>}
                     {tool.description && (
@@ -93,7 +93,7 @@ export function McpPage({ client, config, setConfig, act }: ConfigPageProps) {
           </article>
         ))}
         {!rows.length && !status.error && (
-          <EmptyState text="尚未配置 MCP 服务。" />
+          <EmptyState text={i18n.t("mcp:empty")} />
         )}
       </section>
     </>

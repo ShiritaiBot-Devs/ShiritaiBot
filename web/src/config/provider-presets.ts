@@ -10,19 +10,19 @@ export interface ProviderPreset {
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     id: "openai-compatible",
-    label: "OpenAI兼容(Completions)",
+    label: "models:presets.openaiCompletions",
     protocol: "chat_completions",
     base_url: "",
   },
   {
     id: "responses-compatible",
-    label: "OpenAI兼容(Responses)",
+    label: "models:presets.openaiResponses",
     protocol: "responses",
     base_url: "",
   },
   {
     id: "anthropic-compatible",
-    label: "Anthropic兼容",
+    label: "models:presets.anthropic",
     protocol: "anthropic",
     base_url: "",
   },
@@ -77,7 +77,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   },
   {
     id: "paratera",
-    label: "并行智算云",
+    label: "models:presets.paratera",
     protocol: "chat_completions",
     base_url: "https://llmapi.paratera.com",
   },

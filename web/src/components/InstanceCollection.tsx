@@ -5,6 +5,7 @@ import type { Instance } from "../api/types";
 import { FieldForm } from "./FieldForm";
 import type { FieldSpec } from "../config/schema";
 import { EmptyState } from "./EmptyState";
+import i18n from "../i18n";
 
 type InstanceCollectionProps<T extends Instance> = {
   title: string;
@@ -69,7 +70,7 @@ export function InstanceCollection<T extends Instance>({
         <div className="instance-actions">
           <button type="button" onClick={add}>
             <Plus size={14} />
-            添加
+            {i18n.t("common:collection.add")}
           </button>
         </div>
       </div>
@@ -77,7 +78,10 @@ export function InstanceCollection<T extends Instance>({
         <EmptyState text={emptyText} />
       ) : (
         <div className="config-workspace">
-          <section className="config-sidebar" aria-label={title + "列表"}>
+          <section
+            className="config-sidebar"
+            aria-label={i18n.t("common:collection.list", { title })}
+          >
             {items.map((row, position) => (
               <button
                 type="button"
@@ -89,7 +93,9 @@ export function InstanceCollection<T extends Instance>({
               >
                 <span className={"dot " + (row.enabled ? "on" : "")} />
                 <span>
-                  <strong>{row.id || "未命名"}</strong>
+                  <strong>
+                    {row.id || i18n.t("common:collection.unnamed")}
+                  </strong>
                   <small>{subtitle(row)}</small>
                 </span>
               </button>
@@ -100,7 +106,7 @@ export function InstanceCollection<T extends Instance>({
               <>
                 <div className="panel-head">
                   <div>
-                    <h2>{item.id || "新建实例"}</h2>
+                    <h2>{item.id || i18n.t("common:collection.new")}</h2>
                     <p className="muted">{subtitle(item)}</p>
                   </div>
                   {!renderStatus && (
@@ -118,7 +124,7 @@ export function InstanceCollection<T extends Instance>({
                   {renderActions?.(item, update)}
                   <button type="button" className="danger" onClick={remove}>
                     <Trash2 size={14} />
-                    移除
+                    {i18n.t("common:collection.remove")}
                   </button>
                 </div>
               </>

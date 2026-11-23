@@ -1,0 +1,90 @@
+{
+  "onlyCustom": "Only show custom overrides ({count})",
+  "sourcePlugin": "Plugin · {plugin}",
+  "notLoaded": "Not loaded",
+  "followPreset": "Preset default · {permission}",
+  "pendingTitle": "Awaiting manual approval · {count}",
+  "historyList": "approval history",
+  "noHistory": "No approval history yet.",
+  "arguments": "Arguments",
+  "status": {
+    "reviewing": "Under review",
+    "denied": "Denied",
+    "approved": "Approved"
+  },
+  "reviewer": {
+    "manual": "Manual approval",
+    "model": "Model auto-approval"
+  },
+  "historyFailed": "Couldn't load approval history: {error}",
+  "history": {
+    "title": "Approval history"
+  },
+  "pendingList": "pending approvals",
+  "noPending": "Nothing is waiting for manual approval.",
+  "approvalsFailed": "Couldn't load approvals: {error}",
+  "approvalSettingsHint": "The auto-approval model is set in the \"Models & Services → Tool auto-approval model\" route, which can include fallback models and the Jev decision model. When Jev denies or isn't confident, a text model in the route can review the call. Calls never run when the final answer is a denial, a timeout, or an invalid response.",
+  "approvalSettings": "Approval and execution settings",
+  "toolList": "tools",
+  "noMatch": "No matching tools.",
+  "noTools": "No tools registered yet.",
+  "loadingTools": "Loading tool permissions",
+  "unavailableInMode": "Not available in this mode",
+  "toolPermission": "Permission for {name}",
+  "unknown": "Unknown",
+  "pluginNotLoaded": "The plugin isn't loaded. Saved permissions apply once the tool is registered again.",
+  "noDescription": "No description.",
+  "col": {
+    "status": "Current status",
+    "permission": "Permission",
+    "details": "Details",
+    "risk": "Risk level",
+    "name": "Tool"
+  },
+  "toolTable": "Tool permissions",
+  "allRisks": "All risk levels",
+  "riskFilter": "Filter by risk level",
+  "search": {
+    "placeholder": "Tool name, plugin, or description",
+    "label": "Search tools"
+  },
+  "sessionsFailed": "Couldn't load sessions: {error}",
+  "toolsFailed": "Couldn't load tools: {error}",
+  "chatHint": "Chat mode only offers basic conversation tools, such as the time, web search, and group chat history.",
+  "proactiveHint": "Only new Proactive Loops use this default; running tasks keep the permissions they were created with. Manual approvals are sent to the owner and wait for an answer or a timeout.",
+  "unsaved": "Permission changes aren't saved yet",
+  "riskDefault": "Default permission for {risk} tools",
+  "riskMatrix": "Default permissions by risk level",
+  "preset": {
+    "help": "Switching presets fills in the risk matrix below and clears per-tool overrides.",
+    "custom": "Custom (risk levels below were changed)",
+    "label": "Permission preset"
+  },
+  "sandbox": {
+    "help": "When on, only this session's directory and temporary directories are writable. Requires Linux and bubblewrap.",
+    "label": "Shell workspace isolation"
+  },
+  "on": "On",
+  "off": "Off",
+  "mode": {
+    "feishuGroup": "Feishu group chats always use Chat.",
+    "agent": "Agent · tool calls allowed",
+    "chat": "Chat · basic conversation",
+    "label": "Session mode"
+  },
+  "resetDefault": "Restore defaults",
+  "session": "Session",
+  "scopeProactive": "Default for new Proactive Loops",
+  "scopeGroup": "Default for group chats",
+  "scopePrivate": "Default for other private chats",
+  "scopeOwner": "Owner private chat / WebUI default",
+  "scopeSession": "A specific Main session",
+  "scope": "Scope",
+  "availability": {
+    "hint": "Pick a session to see which tools it can use and how they're approved.",
+    "title": "Tool availability"
+  },
+  "denied": "Denied.",
+  "allowed": "Allowed.",
+  "unavailable": "Unavailable"
+}

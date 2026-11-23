@@ -3,28 +3,41 @@ import { useId, useState } from "react";
 import type { ModelPerformance, TokenBucket } from "../api/types";
 import { smoothLine, type ChartModel } from "../lib/charts";
 import { dateFormat, formatBucketTime, formatNumber } from "../lib/utils";
+import i18n from "../i18n";
 
 const metrics = [
   {
     key: "error_rate",
-    title: "调用错误率",
+    get title() {
+      return i18n.t("charts:errorRate.title");
+    },
     unit: "%",
     icon: Activity,
-    hint: "失败调用数占该模型调用数的比例，同一候选模型的内部重试合并为一次。",
+    get hint() {
+      return i18n.t("charts:errorRate.hint");
+    },
   },
   {
     key: "tps",
-    title: "生成速度",
+    get title() {
+      return i18n.t("charts:tps.title");
+    },
     unit: "tokens/s",
     icon: Zap,
-    hint: "按流式生成时长加权的输出速度，扣除首个 token。需要提供商返回输出 token 数。",
+    get hint() {
+      return i18n.t("charts:tps.hint");
+    },
   },
   {
     key: "ttft_ms",
-    title: "首字延迟",
+    get title() {
+      return i18n.t("charts:ttft.title");
+    },
     unit: "ms",
     icon: Timer,
-    hint: "从发出请求到收到首段文本、推理或工具输出的平均时间。",
+    get hint() {
+      return i18n.t("charts:ttft.hint");
+    },
   },
 ] as const;
 
@@ -110,9 +123,7 @@ function PerformanceCard({
         </h4>
         <span
           title={
-            daily
-              ? "所选日期，默认显示最后一天"
-              : "所选小时，默认显示最后一小时"
+            daily ? i18n.t("charts:selectedDay") : i18n.t("charts:selectedHour")
           }
         >
           {headerValue != null && <b>{display(headerValue, metric.key)} </b>}
@@ -125,7 +136,10 @@ function PerformanceCard({
             viewBox="0 0 316 154"
             role="group"
             tabIndex={0}
-            aria-label={`${metric.title}逐${daily ? "日" : "小时"}趋势，使用左右方向键查看数值`}
+            aria-label={i18n.t(
+              daily ? "charts:trendDaily" : "charts:trendHourly",
+              { title: metric.title },
+            )}
             onFocus={() => setHover(rows.length - 1)}
             onBlur={() => setHover(null)}
             onKeyDown={(e) => {
@@ -281,10 +295,10 @@ function PerformanceCard({
       ) : (
         <div className="performance-empty">
           {metric.key === "error_rate"
-            ? "此区间暂无调用样本"
+            ? i18n.t("charts:noSamples")
             : metric.key === "tps"
-              ? "此区间暂无生成速度样本"
-              : "此区间暂无首字延迟样本"}
+              ? i18n.t("charts:noTps")
+              : i18n.t("charts:noTtft")}
         </div>
       )}
     </section>
@@ -307,10 +321,10 @@ export function ModelPerformanceCharts({
   const models = [...catalog.values()].filter((model) => present.has(model.id));
   const focused = models.find((model) => model.id === selected);
   return (
-    <section className="model-performance" aria-label="模型调用表现">
+    <section className="model-performance" aria-label={i18n.t("charts:title")}>
       <div className="performance-head">
-        <h3>模型调用表现</h3>
-        <div className="chart-legend" aria-label="筛选模型">
+        <h3>{i18n.t("charts:title")}</h3>
+        <div className="chart-legend" aria-label={i18n.t("charts:filter")}>
           {models.map((model) => (
             <button
               type="button"
@@ -318,8 +332,8 @@ export function ModelPerformanceCharts({
               aria-pressed={focused?.id === model.id}
               title={
                 focused?.id === model.id
-                  ? "显示全部模型"
-                  : "仅查看 " + model.label
+                  ? i18n.t("charts:showAll")
+                  : i18n.t("charts:only", { model: model.label })
               }
               className={
                 "chart-legend-button" +

@@ -1,0 +1,26 @@
+{
+  "sendModes": {
+    "steer": {
+      "label": "Steer",
+      "hint": "Hand this straight to the model while a task runs"
+    },
+    "queue": {
+      "label": "Queue",
+      "hint": "Send in order after the current turn ends"
+    }
+  },
+  "send": "Send message",
+  "stop": "Stop the current task",
+  "reviewMode": "Review mode",
+  "sendMode": "Send mode",
+  "defaultRouteHint": "Chosen automatically by the configured model routes",
+  "defaultRoute": "Default route",
+  "model": "Model",
+  "placeholder": "Tell {name} what you'd like to do, or type / for commands…",
+  "message": "Message",
+  "commands": "Slash commands",
+  "removeQueued": "Remove queued message: {text}",
+  "queued": "Queued messages",
+  "review": "Review",
+  "custom": "Custom"
+}

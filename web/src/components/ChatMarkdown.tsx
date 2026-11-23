@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import { findAndReplace } from "mdast-util-find-and-replace";
 import type { ApiClient } from "../api/client";
 import { MemeImage } from "./MemeImage";
+import i18n from "../i18n";
 
 const plugins: Options["remarkPlugins"] = [
   remarkGfm,
@@ -19,7 +20,7 @@ const plugins: Options["remarkPlugins"] = [
         (_, id: string) => ({
           type: "image",
           url: `/api/memes/${id}/image`,
-          alt: "表情",
+          alt: i18n.t("meme.label"),
         }),
       ]);
     };
@@ -52,7 +53,7 @@ export default memo(function ChatMarkdown({
             ) : (
               <img
                 src={src}
-                alt={alt || "图片"}
+                alt={alt || i18n.t("image")}
                 loading="lazy"
                 referrerPolicy="no-referrer"
               />

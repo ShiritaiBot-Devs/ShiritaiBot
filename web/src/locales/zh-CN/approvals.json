@@ -1,0 +1,90 @@
+{
+  "onlyCustom": "仅看已自定义覆盖（{count}）",
+  "sourcePlugin": "来源插件 · {plugin}",
+  "notLoaded": "未加载",
+  "followPreset": "跟随预设 · {permission}",
+  "pendingTitle": "待人工审批 · {count}",
+  "historyList": "审批记录",
+  "noHistory": "暂无审批记录。",
+  "arguments": "调用参数",
+  "status": {
+    "reviewing": "正在审查",
+    "denied": "已拒绝",
+    "approved": "已批准"
+  },
+  "reviewer": {
+    "manual": "人工审批",
+    "model": "模型自动审批"
+  },
+  "historyFailed": "读取审批记录失败：{error}",
+  "history": {
+    "title": "审批记录"
+  },
+  "pendingList": "待人工审批",
+  "noPending": "当前没有待人工审批操作。",
+  "approvalsFailed": "读取审批失败：{error}",
+  "approvalSettingsHint": "自动审批模型在“模型与服务 → 工具自动审批模型”路由中设置，可配置备用模型和 Jev 判断模型；Jev 拒绝或把握不足时可交给路由里的文本模型复核。最终拒绝、 超时或返回无效时均不执行。",
+  "approvalSettings": "审批与执行设置",
+  "toolList": "工具列表",
+  "noMatch": "没有匹配的工具。",
+  "noTools": "尚无已注册工具。",
+  "loadingTools": "读取工具权限",
+  "unavailableInMode": "此模式下不可用",
+  "toolPermission": "{name} 权限",
+  "unknown": "未知",
+  "pluginNotLoaded": "插件未加载，保留的权限配置将在工具重新注册后使用。",
+  "noDescription": "暂无工具说明。",
+  "col": {
+    "status": "当前状态",
+    "permission": "权限",
+    "details": "详细信息",
+    "risk": "风险等级",
+    "name": "工具名"
+  },
+  "toolTable": "工具权限",
+  "allRisks": "全部风险等级",
+  "riskFilter": "按风险等级筛选",
+  "search": {
+    "placeholder": "工具名、插件或说明",
+    "label": "搜索工具"
+  },
+  "sessionsFailed": "读取会话失败：{error}",
+  "toolsFailed": "读取工具失败：{error}",
+  "chatHint": "Chat 模式只开放基础对话工具，例如时间、网页搜索和群聊上下文查询。",
+  "proactiveHint": "仅新建的 Proactive Loop 使用此默认值，运行中的任务保留创建时的权限快照。人工审批会发送给主人，并等待审批或超时。",
+  "unsaved": "权限修改待保存",
+  "riskDefault": "{risk}工具默认权限",
+  "riskMatrix": "按风险等级配置默认权限",
+  "preset": {
+    "help": "切换预设会填充下方风险矩阵并清除逐工具覆盖。",
+    "custom": "自定义（已调整下方风险等级）",
+    "label": "权限预设"
+  },
+  "sandbox": {
+    "help": "开启后仅可写入本会话目录和临时目录。需要 Linux 和 bubblewrap。",
+    "label": "Shell 工作区隔离"
+  },
+  "on": "开启",
+  "off": "关闭",
+  "mode": {
+    "feishuGroup": "飞书群聊固定使用 Chat。",
+    "agent": "Agent · 允许工具调用",
+    "chat": "Chat · 基础对话",
+    "label": "会话模式"
+  },
+  "resetDefault": "恢复默认配置",
+  "session": "会话",
+  "scopeProactive": "新 Proactive Loop 默认",
+  "scopeGroup": "群聊默认",
+  "scopePrivate": "其他私聊默认",
+  "scopeOwner": "主人私聊 / WebUI 默认",
+  "scopeSession": "指定 Main 会话",
+  "scope": "配置范围",
+  "availability": {
+    "hint": "选择会话，查看当前可用的工具和审批方式。",
+    "title": "工具可用性"
+  },
+  "denied": "已拒绝",
+  "allowed": "已允许",
+  "unavailable": "不可用"
+}

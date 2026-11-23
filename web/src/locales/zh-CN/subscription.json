@@ -1,0 +1,26 @@
+{
+  "calls_other": "{calls} 次请求",
+  "tokens": "输入 {input} · 输出 {output} Token",
+  "helperSteps": "在打开 WebUI 的电脑运行下载的授权助手。Windows 用 <code>py {helper}</code>，macOS / Linux 用 <code>python3 {helper}</code>。完成 ChatGPT 登录后，把助手页面显示的回调地址粘贴到这里。授权请求在 {minutes} 分钟后过期。",
+  "usage": {
+    "last7": "近 7 天",
+    "today": "今日",
+    "title": "本实例用量"
+  },
+  "finish": "完成授权",
+  "callbackUrl": "一次性回调地址",
+  "authorized": "已授权使用 ChatGPT 套餐",
+  "revokeHint": "已断开本实例。远端撤销未确认，可在 ChatGPT 用量设置中移除应用授权。",
+  "disconnect": "断开连接",
+  "disconnectedDone": "已断开 ChatGPT 账号",
+  "reconnect": "重新连接",
+  "redownload": "重新下载授权助手",
+  "limitHit": "最近一次调用达到使用上限，请在 ChatGPT 查看适用的限额。",
+  "saveFirst": "保存配置后即可连接部署者的 ChatGPT 账号。",
+  "viewUsage": "查看 ChatGPT 用量",
+  "disconnected": "未连接",
+  "expired": "授权已失效，请重新连接",
+  "connected": "已连接，使用 ChatGPT 套餐",
+  "title": "ChatGPT 套餐",
+  "region": "ChatGPT 套餐连接与用量"
+}

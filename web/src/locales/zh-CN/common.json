@@ -7,5 +7,72 @@
     "unauthorized": "管理令牌无效或已过期，请重新登录。",
     "requestFailed": "请求失败（HTTP {status}），请检查后端服务。",
     "offline": "无法连接后端服务，请确认进程仍在运行。"
+  },
+  "done": "操作已完成",
+  "listSeparator": "；",
+  "empty": "这里还没有内容",
+  "loading": "正在加载",
+  "showDetails": "查看详情",
+  "onePerLine": "每行一个值",
+  "unknownProvider": "未知提供商",
+  "unknownModel": "未知模型",
+  "toast": {
+    "dismiss": "关闭通知"
+  },
+  "pagination": {
+    "region": "{label}分页",
+    "loading": "读取{label}",
+    "summary_other": "共 {count} 条 · 第 {current} / {pages} 页",
+    "previous": "上一页",
+    "previousLabel": "{label}上一页",
+    "next": "下一页",
+    "nextLabel": "{label}下一页"
+  },
+  "saveBar": {
+    "region": "未保存的配置",
+    "message": "配置有未保存的修改",
+    "discard": "放弃修改",
+    "save": "保存并应用"
+  },
+  "secret": {
+    "help": "保存后加密存储，已有密钥不会回显。",
+    "label": "密钥",
+    "saved": "已配置 · 输入新值可替换",
+    "empty": "直接输入密钥",
+    "hide": "隐藏密钥",
+    "show": "显示密钥",
+    "clear": "清除"
+  },
+  "json": {
+    "objectRequired": "请填写 JSON 对象，例如 {example}",
+    "invalid": "JSON 格式无效，请检查引号、逗号和括号。"
+  },
+  "field": {
+    "slider": "{label}滑块"
+  },
+  "meme": {
+    "unavailable": "表情不可用",
+    "alt": "表情 {id}",
+    "label": "表情"
+  },
+  "image": "图片",
+  "modelTest": {
+    "done": "测试请求已完成",
+    "testing": "测试中…",
+    "run": "测试当前配置"
+  },
+  "cancel": "取消",
+  "close": "关闭",
+  "enumSeparator": "、",
+  "collection": {
+    "list": "{title}列表",
+    "remove": "移除",
+    "new": "新建实例",
+    "unnamed": "未命名",
+    "add": "添加"
+  },
+  "sessionPicker": {
+    "reset": "恢复默认配置",
+    "session": "会话"
   }
 }

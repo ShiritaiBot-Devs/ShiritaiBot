@@ -135,7 +135,7 @@ function ConsoleApp() {
   );
   const draft = useConfigDraft(client);
   // Re-render the console when the interface language changes.
-  useTranslation();
+  const { t } = useTranslation(["shell", "common"]);
   const savedSettings = draft.saved?.settings;
   // Idempotent module setting read by every date formatter, so it must be set
   // before this render's children format anything.
@@ -185,7 +185,7 @@ function ConsoleApp() {
   const queryError =
     draft.error ??
     (health.error instanceof Error ? health.error : null) ??
-    (client && health.isError ? new Error("无法连接后端服务") : null);
+    (client && health.isError ? new Error(t("common:errors.offline")) : null);
   useEffect(() => {
     if (!queryError || restarting) return;
     // By status, not message text: the message follows the interface language.
@@ -205,19 +205,19 @@ function ConsoleApp() {
       return;
     setRestarting(false);
     setRestartInstance(null);
-    succeed("重启完成");
+    succeed(t("restart.done"));
     void queryClient.invalidateQueries();
-  }, [restartInstance, health.data?.instance_id, queryClient, succeed]);
+  }, [restartInstance, health.data?.instance_id, queryClient, succeed, t]);
 
   useEffect(() => {
     if (!restarting) return;
     const timer = setTimeout(() => {
       setRestarting(false);
       setRestartInstance(null);
-      fail("等待重启超时，请检查服务日志或稍后刷新页面。");
+      fail(t("restart.timeout"));
     }, 60000);
     return () => clearTimeout(timer);
-  }, [restarting, fail]);
+  }, [restarting, fail, t]);
 
   const onRealtime = useCallback(
     (event: RealtimeEvent) => {
@@ -248,7 +248,7 @@ function ConsoleApp() {
               "text" in result &&
               typeof (result as { text?: unknown }).text === "string"
                 ? String((result as { text: string }).text).slice(0, 500)
-                : "操作已完成"),
+                : t("common:done")),
           );
         }
         await queryClient.invalidateQueries();
@@ -258,7 +258,7 @@ function ConsoleApp() {
         setBusy(false);
       }
     },
-    [queryClient, succeed, fail],
+    [queryClient, succeed, fail, t],
   );
 
   async function save() {
@@ -267,9 +267,13 @@ function ConsoleApp() {
       const result = await draft.save();
       const warnings = result?.warnings ?? [];
       if (warnings.length) {
-        warn("配置已保存，但有以下问题：" + warnings.join("；"));
+        warn(
+          t("config.savedWithWarnings", {
+            warnings: warnings.join(t("common:listSeparator")),
+          }),
+        );
       } else {
-        succeed("配置已保存并应用");
+        succeed(t("config.saved"));
       }
       await queryClient.invalidateQueries({ queryKey: ["health"] });
     } catch (error) {
@@ -331,7 +335,7 @@ function ConsoleApp() {
 
   function content(api: ApiClient) {
     if (!draft.config) {
-      return draft.loading ? <LoadingBar label="正在读取配置…" /> : null;
+      return draft.loading ? <LoadingBar label={t("config.loading")} /> : null;
     }
     const configProps = {
       client: api,
@@ -422,10 +426,10 @@ function ConsoleApp() {
       }
       restartHint={
         draft.dirty
-          ? "请先保存或放弃未保存的配置"
+          ? t("config.unsaved")
           : health.data?.restart_available === false
-            ? "请使用 shiritaibot run 启动以支持重启"
-            : "重启 ShiritaiBot 服务"
+            ? t("restart.unsupported")
+            : t("restart.hint")
       }
       onCheckUpdate={() => setUpdateOpen(true)}
       updateAvailable={updateCheck.data === true}
@@ -439,15 +443,18 @@ function ConsoleApp() {
         queryClient.clear();
       }}
     >
-      {busy && <LoadingBar label="正在执行操作" />}
+      {busy && <LoadingBar label={t("busy.working")} />}
       {capability ? (
         <>
           <PageTabs
-            tabs={CAPABILITY_TABS}
+            tabs={CAPABILITY_TABS.map(({ id }) => ({
+              id,
+              label: t(`capabilities.${id}`),
+            }))}
             active={capability.id}
             onSelect={navigate}
             prefix="capability"
-            label="能力与权限"
+            label={t("pages.approvals.label")}
           />
           {CAPABILITY_TABS.map(({ id }) => (
             <div
@@ -472,9 +479,9 @@ function ConsoleApp() {
           restarting={restarting}
           blockedReason={
             draft.dirty
-              ? "请先保存或放弃未保存的配置"
+              ? t("config.unsaved")
               : busy || saving
-                ? "请等待当前操作完成"
+                ? t("busy.wait")
                 : null
           }
         />

@@ -1,0 +1,26 @@
+{
+  "sendModes": {
+    "steer": {
+      "label": "插话",
+      "hint": "执行中的任务直接把这条交给模型"
+    },
+    "queue": {
+      "label": "排队",
+      "hint": "等这一轮结束后再按顺序发送"
+    }
+  },
+  "send": "发送消息",
+  "stop": "停止当前任务",
+  "reviewMode": "审查方式",
+  "sendMode": "发送性质",
+  "defaultRouteHint": "按配置的模型路由自动选择",
+  "defaultRoute": "默认路由",
+  "model": "模型",
+  "placeholder": "告诉 {name} 你想做什么，或输入 / 查看命令…",
+  "message": "消息",
+  "commands": "斜杠命令",
+  "removeQueued": "移除排队消息：{text}",
+  "queued": "排队消息",
+  "review": "审查",
+  "custom": "自定义"
+}

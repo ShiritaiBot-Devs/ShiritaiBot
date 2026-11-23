@@ -6,12 +6,10 @@
  * is never guessed. Catalogs are bundled, so switching is synchronous. `zh-CN` is also
  * the reference catalog and the fallback for missing keys.
  */
+/// <reference types="vite/client" />
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-import enCommon from "../locales/en/common.json";
-import enSettings from "../locales/en/settings.json";
-import zhCommon from "../locales/zh-CN/common.json";
-import zhSettings from "../locales/zh-CN/settings.json";
+import { reference } from "../locales/reference";
 
 export const LOCALES = ["zh-CN", "en"] as const;
 export type Locale = (typeof LOCALES)[number];
@@ -23,10 +21,16 @@ export const LOCALE_NAMES: Record<Locale, string> = {
 export const DEFAULT_LOCALE: Locale = "zh-CN";
 const STORAGE_KEY = "shiritaibot.ui-language";
 
-export const resources = {
-  "zh-CN": { common: zhCommon, settings: zhSettings },
-  en: { common: enCommon, settings: enSettings },
-} as const;
+/** Every bundled catalog, as `resources[locale][namespace]`. */
+export const resources: Record<string, Record<string, object>> = {};
+const catalogs = import.meta.glob<object>("../locales/*/*.json", {
+  eager: true,
+  import: "default",
+});
+for (const [path, catalog] of Object.entries(catalogs)) {
+  const [, locale, namespace] = /\/([^/]+)\/([^/]+)\.json$/.exec(path)!;
+  (resources[locale] ??= {})[namespace] = catalog;
+}
 
 export function normalizeLocale(
   value: string | null | undefined,
@@ -48,6 +52,7 @@ function savedLocale(): Locale | null {
 
 function syncDocument(locale: string) {
   document.documentElement.lang = locale;
+  document.title = i18n.t("shell:documentTitle");
 }
 
 void i18n.use(initReactI18next).init({
@@ -56,7 +61,7 @@ void i18n.use(initReactI18next).init({
   fallbackLng: DEFAULT_LOCALE,
   supportedLngs: LOCALES,
   defaultNS: "common",
-  ns: ["common", "settings"],
+  ns: Object.keys(reference),
   // Catalog text uses {name} placeholders, the same syntax as the Python backend.
   interpolation: { escapeValue: false, prefix: "{", suffix: "}" },
 });

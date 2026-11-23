@@ -6,7 +6,8 @@
    not exceed its count in ``scripts/i18n-baseline.json``; new files start at zero. As pages
    are migrated, run ``--update`` to lower the baseline so the gain is locked in.
 2. Catalogs: every locale has the same keys and the same ``{placeholders}`` as zh-CN, for
-   both ``src/shiritaibot/locales`` and ``web/src/locales``.
+   both ``src/shiritaibot/locales`` and ``web/src/locales``. Plural forms (``key_one``,
+   ``key_other``) count as one key, since each language has its own set of forms.
 
 Usage: python3 scripts/check_i18n.py [--update]
 """
@@ -25,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "scripts" / "i18n-baseline.json"
 CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
+PLURAL = re.compile(r"_(zero|one|two|few|many|other)$")
 # Where Chinese text belongs: catalogs, per-locale prompts, and tests.
 ALLOWED = (
     "src/shiritaibot/locales/",
@@ -99,15 +101,27 @@ def flatten(data: dict, prefix: str = ""):
             yield path, str(value)
 
 
+def plural_merged(entries: dict[str, str]) -> dict[str, str]:
+    """Folds ``key_one`` / ``key_other`` … into ``key``: languages need different plural
+    forms (Chinese has one), so parity is checked per key, with placeholders combined."""
+    merged: dict[str, str] = {}
+    for key, value in entries.items():
+        base = PLURAL.sub("", key)
+        merged[base] = merged.get(base, "") + " " + value
+    return merged
+
+
 def catalog_problems() -> list[str]:
     problems = []
     for base in (ROOT / "src/shiritaibot/locales", ROOT / "web/src/locales"):
         locales = {
-            folder.name: {
-                f"{file.stem}:{key}": value
-                for file in sorted(folder.glob("*.json"))
-                for key, value in flatten(json.loads(file.read_text(encoding="utf-8")))
-            }
+            folder.name: plural_merged(
+                {
+                    f"{file.stem}:{key}": value
+                    for file in sorted(folder.glob("*.json"))
+                    for key, value in flatten(json.loads(file.read_text(encoding="utf-8")))
+                }
+            )
             for folder in sorted(base.iterdir())
             if folder.is_dir()
         }

@@ -1,0 +1,53 @@
+{
+  "remove": {
+    "title": "确认删除 {name}？",
+    "button": "删除",
+    "confirm": "确认删除",
+    "hint": "技能目录会被删除，无法恢复。",
+    "dialog": "确认删除技能"
+  },
+  "item": {
+    "path": "位置：{path}",
+    "files": "文件",
+    "enabled": {
+      "help": "停用后不会出现在系统提示中，也不能被读取。修改后请保存。",
+      "label": "启用此技能"
+    },
+    "bytes_other": "{count} 字节"
+  },
+  "flags": {
+    "disabled": " · 已停用",
+    "invalid": " · 无效",
+    "overrides": " · 覆盖内置"
+  },
+  "source": {
+    "installed": "已安装",
+    "builtin": "内置"
+  },
+  "list": {
+    "title": "技能列表"
+  },
+  "empty": "尚未安装技能。",
+  "loading": "正在读取技能…",
+  "cancel": "取消",
+  "removed": "技能已删除",
+  "install": {
+    "submit": "上传并安装",
+    "file": "技能文件",
+    "hint": "支持 .skill / .zip 技能包或单个 SKILL.md（最大 10 MiB）。也可以直接在 QQ 里把技能文件发给助手，让它安装。技能附带的脚本属于外部代码，只安装信任的技能。",
+    "title": "安装技能",
+    "replace": "覆盖同名技能"
+  },
+  "installed": "技能已安装",
+  "settings": {
+    "list": {
+      "help": "列出已启用技能的名称和描述，让助手在合适时自动读取对应技能。",
+      "label": "在系统提示中列出技能"
+    },
+    "enabled": {
+      "help": "开启后 Agent 模式提供 skill_list / skill_read / skill_write 等工具。",
+      "label": "启用技能系统"
+    },
+    "title": "技能设置"
+  }
+}

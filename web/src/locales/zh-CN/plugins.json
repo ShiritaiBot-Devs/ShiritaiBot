@@ -1,0 +1,83 @@
+{
+  "commands": "指令（{count}）",
+  "tools": "工具（{count}）",
+  "hooks": "Hook（{count}）",
+  "priority": "优先级 {priority}",
+  "remove": {
+    "title": "确认移除 {name}？",
+    "button": "移除",
+    "confirm": "确认移除",
+    "hint": "将停止插件、撤销工具和通知通道，删除插件代码目录及配置。插件数据和历史记录会保留。",
+    "dialog": "确认移除插件"
+  },
+  "meta": {
+    "id": "插件标识：{id}",
+    "author": "作者：{author}",
+    "platforms": "平台：{platforms}"
+  },
+  "settings": {
+    "hint": "配置修改后请保存；手动重载使用已保存的配置，并重新读取插件代码和配置项定义。",
+    "fillTemplate": "填入配置模板",
+    "title": "插件设置"
+  },
+  "reloadOne": "重载当前插件",
+  "reloadedOne": "插件已重载",
+  "enable": {
+    "help": "保存后加载插件，注册其工具和通知通道。",
+    "label": "启用插件"
+  },
+  "keepOld": "；若此前已运行，旧实例会继续保留。",
+  "repo": "仓库",
+  "legacy": "旧版 API",
+  "legacyHint": "使用 plugin.toml 的旧版插件接口",
+  "list": "插件列表",
+  "empty": "尚未发现插件。可以上传 ZIP、从 GitHub 安装，或放入插件目录后点击重载插件。",
+  "scanning": "正在扫描插件目录…",
+  "cancel": "取消",
+  "removed": "插件已移除，插件列表已更新",
+  "install": {
+    "cancel": "取消安装",
+    "submit": "安装并扫描",
+    "zipLabel": "ZIP 插件包",
+    "zipFile": "ZIP 插件包（最大 20 MiB）",
+    "repo": "GitHub 仓库地址",
+    "github": "公开 GitHub 仓库",
+    "zip": "上传 ZIP 插件包",
+    "source": "安装来源",
+    "idPlaceholder": "例如 hello_world",
+    "idLabel": "安装插件标识",
+    "id": "插件标识",
+    "hint": "插件与主程序同进程运行，只安装信任的插件。新插件默认停用，配置后启用并保存。",
+    "title": "安装插件"
+  },
+  "installed": "插件已安装，请配置并启用",
+  "reload": "重载插件",
+  "reloaded": "已重新扫描并重载插件，请查看各插件状态",
+  "title": "插件管理",
+  "ownerOnly": "仅主人",
+  "status": {
+    "error": "加载失败",
+    "disabled": "未启用",
+    "loaded": "运行中"
+  },
+  "schema": {
+    "unknownTemplateEdit": "未知模板 {key}，可直接编辑 JSON。",
+    "missingTemplateKey": "（缺少 __template_key）",
+    "addEntry": "添加条目",
+    "entryTemplate": "{label}条目模板",
+    "removeEntry": "移除第 {n} 项 {name}",
+    "entryName": "{label}第 {n} 项",
+    "unknownTemplate": "未知模板",
+    "noEntries": "尚未添加条目。",
+    "addParam": "添加参数",
+    "allAdded": "已添加全部参数",
+    "addableParams": "{label}可添加参数",
+    "removeParam": "移除参数 {name}",
+    "noParams": "尚未添加参数。",
+    "invalidArray": "请填写有效的 JSON 数组后保存。",
+    "invalidObject": "请填写有效的 JSON 对象后保存。",
+    "patternMismatch": "格式不符合要求：",
+    "jsonLabel": "插件配置 JSON",
+    "editJson": "编辑完整配置 JSON"
+  }
+}

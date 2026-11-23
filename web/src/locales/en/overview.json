@@ -1,0 +1,47 @@
+{
+  "metrics": {
+    "adapters": {
+      "label": "Connections",
+      "note": "Enabled adapter instances"
+    },
+    "tools": {
+      "label": "Available tools",
+      "note": "Built-in abilities and plugins"
+    },
+    "approvals": {
+      "label": "Awaiting approval",
+      "note": "Need your confirmation"
+    },
+    "subagents": {
+      "label": "Subagent tasks",
+      "note": "Running or queued"
+    }
+  },
+  "pendingTitle": "Waiting for you · {count}",
+  "activity": {
+    "latest": "Latest: {time}",
+    "empty": "Once everything is set up, the assistant's activity shows up here.",
+    "loading": "Loading recent activity",
+    "title": "Recent activity"
+  },
+  "connections": {
+    "manage": "Manage connections",
+    "empty": "Add a QQ or Feishu instance under Connections.",
+    "loading": "Loading connection status",
+    "title": "Connections"
+  },
+  "deniedOnce": "Denied this call.",
+  "allowedOnce": "Allowed this call.",
+  "setup": {
+    "go": "Set up",
+    "todo": "Not done",
+    "done": "Done",
+    "hint": "Finish these steps in order and the assistant can start receiving messages.",
+    "title": "Get started",
+    "adapter": "Connect QQ or Feishu (adapter)",
+    "webSearch": "Enter a web search key (optional)",
+    "routes": "Choose models for the chat / agent routes",
+    "model": "Add and enable a model",
+    "provider": "Add and enable a provider (API key)"
+  }
+}

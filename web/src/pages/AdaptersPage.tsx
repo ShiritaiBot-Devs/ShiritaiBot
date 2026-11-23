@@ -8,13 +8,14 @@ import { adapterFields, createAdapter } from "../config/schema";
 import { useNotice } from "../hooks/useNotice";
 import { uniqueId } from "../lib/utils";
 import type { ConfigPageProps } from "./common";
+import i18n, { tx } from "../i18n";
 
 const CONNECTION_LABELS: Record<string, string> = {
-  connected: "已连接",
-  connecting: "连接中",
-  disconnected: "未连接",
-  reconnecting: "重新连接中",
-  error: "连接异常",
+  connected: "adapters:status.connected",
+  connecting: "adapters:status.connecting",
+  disconnected: "adapters:status.disconnected",
+  reconnecting: "adapters:status.reconnecting",
+  error: "adapters:status.error",
 };
 
 function savedAppIdentity(current: AdapterConfig, saved?: AdapterConfig) {
@@ -57,29 +58,31 @@ function AddAdapterDialog({
         onClose();
       }}
     >
-      <h2 id={title}>添加机器人</h2>
+      <h2 id={title}>{i18n.t("adapters:add.title")}</h2>
       <label className="field">
-        <span className="field-name">适配器类型</span>
+        <span className="field-name">{i18n.t("adapters:add.type")}</span>
         <select
           value={type}
           onChange={(event) => setType(event.target.value as AdapterType)}
         >
           <option value="onebot11">QQ · OneBot V11</option>
-          <option value="qq_official">QQ 官方机器人</option>
-          <option value="feishu">飞书应用机器人</option>
+          <option value="qq_official">
+            {i18n.t("adapters:type.qq_official")}
+          </option>
+          <option value="feishu">{i18n.t("adapters:type.feishu")}</option>
         </select>
       </label>
       <div className="actions adapter-dialog-actions">
         <button type="button" onClick={onClose}>
-          取消
+          {i18n.t("adapters:cancel")}
         </button>
         {type === "feishu" ? (
           <>
             <button type="button" onClick={() => onManual(type)}>
-              手动配置
+              {i18n.t("adapters:add.manual")}
             </button>
             <button type="button" className="primary" onClick={onQr}>
-              扫码一键创建
+              {i18n.t("adapters:add.scan")}
             </button>
           </>
         ) : (
@@ -88,7 +91,7 @@ function AddAdapterDialog({
             className="primary"
             onClick={() => onManual(type)}
           >
-            继续
+            {i18n.t("adapters:add.continue")}
           </button>
         )}
       </div>
@@ -151,7 +154,7 @@ export function AdaptersPage({
   function openQr() {
     if (dirty) {
       setCreation(null);
-      warn("请先保存或放弃未保存的配置，再创建飞书机器人。");
+      warn(i18n.t("adapters:saveFirst"));
       return;
     }
     setCreation("qr");
@@ -167,7 +170,9 @@ export function AdaptersPage({
         ),
       );
       succeed(
-        enabled ? "飞书实例已保存，正在连接。" : "飞书实例已保存为未启用。",
+        enabled
+          ? i18n.t("adapters:feishuSaved")
+          : i18n.t("adapters:feishuSavedDisabled"),
       );
     },
     [queryClient, succeed],
@@ -177,7 +182,7 @@ export function AdaptersPage({
     <>
       <InstanceCollection<AdapterConfig>
         key={selection?.key}
-        title="适配器实例"
+        title={i18n.t("adapters:instances")}
         items={items}
         initialSelectedId={selection?.id}
         onAdd={() => setCreation("choose")}
@@ -210,13 +215,13 @@ export function AdaptersPage({
         subtitle={(item) =>
           item.type === "feishu"
             ? item.domain === "lark"
-              ? "Lark 应用机器人"
-              : "飞书应用机器人"
+              ? i18n.t("adapters:type.lark")
+              : i18n.t("adapters:type.feishu")
             : item.type === "qq_official"
-              ? "QQ 官方机器人"
+              ? i18n.t("adapters:type.qq_official")
               : item.url
         }
-        emptyText="添加实例，连接 QQ 或飞书。"
+        emptyText={i18n.t("adapters:empty")}
         renderStatus={(item) => {
           const saved = savedAdapter(item);
           const status = health.data?.adapters[item.id];
@@ -233,16 +238,20 @@ export function AdaptersPage({
                 item.url === saved.url &&
                 item.token === saved.token);
           const label = !savedConnection
-            ? "待保存"
+            ? i18n.t("adapters:pending")
             : !item.enabled
-              ? "未启用"
+              ? i18n.t("adapters:disabled")
               : health.isPending
-                ? "正在读取状态"
+                ? i18n.t("adapters:loadingStatus")
                 : health.isError
-                  ? "状态暂不可用"
+                  ? i18n.t("adapters:statusUnavailable")
                   : item.type === "qq_official" && status === "connected"
-                    ? "凭证可用"
-                    : (CONNECTION_LABELS[status ?? ""] ?? status ?? "未连接");
+                    ? i18n.t("adapters:credentialsOk")
+                    : tx(
+                        CONNECTION_LABELS[status ?? ""] ??
+                          status ??
+                          i18n.t("adapters:status.disconnected"),
+                      );
           const diagnostic =
             hasAppSecret && item.enabled && savedConnection
               ? health.data?.adapter_diagnostics?.[item.id]
@@ -256,7 +265,10 @@ export function AdaptersPage({
                 }
               >
                 {savedConnection && item.enabled && health.isPending ? (
-                  <LoadingBar compact label="读取连接状态" />
+                  <LoadingBar
+                    compact
+                    label={i18n.t("adapters:loadingConnections")}
+                  />
                 ) : (
                   label
                 )}
@@ -264,7 +276,7 @@ export function AdaptersPage({
               {diagnostic && <p>{diagnostic}</p>}
               {item.type === "qq_official" && (
                 <p>
-                  回调路径{" "}
+                  {i18n.t("adapters:callbackPath")}{" "}
                   <code>/api/adapters/qq-official/{item.id}/callback</code>
                 </p>
               )}

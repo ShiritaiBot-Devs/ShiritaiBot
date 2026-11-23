@@ -1,0 +1,66 @@
+{
+  "intro": "The sticker manager has three parts. The library stores stickers by category, with text descriptions. The collector gathers stickers other people post in allowed group chats. The injector tells the model how to send stickers with <meme>category</meme>, and swaps the tags for sticker messages before sending. The description and category model is set under \"Models & Services → Routes → Sticker description and category model\", and semantic search uses the Embedding route.",
+  "categories": {
+    "hint": "The name is used in <meme>name</meme> tags: lowercase letters, numbers, and underscores, starting with a letter. The description tells the model and the category check what the category expresses. After renaming or deleting a category, its stickers need to be recategorized before they can be sent at random.",
+    "duplicate": "Duplicate category name",
+    "invalidName": "Invalid name format",
+    "delete": "Delete category {name}",
+    "descriptionPlaceholder": "The emotion or use this category expresses",
+    "descriptionLabel": "Category {n} description",
+    "nameLabel": "Category {n} name",
+    "add": "Add category",
+    "title": "Category tags"
+  },
+  "item": {
+    "delete": "Delete sticker {id}",
+    "confirmDelete": "Confirm delete",
+    "deleted": "Sticker deleted.",
+    "redescribe": "Describe again",
+    "redescribed": "Described again.",
+    "redescribeLabel": "Describe again with the sticker description model",
+    "saveDescription": "Save description",
+    "descriptionSaved": "Description saved.",
+    "descriptionLabel": "Description of sticker {id}",
+    "categoryUpdated": "Category updated.",
+    "categoryLabel": "Category of sticker {id}",
+    "unconfigured": "{category} (not configured)"
+  },
+  "cancel": "Cancel",
+  "upload": {
+    "submit": "Upload",
+    "descriptionPlaceholder": "Leave empty to let the sticker description model describe it",
+    "descriptionLabel": "Upload description",
+    "description": "Description",
+    "auto": "Decide automatically",
+    "categoryLabel": "Upload category",
+    "category": "Category",
+    "image": "Sticker image",
+    "title": "Upload a sticker (up to 2 MB)"
+  },
+  "uploaded": "Sticker added to the library.",
+  "pages": "Sticker pages",
+  "empty": "The library is empty. Turn on group collection, or upload stickers above.",
+  "noMatch": "No stickers match",
+  "loadFailed": "Couldn't load stickers: {error}",
+  "search": {
+    "submit": "Search",
+    "placeholder": "Keywords from the description, or a sticker ID",
+    "label": "Search stickers"
+  },
+  "library": {
+    "all": "All",
+    "category": "Sticker category",
+    "noEmbedding": "No embedding model, so search uses keywords only",
+    "indexed": "{indexed} indexed, {pending} pending",
+    "title": "Sticker library",
+    "usage": "{count} / {capacity} stickers · vectors"
+  },
+  "title": "Sticker manager",
+  "sources": {
+    "manual": "Uploaded manually",
+    "agent": "Saved by the model",
+    "group": "Collected from groups"
+  },
+  "count_one": "{count} sticker",
+  "count_other": "{count} stickers"
+}

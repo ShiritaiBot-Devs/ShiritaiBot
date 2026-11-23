@@ -5,6 +5,7 @@ import { inferFieldSpec } from "../config/schema";
 import { Control } from "./FieldForm";
 import { schemaLabel } from "../lib/pluginSchema";
 import { DictField, TemplateListField } from "./PluginSchemaCollections";
+import i18n from "../i18n";
 
 export interface SchemaFieldProps {
   name: string;
@@ -67,7 +68,11 @@ export function JsonSetting({
       />
       {error && (
         <small className="field-error" role="alert">
-          请填写有效的 JSON {Array.isArray(value) ? "数组" : "对象"}后保存。
+          {i18n.t(
+            Array.isArray(value)
+              ? "plugins:schema.invalidArray"
+              : "plugins:schema.invalidObject",
+          )}
         </small>
       )}
     </div>
@@ -211,7 +216,8 @@ function PatternText({
       <Control spec={spec} value={value} onChange={onChange} />
       {invalid && (
         <small className="field-error" role="alert">
-          格式不符合要求：<code>{pattern}</code>
+          {i18n.t("plugins:schema.patternMismatch")}
+          <code>{pattern}</code>
         </small>
       )}
     </>

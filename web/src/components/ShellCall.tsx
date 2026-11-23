@@ -11,6 +11,7 @@ import {
 import type { FileDiff } from "../api/types";
 import type { ToolItem } from "../lib/timeline";
 import { useNotice } from "../hooks/useNotice";
+import i18n from "../i18n";
 
 function json(text?: string) {
   try {
@@ -39,7 +40,7 @@ function CopyText({ text, label }: { text: string; label: string }) {
       }
       setCopied(true);
     } catch {
-      fail("复制失败，可选中文本后复制。");
+      fail(i18n.t("chat:shell.copyFailed"));
     }
   }
   return (
@@ -47,7 +48,7 @@ function CopyText({ text, label }: { text: string; label: string }) {
       type="button"
       className="trace-copy"
       aria-label={label}
-      title={copied ? "已复制" : label}
+      title={copied ? i18n.t("chat:shell.copied") : label}
       onBlur={() => setCopied(false)}
       onClick={() => void copy()}
     >
@@ -102,7 +103,10 @@ function FilePatch({ file }: { file: FileDiff }) {
         <span className="patch-add-count">+{file.added}</span>
         <span className="patch-remove-count">−{file.removed}</span>
         {file.patch && (
-          <CopyText text={file.patch} label={`复制 ${file.path} 的差异`} />
+          <CopyText
+            text={file.patch}
+            label={i18n.t("chat:shell.copyDiff", { path: file.path })}
+          />
         )}
       </div>
       {file.patch && (
@@ -138,7 +142,7 @@ function FilePatch({ file }: { file: FileDiff }) {
           </div>
         </div>
       )}
-      {file.truncated && <small>差异预览已截断</small>}
+      {file.truncated && <small>{i18n.t("chat:shell.diffTruncated")}</small>}
     </section>
   );
 }
@@ -157,12 +161,12 @@ export function ShellCall({ item }: { item: ToolItem }) {
   const error = typeof parsed?.error === "string" ? parsed.error : "";
   const failed = Boolean(error) || (exit !== undefined && exit !== 0);
   const label = !result
-    ? "正在运行"
+    ? i18n.t("chat:shell.running")
     : failed
-      ? "运行失败"
+      ? i18n.t("chat:shell.failed")
       : exit === 0
-        ? "已运行"
-        : "运行记录";
+        ? i18n.t("chat:shell.ran")
+        : i18n.t("chat:shell.record");
   const fallback =
     typeof parsed?.preview === "string" ? parsed.preview : result?.content;
   const transcript = [
@@ -189,28 +193,32 @@ export function ShellCall({ item }: { item: ToolItem }) {
         <div className="terminal-card">
           <div className="terminal-caption">
             Shell
-            <CopyText text={transcript} label="复制命令和输出" />
+            <CopyText text={transcript} label={i18n.t("chat:shell.copyAll")} />
           </div>
           <pre tabIndex={0}>{transcript}</pre>
           <div className={`terminal-status ${failed ? "failed" : ""}`}>
-            {output?.truncated === true && <span>输出已截断</span>}
+            {output?.truncated === true && (
+              <span>{i18n.t("chat:shell.outputTruncated")}</span>
+            )}
             {!result ? (
               <>
                 <Clock3 size={12} />
-                执行中
+                {i18n.t("chat:shell.executing")}
               </>
             ) : failed ? (
               <>
                 <X size={13} />
-                {exit !== undefined ? `退出码 ${exit}` : "失败"}
+                {exit !== undefined
+                  ? i18n.t("chat:shell.exitCode", { code: exit })
+                  : i18n.t("chat:shell.failure")}
               </>
             ) : exit === 0 ? (
               <>
                 <Check size={13} />
-                成功
+                {i18n.t("chat:shell.success")}
               </>
             ) : (
-              "已返回"
+              i18n.t("chat:shell.returned")
             )}
           </div>
         </div>
@@ -219,7 +227,9 @@ export function ShellCall({ item }: { item: ToolItem }) {
         <details className="shell-files" open>
           <summary>
             <FilePenLine size={14} />
-            {changes?.length ? "已编辑的文件" : "差异输出"}
+            {changes?.length
+              ? i18n.t("chat:shell.editedFiles")
+              : i18n.t("chat:shell.diffOutput")}
             <ChevronRight size={13} />
           </summary>
           {files.map((file, i) => (

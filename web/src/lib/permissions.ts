@@ -6,6 +6,7 @@ import type {
   ToolPolicy,
   ToolRisk,
 } from "../api/types";
+import i18n from "../i18n";
 
 export const RISK_ORDER: ToolRisk[] = [
   "safe",
@@ -19,28 +20,52 @@ export const RISK_META: Record<
   { label: string; description: string }
 > = {
   safe: {
-    label: "安全",
-    description: "只读查询、搜索与状态查看，无副作用",
+    get label() {
+      return i18n.t("permissions:risk.safe.label");
+    },
+    get description() {
+      return i18n.t("permissions:risk.safe.description");
+    },
   },
   normal: {
-    label: "一般",
-    description: "局部写入且可恢复，如记记忆、建待办、写知识库",
+    get label() {
+      return i18n.t("permissions:risk.normal.label");
+    },
+    get description() {
+      return i18n.t("permissions:risk.normal.description");
+    },
   },
   sensitive: {
-    label: "敏感",
-    description: "对外发送消息/文件、安装技能或外部 MCP 默认工具",
+    get label() {
+      return i18n.t("permissions:risk.sensitive.label");
+    },
+    get description() {
+      return i18n.t("permissions:risk.sensitive.description");
+    },
   },
   dangerous: {
-    label: "危险",
-    description: "高危或不可逆操作，如 Shell、子代理、删除数据或踢人",
+    get label() {
+      return i18n.t("permissions:risk.dangerous.label");
+    },
+    get description() {
+      return i18n.t("permissions:risk.dangerous.description");
+    },
   },
 };
 
 export const PERMISSIONS: Record<ToolPermission, string> = {
-  deny: "禁止使用",
-  manual: "需要人工审批",
-  auto: "模型自动审批",
-  allow: "无需审批",
+  get deny() {
+    return i18n.t("permissions:permission.deny");
+  },
+  get manual() {
+    return i18n.t("permissions:permission.manual");
+  },
+  get auto() {
+    return i18n.t("permissions:permission.auto");
+  },
+  get allow() {
+    return i18n.t("permissions:permission.allow");
+  },
 };
 
 export interface PermissionPresetSpec {
@@ -54,9 +79,15 @@ export interface PermissionPresetSpec {
 export const PERMISSION_PRESETS: PermissionPresetSpec[] = [
   {
     value: "strict",
-    label: "保守：仅安全免审，其余人工审批",
-    shortLabel: "保守",
-    hint: "安全免审，一般/敏感/危险均需人工审批",
+    get label() {
+      return i18n.t("permissions:preset.strict.label");
+    },
+    get shortLabel() {
+      return i18n.t("permissions:preset.strict.shortLabel");
+    },
+    get hint() {
+      return i18n.t("permissions:preset.strict.hint");
+    },
     risks: {
       safe: "allow",
       normal: "manual",
@@ -66,9 +97,15 @@ export const PERMISSION_PRESETS: PermissionPresetSpec[] = [
   },
   {
     value: "balanced",
-    label: "平衡：安全与一般免审，敏感自动，危险人工",
-    shortLabel: "平衡",
-    hint: "安全与一般免审，敏感模型自动审批，危险人工审批",
+    get label() {
+      return i18n.t("permissions:preset.balanced.label");
+    },
+    get shortLabel() {
+      return i18n.t("permissions:preset.balanced.shortLabel");
+    },
+    get hint() {
+      return i18n.t("permissions:preset.balanced.hint");
+    },
     risks: {
       safe: "allow",
       normal: "allow",
@@ -78,9 +115,15 @@ export const PERMISSION_PRESETS: PermissionPresetSpec[] = [
   },
   {
     value: "autonomous",
-    label: "高自治：安全与一般免审，敏感与危险自动审批",
-    shortLabel: "高自治",
-    hint: "安全与一般免审，敏感与危险由模型自动审批",
+    get label() {
+      return i18n.t("permissions:preset.autonomous.label");
+    },
+    get shortLabel() {
+      return i18n.t("permissions:preset.autonomous.shortLabel");
+    },
+    get hint() {
+      return i18n.t("permissions:preset.autonomous.hint");
+    },
     risks: {
       safe: "allow",
       normal: "allow",
@@ -90,9 +133,15 @@ export const PERMISSION_PRESETS: PermissionPresetSpec[] = [
   },
   {
     value: "full_access",
-    label: "完全放行：所有等级无需审批",
-    shortLabel: "完全放行",
-    hint: "所有风险等级工具无需审批",
+    get label() {
+      return i18n.t("permissions:preset.full_access.label");
+    },
+    get shortLabel() {
+      return i18n.t("permissions:preset.full_access.shortLabel");
+    },
+    get hint() {
+      return i18n.t("permissions:preset.full_access.hint");
+    },
     risks: {
       safe: "allow",
       normal: "allow",

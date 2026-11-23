@@ -22,7 +22,7 @@
 
 </div>
 
-> **Language note:** ShiritaiBot uses Simplified Chinese by default. To switch the bot to English, set **Settings → General → Language** [设置 → 通用设定 → 语言] in the WebUI, or send `/lang en` in a chat. The WebUI has its own language switch in the top bar. English translation is still in progress, so some WebUI pages, bot messages, and most documents under [`docs/`](docs/) are still in Chinese. Where this README mentions a WebUI menu, the Chinese label is shown in brackets so you can find it.
+> **Language note:** ShiritaiBot uses Simplified Chinese by default. To switch the bot to English, set **Settings → General → Language** [设置 → 通用设定 → 语言] in the WebUI, or send `/lang en` in a chat. The WebUI is fully translated and has its own language switch in the top bar and on the sign-in page. Messages the bot sends, built-in tool descriptions, and most documents under [`docs/`](docs/) are still in Chinese while translation continues. Menu names in this README match the English WebUI, with the Chinese label in brackets.
 
 ## Why ShiritaiBot?
 
@@ -90,7 +90,7 @@ The goal is simple: by the time you think to ask, ShiritaiBot has already done t
 **Management**
 
 - 🖥️ **WebUI console**: manage models, connections, permissions, memory, logs, and usage dashboards from your browser.
-- 🌏 **Languages**: Simplified Chinese (the default) and English. Set the bot's language for every chat in the WebUI, switch a single chat with `/lang`, and switch the WebUI itself from its top bar. English translation is still in progress.
+- 🌏 **Languages**: Simplified Chinese (the default) and English. Set the bot's language for every chat in the WebUI, switch a single chat with `/lang`, and switch the WebUI itself from its top bar. The WebUI is fully translated; the bot's own messages are being translated next.
 
 ## Quick start
 

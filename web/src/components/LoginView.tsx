@@ -1,7 +1,9 @@
 import { LoadingBar } from "./LoadingBar";
 import { useState } from "react";
 import { ArrowUpRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { createClient } from "../api/client";
+import { UiLanguageSelect } from "./LanguageSettings";
 
 export function LoginView({
   authenticating = false,
@@ -12,6 +14,7 @@ export function LoginView({
   onAuthenticated: (token: string) => void;
   onError: (message: string) => void;
 }) {
+  const { t } = useTranslation("shell");
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -35,16 +38,16 @@ export function LoginView({
         <img src="/icon.png" alt="" />
       </div>
       <h1>ShiritaiBot</h1>
-      <p className="muted">打开启动日志中的登录链接，或输入管理令牌。</p>
+      <p className="muted">{t("login.hint")}</p>
       <form onSubmit={submit}>
         <label>
-          管理令牌
+          {t("login.token")}
           <input
             autoFocus
             type="password"
             value={token}
             onChange={(event) => setToken(event.target.value)}
-            placeholder="粘贴本机管理令牌"
+            placeholder={t("login.placeholder")}
             disabled={authenticating || busy}
             required
           />
@@ -55,13 +58,16 @@ export function LoginView({
           disabled={authenticating || busy}
         >
           {authenticating || busy ? (
-            <LoadingBar compact label="验证中…" />
+            <LoadingBar compact label={t("login.checking")} />
           ) : (
-            "进入控制台"
+            t("login.submit")
           )}
           <ArrowUpRight size={16} />
         </button>
       </form>
+      <div className="login-language">
+        <UiLanguageSelect compact />
+      </div>
     </div>
   );
 }

@@ -18,6 +18,7 @@ import {
   sessionGroups,
   sessionTitle,
 } from "../lib/sessions";
+import i18n from "../i18n";
 
 export interface ChatWorkspaceProps {
   client: ApiClient;
@@ -144,7 +145,9 @@ export function ChatWorkspace({
     setBusy(true);
     void act(
       () => client.resolveApproval(id, allow),
-      allow ? "已允许" : "已拒绝",
+      allow
+        ? i18n.t("chat:workspace.allowed")
+        : i18n.t("chat:workspace.denied"),
     ).finally(() => setBusy(false));
   }
 
@@ -197,7 +200,7 @@ export function ChatWorkspace({
         <header className="chat-header">
           <button
             type="button"
-            aria-label="会话列表"
+            aria-label={i18n.t("chat:workspace.sessions")}
             className="icon-button chat-menu"
             onClick={() => setDrawerOpen((open) => !open)}
           >
@@ -205,11 +208,13 @@ export function ChatWorkspace({
           </button>
           <h1>
             {titles.get(session)?.title ??
-              (session.startsWith("web:") ? "新对话" : sessionTitle(session))}
+              (session.startsWith("web:")
+                ? i18n.t("chat:workspace.newChat")
+                : sessionTitle(session))}
           </h1>
           <button
             type="button"
-            aria-label="设置"
+            aria-label={i18n.t("chat:workspace.settings")}
             className="icon-button"
             onClick={onOpenSettings}
           >
@@ -229,15 +234,19 @@ export function ChatWorkspace({
           <div className="chat-stream" key={session} ref={streamRef}>
             {webChats.error && (
               <QueryErrorNotice
-                message={`读取网页会话失败：${webChats.error.message}`}
+                message={i18n.t("chat:workspace.webChatsFailed", {
+                  error: webChats.error.message,
+                })}
               />
             )}
             {history.isPending && !outgoing.length && (
-              <LoadingBar label="正在读取会话…" />
+              <LoadingBar label={i18n.t("chat:workspace.loading")} />
             )}
             {history.error && (
               <QueryErrorNotice
-                message={`读取会话失败：${history.error.message}`}
+                message={i18n.t("chat:workspace.historyFailed", {
+                  error: history.error.message,
+                })}
               />
             )}
             {history.data?.length === 0 &&
@@ -246,7 +255,7 @@ export function ChatWorkspace({
               !waiting && (
                 <div className="chat-greeting">
                   <h2>Hi I'm ShiritaiBot</h2>
-                  <p>今天想做些什么？⭐</p>
+                  <p>{i18n.t("chat:workspace.greeting")}</p>
                 </div>
               )}
             <AgentTimeline
@@ -265,9 +274,9 @@ export function ChatWorkspace({
               <div
                 className="chat-loading"
                 role="status"
-                aria-label="助手正在回复"
+                aria-label={i18n.t("chat:workspace.replying")}
               >
-                <LoadingBar compact label="等待助手回复" />
+                <LoadingBar compact label={i18n.t("chat:workspace.waiting")} />
               </div>
             )}
           </div>
@@ -286,9 +295,7 @@ export function ChatWorkspace({
             running={running.has(session)}
           />
         ) : (
-          <p className="muted chat-readonly">
-            这里只发送 WebUI 会话。其他会话请返回原平台对话。
-          </p>
+          <p className="muted chat-readonly">{i18n.t("chat:webOnly")}</p>
         )}
       </main>
     </div>

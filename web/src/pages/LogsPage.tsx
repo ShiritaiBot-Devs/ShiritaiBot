@@ -5,17 +5,18 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { EmptyState } from "../components/EmptyState";
 import { formatTime } from "../lib/utils";
 import type { PageProps } from "./common";
+import i18n, { tx } from "../i18n";
 
 const LINE_OPTIONS = [200, 500, 1000, 2000];
 const LEVEL_OPTIONS = [
-  ["", "显示全部"],
-  ["log", "只看 LOG 及以上"],
-  ["warning", "只看 WARNING 及以上"],
-  ["error", "只看 ERROR"],
+  ["", "logs:filter.all"],
+  ["log", "logs:filter.log"],
+  ["warning", "logs:filter.warning"],
+  ["error", "logs:filter.error"],
 ] as const;
 const RECORD_LEVELS = [
-  ["debug", "DEBUG（全部细节）"],
-  ["info", "LOG（默认）"],
+  ["debug", "logs:record.debug"],
+  ["info", "logs:record.info"],
   ["warning", "WARNING"],
   ["error", "ERROR"],
 ] as const;
@@ -27,13 +28,10 @@ function RecordLevel({ client, act }: PageProps) {
     queryFn: () => client.logLevel(),
   });
   return (
-    <label
-      className="raw-log-follow"
-      title="立即生效：终端、日志文件和本页同时按此级别记录"
-    >
-      记录级别
+    <label className="raw-log-follow" title={i18n.t("logs:record.hint")}>
+      {i18n.t("logs:record.label")}
       <select
-        aria-label="记录级别"
+        aria-label={i18n.t("logs:record.label")}
         value={current.data?.level ?? "info"}
         disabled={!current.data}
         onChange={(event) => {
@@ -43,12 +41,12 @@ function RecordLevel({ client, act }: PageProps) {
               ["log-level"],
               await client.setLogLevel(level),
             );
-          }, "日志级别已更新，立即生效");
+          }, i18n.t("logs:record.updated"));
         }}
       >
         {RECORD_LEVELS.map(([value, label]) => (
           <option key={value} value={value}>
-            {label}
+            {tx(label)}
           </option>
         ))}
       </select>
@@ -83,28 +81,28 @@ function RunLog({ client, act }: PageProps) {
       <div className="inline raw-log-toolbar">
         <RecordLevel client={client} act={act} />
         <input
-          aria-label="过滤运行日志"
-          placeholder="过滤关键词…"
+          aria-label={i18n.t("logs:runtime.filter")}
+          placeholder={i18n.t("logs:filterPlaceholder")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
         <select
-          aria-label="筛选级别"
+          aria-label={i18n.t("logs:filter.label")}
           value={level}
           onChange={(event) => setLevel(event.target.value)}
         >
           {LEVEL_OPTIONS.map(([value, label]) => (
             <option key={value} value={value}>
-              {label}
+              {tx(label)}
             </option>
           ))}
         </select>
         <select
-          aria-label="日志来源"
+          aria-label={i18n.t("logs:source.label")}
           value={source}
           onChange={(event) => setSource(event.target.value)}
         >
-          <option value="">全部来源</option>
+          <option value="">{i18n.t("logs:source.all")}</option>
           {[...new Set([...sources, ...(source ? [source] : [])])].map(
             (name) => (
               <option key={name} value={name}>
@@ -114,13 +112,13 @@ function RunLog({ client, act }: PageProps) {
           )}
         </select>
         <select
-          aria-label="显示条数"
+          aria-label={i18n.t("logs:count")}
           value={limit}
           onChange={(event) => setLimit(Number(event.target.value))}
         >
           {LINE_OPTIONS.map((value) => (
             <option key={value} value={value}>
-              最近 {value} 条
+              {i18n.t("logs:recentEntries", { count: value })}
             </option>
           ))}
         </select>
@@ -130,15 +128,21 @@ function RunLog({ client, act }: PageProps) {
             checked={follow}
             onChange={(event) => setFollow(event.target.checked)}
           />
-          实时跟随
+          {i18n.t("logs:follow")}
         </label>
       </div>
-      {feed.isPending && <LoadingBar label="读取日志" />}
+      {feed.isPending && <LoadingBar label={i18n.t("logs:loading")} />}
       {feed.error && (
-        <QueryErrorNotice message={`读取运行日志失败：${feed.error.message}`} />
+        <QueryErrorNotice
+          message={i18n.t("logs:runtime.failed", { error: feed.error.message })}
+        />
       )}
       {entries.length ? (
-        <div className="run-log" ref={viewer} aria-label="运行日志">
+        <div
+          className="run-log"
+          ref={viewer}
+          aria-label={i18n.t("logs:runtime.title")}
+        >
           {entries.map((entry, index) => (
             <div
               className={`run-log-row level-${entry.level.toLowerCase()}`}
@@ -157,12 +161,10 @@ function RunLog({ client, act }: PageProps) {
           ))}
         </div>
       ) : (
-        !feed.error && !feed.isPending && <EmptyState text="暂无运行日志。" />
+        !feed.error &&
+        !feed.isPending && <EmptyState text={i18n.t("logs:runtime.empty")} />
       )}
-      <p className="muted raw-log-hint">
-        「记录级别」决定终端、日志文件和本页记录哪些日志，修改后立即生效并在重启后保留；
-        「筛选级别」只影响本页显示。文件：data/logs/shiritaibot.log。
-      </p>
+      <p className="muted raw-log-hint">{i18n.t("logs:runtime.hint")}</p>
     </>
   );
 }
@@ -175,9 +177,13 @@ function ActivityLog({ client }: Pick<PageProps, "client">) {
   });
   return (
     <>
-      {activity.isPending && <LoadingBar label="读取日志" />}
+      {activity.isPending && <LoadingBar label={i18n.t("logs:loading")} />}
       {activity.error && (
-        <QueryErrorNotice message={`读取日志失败：${activity.error.message}`} />
+        <QueryErrorNotice
+          message={i18n.t("logs:activity.failed", {
+            error: activity.error.message,
+          })}
+        />
       )}
       {activity.data?.map((row) => (
         <div className="log-row" key={row.id}>
@@ -213,19 +219,19 @@ function RawLog({ client }: Pick<PageProps, "client">) {
     <>
       <div className="inline raw-log-toolbar">
         <input
-          aria-label="过滤原始日志"
-          placeholder="过滤关键词…"
+          aria-label={i18n.t("logs:raw.filter")}
+          placeholder={i18n.t("logs:filterPlaceholder")}
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
         />
         <select
-          aria-label="显示行数"
+          aria-label={i18n.t("logs:raw.lines")}
           value={lines}
           onChange={(event) => setLines(Number(event.target.value))}
         >
           {LINE_OPTIONS.map((value) => (
             <option key={value} value={value}>
-              最近 {value} 行
+              {i18n.t("logs:recentLines", { count: value })}
             </option>
           ))}
         </select>
@@ -235,26 +241,31 @@ function RawLog({ client }: Pick<PageProps, "client">) {
             checked={follow}
             onChange={(event) => setFollow(event.target.checked)}
           />
-          自动滚动
+          {i18n.t("logs:raw.autoScroll")}
         </label>
         <button type="button" onClick={() => void raw.refetch()}>
-          刷新
+          {i18n.t("logs:raw.refresh")}
         </button>
       </div>
-      {raw.isPending && <LoadingBar label="读取日志" />}
+      {raw.isPending && <LoadingBar label={i18n.t("logs:loading")} />}
       {raw.error && (
-        <QueryErrorNotice message={`读取原始日志失败：${raw.error.message}`} />
+        <QueryErrorNotice
+          message={i18n.t("logs:raw.failed", { error: raw.error.message })}
+        />
       )}
       {text ? (
-        <pre className="raw-log" ref={viewer} aria-label="原始日志">
+        <pre
+          className="raw-log"
+          ref={viewer}
+          aria-label={i18n.t("logs:raw.title")}
+        >
           {text}
         </pre>
       ) : (
-        !raw.error && !raw.isPending && <EmptyState text="暂无日志输出。" />
+        !raw.error &&
+        !raw.isPending && <EmptyState text={i18n.t("logs:raw.empty")} />
       )}
-      <p className="muted raw-log-hint">
-        日志文件：data/logs/shiritaibot.log（单文件 5 MB 滚动，保留 3 份）
-      </p>
+      <p className="muted raw-log-hint">{i18n.t("logs:raw.hint")}</p>
     </>
   );
 }
@@ -266,17 +277,21 @@ export function LogsPage({ client, act }: PageProps) {
       <div className="panel-head logs-head">
         <h2>
           {tab === "runtime"
-            ? "运行日志"
+            ? i18n.t("logs:runtime.title")
             : tab === "activity"
-              ? "活动记录"
-              : "原始滚动日志"}
+              ? i18n.t("logs:activity.title")
+              : i18n.t("logs:raw.rollingTitle")}
         </h2>
-        <div className="range-tabs" role="group" aria-label="日志类型">
+        <div
+          className="range-tabs"
+          role="group"
+          aria-label={i18n.t("logs:tabs")}
+        >
           {(
             [
-              ["runtime", "运行日志"],
-              ["activity", "活动记录"],
-              ["raw", "原始日志"],
+              ["runtime", i18n.t("logs:runtime.title")],
+              ["activity", i18n.t("logs:activity.title")],
+              ["raw", i18n.t("logs:raw.title")],
             ] as const
           ).map(([value, label]) => (
             <button

@@ -1,6 +1,7 @@
 import { Circle } from "lucide-react";
+import i18n from "../i18n";
 
-export function EmptyState({ text = "这里还没有内容" }: { text?: string }) {
+export function EmptyState({ text = i18n.t("empty") }: { text?: string }) {
   return (
     <div className="empty">
       <Circle size={26} aria-hidden="true" />

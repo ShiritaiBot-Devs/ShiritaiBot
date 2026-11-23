@@ -20,6 +20,7 @@ import {
   type SendMode,
 } from "../lib/composer";
 import { matchPreset } from "../lib/permissions";
+import i18n from "../i18n";
 
 export interface ChatComposerProps {
   client: ApiClient;
@@ -106,17 +107,19 @@ export function ChatComposer({
   }));
   const modelLabel = model
     ? modelNameById(config.data?.models ?? [], model)
-    : "模型";
+    : i18n.t("composer:model");
   const serverPreset = tools.data?.policy?.risks
     ? matchPreset(tools.data.policy.risks)
     : "balanced";
   const currentPreset = preset || serverPreset;
   const presetLabel =
     currentPreset === "custom"
-      ? "自定义"
-      : (PRESETS.find((row) => row.value === currentPreset)?.label ?? "审查");
+      ? i18n.t("composer:custom")
+      : (PRESETS.find((row) => row.value === currentPreset)?.label ??
+        i18n.t("composer:review"));
   const sendLabel =
-    SEND_MODES.find((row) => row.value === sendMode)?.label ?? "发送性质";
+    SEND_MODES.find((row) => row.value === sendMode)?.label ??
+    i18n.t("composer:sendMode");
 
   const query = text.trimStart();
   const menuOpen =
@@ -241,14 +244,16 @@ export function ChatComposer({
       }}
     >
       {queue.length > 0 && (
-        <ul className="composer-queue" aria-label="排队消息">
+        <ul className="composer-queue" aria-label={i18n.t("composer:queued")}>
           {queue.map((item) => (
             <li key={item.id}>
               <span>{item.text}</span>
               <button
                 type="button"
                 className="icon-button"
-                aria-label={`移除排队消息：${item.text}`}
+                aria-label={i18n.t("composer:removeQueued", {
+                  text: item.text,
+                })}
                 onClick={() =>
                   setQueue((items) => items.filter((row) => row.id !== item.id))
                 }
@@ -264,7 +269,7 @@ export function ChatComposer({
           className="command-menu"
           role="listbox"
           id="chat-commands"
-          aria-label="斜杠命令"
+          aria-label={i18n.t("composer:commands")}
         >
           {matches.map((command, position) => (
             <button
@@ -284,7 +289,7 @@ export function ChatComposer({
         </div>
       )}
       <textarea
-        aria-label="消息"
+        aria-label={i18n.t("composer:message")}
         aria-autocomplete="list"
         aria-controls={matches.length ? "chat-commands" : undefined}
         aria-activedescendant={
@@ -299,33 +304,33 @@ export function ChatComposer({
           setIndex(0);
         }}
         onKeyDown={onKeyDown}
-        placeholder={`告诉 ${assistantName} 你想做什么，或输入 / 查看命令…`}
+        placeholder={i18n.t("composer:placeholder", { name: assistantName })}
       />
       <div className="composer-bar">
         <div className="composer-chips">
           <ComposerSelect
-            label="模型"
+            label={i18n.t("composer:model")}
             value={model}
             display={modelLabel}
             options={[
               {
                 value: "",
-                label: "默认路由",
-                hint: "按配置的模型路由自动选择",
+                label: i18n.t("composer:defaultRoute"),
+                hint: i18n.t("composer:defaultRouteHint"),
               },
             ]}
             groups={modelGroups}
             onSelect={chooseModel}
           />
           <ComposerSelect
-            label="发送性质"
+            label={i18n.t("composer:sendMode")}
             value={sendMode}
             display={sendLabel}
             options={SEND_MODES}
             onSelect={chooseSendMode}
           />
           <ComposerSelect
-            label="审查方式"
+            label={i18n.t("composer:reviewMode")}
             value={currentPreset === "custom" ? ("" as Preset) : currentPreset}
             display={presetLabel}
             options={PRESETS}
@@ -334,7 +339,11 @@ export function ChatComposer({
         </div>
         <div className="composer-actions">
           {running && (
-            <button type="button" aria-label="停止当前任务" onClick={stop}>
+            <button
+              type="button"
+              aria-label={i18n.t("composer:stop")}
+              onClick={stop}
+            >
               <Square size={16} />
             </button>
           )}
@@ -342,7 +351,7 @@ export function ChatComposer({
             type="submit"
             className="primary"
             disabled={!text.trim()}
-            aria-label="发送消息"
+            aria-label={i18n.t("composer:send")}
           >
             <Send size={17} />
           </button>

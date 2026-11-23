@@ -55,8 +55,23 @@ def web_catalog(locale):
     }
 
 
+PLURAL = re.compile(r"_(zero|one|two|few|many|other)$")
+
+
+def plural_merged(entries):
+    # Languages have different plural forms (key_one, key_other); compare per key.
+    merged = {}
+    for key, value in entries.items():
+        merged[PLURAL.sub("", key)] = merged.get(PLURAL.sub("", key), "") + " " + value
+    return merged
+
+
 def test_catalogs_match_across_locales():
-    for name, load in (("backend", catalog), ("web", web_catalog)):
+    for name, raw in (("backend", catalog), ("web", web_catalog)):
+
+        def load(locale, raw=raw):
+            return plural_merged(raw(locale))
+
         reference = load("zh-CN")
         assert reference, name
         for locale in LOCALES:

@@ -1,0 +1,117 @@
+{
+  "nav": {
+    "features": "Features",
+    "config": "Configure",
+    "main": "Main navigation"
+  },
+  "capabilities": {
+    "approvals": "Tools",
+    "mcp": "MCP",
+    "skills": "Skills"
+  },
+  "brand": {
+    "console": "Console"
+  },
+  "status": {
+    "restarting": "Restarting…",
+    "online": "Running",
+    "offline": "Not connected"
+  },
+  "restart": {
+    "label": "Restart",
+    "busy": "Restarting",
+    "hint": "Restart the ShiritaiBot service",
+    "unsupported": "Start ShiritaiBot with shiritaibot run to enable restarts",
+    "done": "Restart complete",
+    "timeout": "The restart is taking too long. Check the service log, or refresh the page later."
+  },
+  "header": {
+    "crumb": "Local console",
+    "localOnly": "Local only",
+    "chatMode": "Chat mode",
+    "checkUpdate": "Check for updates",
+    "updateAvailable": "A new version is available",
+    "newVersion": "New version",
+    "logout": "Sign out"
+  },
+  "footer": {
+    "localData": "Local data",
+    "tagline": "Explicit permissions · Lasting memory"
+  },
+  "config": {
+    "loading": "Loading settings…",
+    "saved": "Settings saved and applied.",
+    "savedWithWarnings": "Settings saved, with these problems: {warnings}",
+    "unsaved": "Save or discard your unsaved changes first."
+  },
+  "busy": {
+    "working": "Working…",
+    "wait": "Wait for the current operation to finish."
+  },
+  "login": {
+    "hint": "Open the sign-in link from the startup log, or enter the admin token.",
+    "token": "Admin token",
+    "placeholder": "Paste this instance's admin token",
+    "checking": "Checking…",
+    "submit": "Open console"
+  },
+  "pages": {
+    "overview": {
+      "label": "Overview",
+      "subtitle": "Status, statistics, and recent activity."
+    },
+    "chat": {
+      "label": "Chat",
+      "subtitle": "Talk to the assistant, or type / to use a command."
+    },
+    "routine": {
+      "label": "Schedule",
+      "subtitle": "To-dos, events, reminders, and scheduled tasks."
+    },
+    "events": {
+      "label": "Proactive Feed",
+      "subtitle": "Events the proactive engine received, and how it triaged them."
+    },
+    "logs": {
+      "label": "Activity Log",
+      "subtitle": "Everything the bot did, newest first."
+    },
+    "models": {
+      "label": "Models & Services",
+      "subtitle": "LLM providers, models, and routing."
+    },
+    "memes": {
+      "label": "Stickers",
+      "subtitle": "Sticker library, categories, auto-collection, and usage settings."
+    },
+    "subagents": {
+      "label": "Subagents",
+      "subtitle": "Built-in subagents, external CLI instances, and task history."
+    },
+    "plugins": {
+      "label": "Plugins",
+      "subtitle": "Turn plugins on or off, configure them, and reload them."
+    },
+    "approvals": {
+      "label": "Capabilities & Permissions",
+      "subtitle": "Tool permissions, approval history, MCP servers, and Skills."
+    },
+    "memory": {
+      "label": "Long-term Memory",
+      "subtitle": "What the assistant has explicitly chosen to remember."
+    },
+    "knowledge": {
+      "label": "Knowledge Base",
+      "subtitle": "Reference material that doesn't change, searchable by keyword and meaning."
+    },
+    "adapters": {
+      "label": "Connections",
+      "subtitle": "Manage QQ and Feishu connections."
+    },
+    "settings": {
+      "label": "Settings",
+      "subtitle": "Manage ShiritaiBot's settings."
+    }
+  },
+  "documentTitle": "ShiritaiBot · Console"
+}

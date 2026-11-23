@@ -87,6 +87,8 @@ aside nav {
 
 aside nav button {
   justify-content: flex-start;
+  /* Long labels (English) wrap left-aligned, like the rest of the sidebar. */
+  text-align: left;
   padding: 10px 12px;
   gap: 12px;
   border: 0;
@@ -191,7 +193,8 @@ header button {
 }
 
 /* Interface language picker: sized to its content like the header buttons. */
-header select.console-language {
+header select.console-language,
+.login select.console-language {
   width: auto;
   flex: none;
   padding: 5px 8px;
@@ -202,6 +205,20 @@ header select.console-language {
   font-size: 10px;
   letter-spacing: 1.4px;
   color: var(--accent);
+}
+
+.console-crumb,
+.console-actions button,
+.local-badge {
+  white-space: nowrap;
+}
+
+/* Longer (English) labels: drop the header's static parts before anything wraps. */
+@media (max-width: 960px) {
+  .console-crumb > :not([aria-current]),
+  .local-badge {
+    display: none;
+  }
 }
 
 .content {

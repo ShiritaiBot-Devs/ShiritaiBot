@@ -1,0 +1,54 @@
+{
+  "remove": {
+    "title": "Delete {name}?",
+    "button": "Delete",
+    "confirm": "Delete",
+    "hint": "The Skill's directory will be deleted. This can't be undone.",
+    "dialog": "Confirm Skill deletion"
+  },
+  "item": {
+    "path": "Location: {path}",
+    "files": "Files",
+    "enabled": {
+      "help": "When disabled, it doesn't appear in the system prompt and can't be read. Save after changing.",
+      "label": "Enable this Skill"
+    },
+    "bytes_one": "{count} byte",
+    "bytes_other": "{count} bytes"
+  },
+  "flags": {
+    "disabled": " · disabled",
+    "invalid": " · invalid",
+    "overrides": " · overrides built-in"
+  },
+  "source": {
+    "installed": "Installed",
+    "builtin": "Built-in"
+  },
+  "list": {
+    "title": "Skills"
+  },
+  "empty": "No Skills installed yet.",
+  "loading": "Loading Skills…",
+  "cancel": "Cancel",
+  "removed": "Skill deleted.",
+  "install": {
+    "submit": "Upload and install",
+    "file": "Skill file",
+    "hint": "Supports .skill / .zip packages or a single SKILL.md (max 10 MiB). You can also send a Skill file to the assistant on QQ and ask it to install it. Scripts that come with a Skill are external code, so only install Skills you trust.",
+    "title": "Install a Skill",
+    "replace": "Replace a Skill with the same name"
+  },
+  "installed": "Skill installed.",
+  "settings": {
+    "list": {
+      "help": "List the names and descriptions of enabled Skills so the assistant reads the right one when it fits.",
+      "label": "List Skills in the system prompt"
+    },
+    "enabled": {
+      "help": "When on, Agent mode offers tools such as skill_list, skill_read, and skill_write.",
+      "label": "Enable Skills"
+    },
+    "title": "Skill settings"
+  }
+}

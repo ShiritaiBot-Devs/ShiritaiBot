@@ -16,6 +16,7 @@ import type { Action } from "./common";
 import type { NavigationProps } from "./common";
 import { Dashboard } from "./Dashboard";
 import { formatDateTime } from "../lib/utils";
+import i18n from "../i18n";
 
 function FirstRunChecklist({
   client,
@@ -32,31 +33,31 @@ function FirstRunChecklist({
   if (!data) return null;
   const steps: { label: string; done: boolean; page: PageId }[] = [
     {
-      label: "添加并启用提供商（API Key）",
+      label: i18n.t("overview:setup.provider"),
       done: data.providers.some((provider) => provider.enabled),
       page: "models",
     },
     {
-      label: "添加并启用模型",
+      label: i18n.t("overview:setup.model"),
       done: data.models.some((model) => model.enabled),
       page: "models",
     },
     {
-      label: "给 chat / agent 路由选模型",
+      label: i18n.t("overview:setup.routes"),
       done: ["chat", "agent", "agent_chat"].every(
         (route) => (data.routes[route] ?? []).length > 0,
       ),
       page: "models",
     },
     {
-      label: "填写网页搜索密钥（可选）",
+      label: i18n.t("overview:setup.webSearch"),
       done:
         !data.web_search.enabled ||
         Boolean(data.web_search[data.web_search.provider].api_key),
       page: "settings",
     },
     {
-      label: "连接 QQ 或飞书（适配器）",
+      label: i18n.t("overview:setup.adapter"),
       done: data.adapters.some((adapter) => adapter.enabled),
       page: "adapters",
     },
@@ -64,15 +65,18 @@ function FirstRunChecklist({
   if (steps.every((step) => step.done)) return null;
   return (
     <section className="panel">
-      <h2>开始使用</h2>
-      <p className="muted">按顺序完成下面几项，助手就能接消息了。</p>
+      <h2>{i18n.t("overview:setup.title")}</h2>
+      <p className="muted">{i18n.t("overview:setup.hint")}</p>
       <ul className="checklist">
         {steps.map((step) => (
           <li key={step.label} className={step.done ? "done" : undefined}>
             {step.done ? (
-              <CheckCircle2 size={16} aria-label="已完成" />
+              <CheckCircle2
+                size={16}
+                aria-label={i18n.t("overview:setup.done")}
+              />
             ) : (
-              <Circle size={16} aria-label="未完成" />
+              <Circle size={16} aria-label={i18n.t("overview:setup.todo")} />
             )}
             <span className={step.done ? "muted" : ""}>{step.label}</span>
             {!step.done && (
@@ -81,7 +85,7 @@ function FirstRunChecklist({
                 className="text-button"
                 onClick={() => onNavigate(step.page)}
               >
-                去设置
+                {i18n.t("overview:setup.go")}
                 <ArrowUpRight size={14} />
               </button>
             )}
@@ -123,31 +127,34 @@ export function OverviewPage({
       <div className="metrics">
         {(
           [
-            ["协议连接", adapters.length, "已启用的适配器实例"],
-            ["可用工具", health.data?.tools.length ?? 0, "内置能力与插件"],
-            ["等待审批", pending.length, "需要你的确认"],
-            ["子代理任务", health.data?.subagents ?? 0, "正在执行或排队"],
+            ["adapters", adapters.length],
+            ["tools", health.data?.tools.length ?? 0],
+            ["approvals", pending.length],
+            ["subagents", health.data?.subagents ?? 0],
           ] as const
-        ).map(([label, value, note]) => (
-          <div className="metric" key={label}>
-            <MetricIcon label={label} />
-            <span>{label}</span>
+        ).map(([id, value]) => (
+          <div className="metric" key={id}>
+            <MetricIcon id={id} />
+            <span>{i18n.t(`overview:metrics.${id}.label`)}</span>
             <strong>
-              {(
-                label === "等待审批" ? approvals.isPending : health.isPending
-              ) ? (
-                <LoadingBar compact label={`读取${label}`} />
+              {(id === "approvals" ? approvals.isPending : health.isPending) ? (
+                <LoadingBar
+                  compact
+                  label={i18n.t("common:pagination.loading", {
+                    label: i18n.t(`overview:metrics.${id}.label`),
+                  })}
+                />
               ) : (
                 value
               )}
             </strong>
-            <small>{note}</small>
+            <small>{i18n.t(`overview:metrics.${id}.note`)}</small>
           </div>
         ))}
       </div>
       {pending.length > 0 && (
         <section className="panel">
-          <h2>待你确认 · {pending.length}</h2>
+          <h2>{i18n.t("overview:pendingTitle", { count: pending.length })}</h2>
           {pending.map((row) => (
             <ApprovalCard
               key={row.id}
@@ -156,7 +163,9 @@ export function OverviewPage({
               onResolve={(allow) =>
                 void act(
                   () => client.resolveApproval(row.id, allow),
-                  allow ? "已允许本次调用" : "已拒绝本次调用",
+                  allow
+                    ? i18n.t("overview:allowedOnce")
+                    : i18n.t("overview:deniedOnce"),
                 )
               }
             />
@@ -167,11 +176,11 @@ export function OverviewPage({
       <div className="two-col">
         <section className="panel">
           <div className="panel-head">
-            <h2>连接状态</h2>
+            <h2>{i18n.t("overview:connections.title")}</h2>
             <Network size={17} aria-hidden="true" />
           </div>
           {health.isPending ? (
-            <LoadingBar label="读取连接状态" />
+            <LoadingBar label={i18n.t("overview:connections.loading")} />
           ) : adapters.length ? (
             adapters.map(([id, status]) => (
               <div className="list-row" key={id}>
@@ -184,24 +193,24 @@ export function OverviewPage({
               </div>
             ))
           ) : (
-            <EmptyState text="在「协议连接」中添加 QQ 或飞书实例。" />
+            <EmptyState text={i18n.t("overview:connections.empty")} />
           )}
           <button
             type="button"
             className="text-button"
             onClick={() => onNavigate("adapters")}
           >
-            管理连接
+            {i18n.t("overview:connections.manage")}
             <ArrowUpRight size={14} />
           </button>
         </section>
         <section className="panel">
           <div className="panel-head">
-            <h2>最近活动</h2>
+            <h2>{i18n.t("overview:activity.title")}</h2>
             <Activity size={17} aria-hidden="true" />
           </div>
           {activity.isPending ? (
-            <LoadingBar label="读取最近活动" />
+            <LoadingBar label={i18n.t("overview:activity.loading")} />
           ) : activity.data?.length ? (
             activity.data.slice(0, 5).map((row) => (
               <div className="activity-row" key={row.id}>
@@ -213,11 +222,13 @@ export function OverviewPage({
               </div>
             ))
           ) : (
-            <EmptyState text="配置完成后，助手的活动会显示在这里。" />
+            <EmptyState text={i18n.t("overview:activity.empty")} />
           )}
           <p className="muted activity-time">
             {activity.data?.[0]
-              ? "最近记录：" + formatDateTime(activity.data[0].at)
+              ? i18n.t("overview:activity.latest", {
+                  time: formatDateTime(activity.data[0].at),
+                })
               : ""}
           </p>
         </section>

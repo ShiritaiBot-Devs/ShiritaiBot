@@ -1,0 +1,23 @@
+{
+  "groups": {
+    "local": "本机",
+    "private": "QQ 私聊",
+    "group": "QQ 群聊",
+    "feishuPrivate": "飞书私聊",
+    "feishuGroup": "飞书群聊",
+    "background": "后台任务"
+  },
+  "feishu": "飞书",
+  "platformPrivate": "{platform}私聊 {id}",
+  "platformGroup": "{platform}群聊 {id}",
+  "qqOfficialPrivate": "QQ 官方私聊 {id}",
+  "qqOfficialGroup": "QQ 官方群聊 {id}",
+  "newChat": "新对话",
+  "hoursAgo_other": "{count} 小时前",
+  "minutesAgo_other": "{count} 分钟前",
+  "justNow": "刚刚",
+  "background": "后台任务 {id}",
+  "group": "群 {id}",
+  "chat": "对话 {name}",
+  "defaultChat": "默认对话"
+}

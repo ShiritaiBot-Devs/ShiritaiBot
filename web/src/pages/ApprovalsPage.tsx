@@ -32,6 +32,7 @@ import type {
   ToolRisk,
 } from "../api/types";
 import type { ConfigPageProps } from "./common";
+import i18n from "../i18n";
 
 const MAIN_SESSION = /^(web|private|group):[^\s]{1,200}$/;
 type Target =
@@ -42,10 +43,13 @@ type Target =
   | "proactive_default";
 
 function effectivePermission(tool?: ToolInfo) {
-  if (!tool) return "不可用";
+  if (!tool) return i18n.t("approvals:unavailable");
   if (tool.decision === "approve") return PERMISSIONS.manual;
-  if (tool.decision === "deny" && tool.permission !== "deny") return "不可用";
-  return PERMISSIONS[tool.decision as ToolPermission] ?? "未知";
+  if (tool.decision === "deny" && tool.permission !== "deny")
+    return i18n.t("approvals:unavailable");
+  return (
+    PERMISSIONS[tool.decision as ToolPermission] ?? i18n.t("approvals:unknown")
+  );
 }
 
 export function ApprovalsPage({
@@ -209,7 +213,7 @@ export function ApprovalsPage({
     try {
       await act(
         () => client.resolveApproval(id, allow),
-        allow ? "已允许" : "已拒绝",
+        allow ? i18n.t("approvals:allowed") : i18n.t("approvals:denied"),
       );
     } finally {
       setBusy(false);
@@ -219,11 +223,11 @@ export function ApprovalsPage({
   return (
     <>
       <section className="panel">
-        <h2>工具可用性</h2>
-        <p className="muted">选择会话，查看当前可用的工具和审批方式。</p>
+        <h2>{i18n.t("approvals:availability.title")}</h2>
+        <p className="muted">{i18n.t("approvals:availability.hint")}</p>
         <div className="field-grid">
           <label className="field">
-            配置范围
+            {i18n.t("approvals:scope")}
             <select
               value={target}
               onChange={(event) => {
@@ -231,16 +235,28 @@ export function ApprovalsPage({
                 setToolPage(1);
               }}
             >
-              <option value="session">指定 Main 会话</option>
-              <option value="owner_default">主人私聊 / WebUI 默认</option>
-              <option value="private_default">其他私聊默认</option>
-              <option value="group_default">群聊默认</option>
-              <option value="proactive_default">新 Proactive Loop 默认</option>
+              <option value="session">
+                {i18n.t("approvals:scopeSession")}
+              </option>
+              <option value="owner_default">
+                {i18n.t("approvals:scopeOwner")}
+              </option>
+              <option value="private_default">
+                {i18n.t("approvals:scopePrivate")}
+              </option>
+              <option value="group_default">
+                {i18n.t("approvals:scopeGroup")}
+              </option>
+              <option value="proactive_default">
+                {i18n.t("approvals:scopeProactive")}
+              </option>
             </select>
           </label>
           {target === "session" && (
             <div className="field">
-              <label htmlFor="approval-session">会话</label>
+              <label htmlFor="approval-session">
+                {i18n.t("approvals:session")}
+              </label>
               <div className="inline">
                 <select
                   id="approval-session"
@@ -254,7 +270,7 @@ export function ApprovalsPage({
                 </select>
                 {policy.sessions[session] && (
                   <button type="button" onClick={restoreSessionDefaults}>
-                    恢复默认配置
+                    {i18n.t("approvals:resetDefault")}
                   </button>
                 )}
               </div>
@@ -262,9 +278,9 @@ export function ApprovalsPage({
           )}
           {target !== "proactive_default" && (
             <label className="field">
-              会话模式
+              {i18n.t("approvals:mode.label")}
               <select
-                aria-label="会话模式"
+                aria-label={i18n.t("approvals:mode.label")}
                 value={mode}
                 disabled={forcedChat}
                 onChange={(event) =>
@@ -274,15 +290,17 @@ export function ApprovalsPage({
                   })
                 }
               >
-                <option value="chat">Chat · 基础对话</option>
-                <option value="agent">Agent · 允许工具调用</option>
+                <option value="chat">{i18n.t("approvals:mode.chat")}</option>
+                <option value="agent">{i18n.t("approvals:mode.agent")}</option>
               </select>
-              {forcedChat && <small>飞书群聊固定使用 Chat。</small>}
+              {forcedChat && (
+                <small>{i18n.t("approvals:mode.feishuGroup")}</small>
+              )}
             </label>
           )}
           {target !== "proactive_default" && (
             <label className="field">
-              Shell 工作区隔离
+              {i18n.t("approvals:sandbox.label")}
               <select
                 value={
                   (profile as SessionPolicy).shell_workspace_isolation
@@ -296,18 +314,16 @@ export function ApprovalsPage({
                   })
                 }
               >
-                <option value="off">关闭</option>
-                <option value="on">开启</option>
+                <option value="off">{i18n.t("approvals:off")}</option>
+                <option value="on">{i18n.t("approvals:on")}</option>
               </select>
-              <small>
-                开启后仅可写入本会话目录和临时目录。需要 Linux 和 bubblewrap。
-              </small>
+              <small>{i18n.t("approvals:sandbox.help")}</small>
             </label>
           )}
           <label className="field">
-            权限预设
+            {i18n.t("approvals:preset.label")}
             <select
-              aria-label="权限预设"
+              aria-label={i18n.t("approvals:preset.label")}
               value={matchedPreset}
               onChange={(event) => {
                 const value = event.target.value;
@@ -321,7 +337,7 @@ export function ApprovalsPage({
             >
               {matchedPreset === "custom" && (
                 <option value="custom" disabled>
-                  自定义（已调整下方风险等级）
+                  {i18n.t("approvals:preset.custom")}
                 </option>
               )}
               {PERMISSION_PRESETS.map((item) => (
@@ -330,10 +346,13 @@ export function ApprovalsPage({
                 </option>
               ))}
             </select>
-            <small>切换预设会填充下方风险矩阵并清除逐工具覆盖。</small>
+            <small>{i18n.t("approvals:preset.help")}</small>
           </label>
         </div>
-        <div className="risk-matrix" aria-label="按风险等级配置默认权限">
+        <div
+          className="risk-matrix"
+          aria-label={i18n.t("approvals:riskMatrix")}
+        >
           {RISK_ORDER.map((level) => (
             <div className="risk-matrix-row" key={level}>
               <div>
@@ -342,9 +361,13 @@ export function ApprovalsPage({
                 <p className="muted">{RISK_META[level].description}</p>
               </div>
               <label className="field">
-                {RISK_META[level].label}工具默认权限
+                {i18n.t("approvals:riskDefault", {
+                  risk: RISK_META[level].label,
+                })}
                 <select
-                  aria-label={`${RISK_META[level].label}工具默认权限`}
+                  aria-label={i18n.t("approvals:riskDefault", {
+                    risk: RISK_META[level].label,
+                  })}
                   value={profileRisks[level]}
                   onChange={(event) =>
                     update({
@@ -368,33 +391,32 @@ export function ApprovalsPage({
         </div>
         {dirtyPolicy && (
           <p className="muted" role="status">
-            权限修改待保存
+            {i18n.t("approvals:unsaved")}
           </p>
         )}
         {target === "proactive_default" && (
-          <p className="muted">
-            仅新建的 Proactive Loop
-            使用此默认值，运行中的任务保留创建时的权限快照。人工审批会发送给主人，并等待审批或超时。
-          </p>
+          <p className="muted">{i18n.t("approvals:proactiveHint")}</p>
         )}
         {mode === "chat" && !forcedChat && target !== "session" && (
-          <p className="muted">
-            Chat 模式只开放基础对话工具，例如时间、网页搜索和群聊上下文查询。
-          </p>
+          <p className="muted">{i18n.t("approvals:chatHint")}</p>
         )}
         {catalog.error && (
           <QueryErrorNotice
-            message={`读取工具失败：${catalog.error.message}`}
+            message={i18n.t("approvals:toolsFailed", {
+              error: catalog.error.message,
+            })}
           />
         )}
         {sessions.error && (
           <QueryErrorNotice
-            message={`读取会话失败：${sessions.error.message}`}
+            message={i18n.t("approvals:sessionsFailed", {
+              error: sessions.error.message,
+            })}
           />
         )}
         <div className="field-grid">
           <label className="field">
-            搜索工具
+            {i18n.t("approvals:search.label")}
             <input
               type="search"
               value={search}
@@ -402,20 +424,20 @@ export function ApprovalsPage({
                 setSearch(event.target.value);
                 setToolPage(1);
               }}
-              placeholder="工具名、插件或说明"
+              placeholder={i18n.t("approvals:search.placeholder")}
             />
           </label>
           <label className="field">
-            按风险等级筛选
+            {i18n.t("approvals:riskFilter")}
             <select
-              aria-label="按风险等级筛选"
+              aria-label={i18n.t("approvals:riskFilter")}
               value={riskFilter}
               onChange={(event) => {
                 setRiskFilter(event.target.value as ToolRisk | "all");
                 setToolPage(1);
               }}
             >
-              <option value="all">全部风险等级</option>
+              <option value="all">{i18n.t("approvals:allRisks")}</option>
               {RISK_ORDER.map((level) => (
                 <option key={level} value={level}>
                   {RISK_META[level].label}（{level}）
@@ -432,13 +454,18 @@ export function ApprovalsPage({
                 setToolPage(1);
               }}
             />
-            <span>仅看已自定义覆盖（{customToolCount}）</span>
+            <span>
+              {i18n.t("approvals:onlyCustom", { count: customToolCount })}
+            </span>
           </label>
         </div>
         <div className="tool-permission-list">
           {visibleTools.length > 0 && (
             <div className="table-scroll">
-              <table className="tool-table" aria-label="工具权限">
+              <table
+                className="tool-table"
+                aria-label={i18n.t("approvals:toolTable")}
+              >
                 <colgroup>
                   <col className="tool-name-col" />
                   <col className="tool-risk-col" />
@@ -448,11 +475,11 @@ export function ApprovalsPage({
                 </colgroup>
                 <thead>
                   <tr>
-                    <th scope="col">工具名</th>
-                    <th scope="col">风险等级</th>
-                    <th scope="col">详细信息</th>
-                    <th scope="col">权限</th>
-                    <th scope="col">当前状态</th>
+                    <th scope="col">{i18n.t("approvals:col.name")}</th>
+                    <th scope="col">{i18n.t("approvals:col.risk")}</th>
+                    <th scope="col">{i18n.t("approvals:col.details")}</th>
+                    <th scope="col">{i18n.t("approvals:col.permission")}</th>
+                    <th scope="col">{i18n.t("approvals:col.status")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -462,8 +489,9 @@ export function ApprovalsPage({
                     const fallbackPerm = inheritedPermission(profile, tool);
                     const permission = profile.tools[name] ?? fallbackPerm;
                     const description = tool
-                      ? tool.description?.trim() || "暂无工具说明。"
-                      : "插件未加载，保留的权限配置将在工具重新注册后使用。";
+                      ? tool.description?.trim() ||
+                        i18n.t("approvals:noDescription")
+                      : i18n.t("approvals:pluginNotLoaded");
                     return (
                       <tr key={name}>
                         <th scope="row">{name}</th>
@@ -472,7 +500,9 @@ export function ApprovalsPage({
                             className="tool-risk-pill"
                             data-risk={tool ? level : "unknown"}
                           >
-                            {tool ? RISK_META[level].label : "未知"}
+                            {tool
+                              ? RISK_META[level].label
+                              : i18n.t("approvals:unknown")}
                           </span>
                         </td>
                         <td>
@@ -482,7 +512,11 @@ export function ApprovalsPage({
                                 {description}
                               </span>
                               <span className="tool-description-source">
-                                来源插件 · {tool?.plugin ?? "未加载"}
+                                {i18n.t("approvals:sourcePlugin", {
+                                  plugin:
+                                    tool?.plugin ??
+                                    i18n.t("approvals:notLoaded"),
+                                })}
                               </span>
                               <ChevronDown size={14} aria-hidden="true" />
                             </summary>
@@ -491,7 +525,9 @@ export function ApprovalsPage({
                         </td>
                         <td>
                           <select
-                            aria-label={`${name} 权限`}
+                            aria-label={i18n.t("approvals:toolPermission", {
+                              name,
+                            })}
                             value={profile.tools[name] ?? "inherit"}
                             onChange={(event) => {
                               const next = { ...profile.tools };
@@ -504,7 +540,9 @@ export function ApprovalsPage({
                             }}
                           >
                             <option value="inherit">
-                              跟随预设 · {PERMISSIONS[fallbackPerm]}
+                              {i18n.t("approvals:followPreset", {
+                                permission: PERMISSIONS[fallbackPerm],
+                              })}
                             </option>
                             {Object.entries(PERMISSIONS).map(
                               ([value, label]) => (
@@ -521,7 +559,7 @@ export function ApprovalsPage({
                               ? effectivePermission(tool)
                               : "—"
                             : !tool || (mode === "chat" && !tool.chat)
-                              ? "此模式下不可用"
+                              ? i18n.t("approvals:unavailableInMode")
                               : PERMISSIONS[permission]}
                         </td>
                       </tr>
@@ -532,31 +570,30 @@ export function ApprovalsPage({
             </div>
           )}
           {(catalog.isPending || refreshingConfig) && (
-            <LoadingBar label="读取工具权限" />
+            <LoadingBar label={i18n.t("approvals:loadingTools")} />
           )}
           {!catalog.isPending &&
             !catalog.isError &&
             !refreshingConfig &&
-            !toolNames.length && <EmptyState text="尚无已注册工具。" />}
+            !toolNames.length && (
+              <EmptyState text={i18n.t("approvals:noTools")} />
+            )}
           {!catalog.isPending &&
             toolNames.length > 0 &&
-            !filteredTools.length && <EmptyState text="没有匹配的工具。" />}
+            !filteredTools.length && (
+              <EmptyState text={i18n.t("approvals:noMatch")} />
+            )}
         </div>
         <Pagination
-          label="工具列表"
+          label={i18n.t("approvals:toolList")}
           page={currentToolPage}
           total={filteredTools.length}
           onChange={setToolPage}
         />
       </section>
       <section className="panel">
-        <h2>审批与执行设置</h2>
-        <p className="muted">
-          自动审批模型在“模型与服务 →
-          工具自动审批模型”路由中设置，可配置备用模型和 Jev 判断模型；Jev
-          拒绝或把握不足时可交给路由里的文本模型复核。最终拒绝、
-          超时或返回无效时均不执行。
-        </p>
+        <h2>{i18n.t("approvals:approvalSettings")}</h2>
+        <p className="muted">{i18n.t("approvals:approvalSettingsHint")}</p>
         <div className="field-grid">
           {POLICY_FIELDS.map((spec) => (
             <Field
@@ -574,10 +611,16 @@ export function ApprovalsPage({
         </div>
       </section>
       <section className="panel">
-        <h2>待人工审批 · {approvals.data?.total ?? 0}</h2>
+        <h2>
+          {i18n.t("approvals:pendingTitle", {
+            count: approvals.data?.total ?? 0,
+          })}
+        </h2>
         {approvals.error && (
           <QueryErrorNotice
-            message={`读取审批失败：${approvals.error.message}`}
+            message={i18n.t("approvals:approvalsFailed", {
+              error: approvals.error.message,
+            })}
           />
         )}
         {pending.length
@@ -590,9 +633,11 @@ export function ApprovalsPage({
               />
             ))
           : !approvals.isPending &&
-            !approvals.error && <EmptyState text="当前没有待人工审批操作。" />}
+            !approvals.error && (
+              <EmptyState text={i18n.t("approvals:noPending")} />
+            )}
         <Pagination
-          label="待人工审批"
+          label={i18n.t("approvals:pendingList")}
           page={approvals.data?.page ?? pendingPage}
           total={approvals.data?.total ?? 0}
           loading={approvals.isFetching || busy}
@@ -600,10 +645,12 @@ export function ApprovalsPage({
         />
       </section>
       <section className="panel">
-        <h2>审批记录</h2>
+        <h2>{i18n.t("approvals:history.title")}</h2>
         {history.error && (
           <QueryErrorNotice
-            message={`读取审批记录失败：${history.error.message}`}
+            message={i18n.t("approvals:historyFailed", {
+              error: history.error.message,
+            })}
           />
         )}
         {reviews.length
@@ -612,29 +659,34 @@ export function ApprovalsPage({
                 <div>
                   <strong>{row.tool}</strong>
                   <span className="badge">
-                    {row.reviewer === "model" ? "模型自动审批" : "人工审批"}
+                    {row.reviewer === "model"
+                      ? i18n.t("approvals:reviewer.model")
+                      : i18n.t("approvals:reviewer.manual")}
                   </span>
                   <span className="badge">
                     {row.status === "approved"
-                      ? "已批准"
+                      ? i18n.t("approvals:status.approved")
                       : row.status === "denied"
-                        ? "已拒绝"
+                        ? i18n.t("approvals:status.denied")
                         : row.status}
                   </span>
                   <p className="muted">
-                    {row.scope} · {row.reason ?? "正在审查"}
+                    {row.scope} ·{" "}
+                    {row.reason ?? i18n.t("approvals:status.reviewing")}
                   </p>
                   <details>
-                    <summary>调用参数</summary>
+                    <summary>{i18n.t("approvals:arguments")}</summary>
                     <pre>{JSON.stringify(row.args, null, 2)}</pre>
                   </details>
                 </div>
               </article>
             ))
           : !history.isPending &&
-            !history.error && <EmptyState text="暂无审批记录。" />}
+            !history.error && (
+              <EmptyState text={i18n.t("approvals:noHistory")} />
+            )}
         <Pagination
-          label="审批记录"
+          label={i18n.t("approvals:historyList")}
           page={history.data?.page ?? reviewPage}
           total={history.data?.total ?? 0}
           loading={history.isFetching}

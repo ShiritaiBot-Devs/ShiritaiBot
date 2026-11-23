@@ -5,6 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { ApiError } from "../api/client";
 import type { ApiClient } from "../api/client";
 import type { FeishuQrAdapter, FeishuQrRegistration } from "../api/types";
+import i18n, { tx } from "../i18n";
 
 interface FeishuQrDialogProps {
   client: ApiClient;
@@ -14,12 +15,17 @@ interface FeishuQrDialogProps {
   onSaved: (id: string, enabled: boolean) => Promise<void>;
 }
 
-const PLATFORM_NAMES = { feishu: "飞书", lark: "Lark" };
+const PLATFORM_NAMES = {
+  get feishu() {
+    return i18n.t("feishu:platform.feishu");
+  },
+  lark: "Lark",
+};
 const TERMINAL_LABELS = {
-  applied: "飞书实例已保存",
-  denied: "已取消授权",
-  expired: "二维码或授权已过期",
-  error: "创建未完成",
+  applied: "feishu:terminal.applied",
+  denied: "feishu:terminal.denied",
+  expired: "feishu:terminal.expired",
+  error: "feishu:terminal.error",
 };
 
 export function FeishuQrDialog({
@@ -115,7 +121,11 @@ export function FeishuQrDialog({
       setStarted(session);
     } catch (failure) {
       if (active.current)
-        setError(failure instanceof Error ? failure.message : "无法生成二维码");
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : i18n.t("feishu:qrFailed"),
+        );
     } finally {
       if (active.current) setBusy(false);
     }
@@ -137,7 +147,11 @@ export function FeishuQrDialog({
       await onSaved(result.adapter_id, enabled);
     } catch (failure) {
       if (active.current)
-        setError(failure instanceof Error ? failure.message : "无法保存机器人");
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : i18n.t("feishu:saveFailed"),
+        );
     } finally {
       applying.current = false;
       if (active.current) setBusy(false);
@@ -154,11 +168,11 @@ export function FeishuQrDialog({
         if (!applying.current) onClose();
       }}
     >
-      <h2 id={title}>扫码创建飞书机器人</h2>
-      <p className="muted">用手机确认创建，再保存到 ShiritaiBot。</p>
+      <h2 id={title}>{i18n.t("feishu:title")}</h2>
+      <p className="muted">{i18n.t("feishu:hint")}</p>
       {!authorized && (
         <label className="field">
-          <span className="field-name">平台</span>
+          <span className="field-name">{i18n.t("feishu:platformLabel")}</span>
           <select
             value={domain}
             disabled={busy || waiting}
@@ -166,7 +180,7 @@ export function FeishuQrDialog({
               setDomain(event.target.value === "lark" ? "lark" : "feishu")
             }
           >
-            <option value="feishu">飞书</option>
+            <option value="feishu">{i18n.t("feishu:platform.feishu")}</option>
             <option value="lark">Lark</option>
           </select>
         </label>
@@ -177,27 +191,29 @@ export function FeishuQrDialog({
             value={registration.qr_url}
             size={196}
             marginSize={4}
-            title="飞书创建应用二维码"
+            title={i18n.t("feishu:qrLabel")}
           />
-          <p role="status">等待手机确认</p>
+          <p role="status">{i18n.t("feishu:waiting")}</p>
           <a
             href={registration.qr_url}
             target="_blank"
             rel="noreferrer noopener"
           >
-            打开授权页面
+            {i18n.t("feishu:openAuth")}
           </a>
         </div>
       )}
       {registration?.status === "authorized" && (
         <>
           <p role="status">
-            {PLATFORM_NAMES[registration.domain]}应用已创建{" "}
+            {i18n.t("feishu:created", {
+              platform: PLATFORM_NAMES[registration.domain],
+            })}{" "}
             <code>{registration.app_id}</code>
           </p>
           <div className="field-grid">
             <label className="field">
-              <span className="field-name">实例标识</span>
+              <span className="field-name">{i18n.t("feishu:instanceId")}</span>
               <input
                 value={adapter.adapter_id}
                 maxLength={64}
@@ -208,7 +224,9 @@ export function FeishuQrDialog({
               />
             </label>
             <label className="field">
-              <span className="field-name">记忆库</span>
+              <span className="field-name">
+                {i18n.t("feishu:memoryProfile")}
+              </span>
               <select
                 value={adapter.memory_profile}
                 disabled={busy}
@@ -220,8 +238,10 @@ export function FeishuQrDialog({
                   })
                 }
               >
-                <option value="feishu">独立飞书记忆库</option>
-                <option value="default">默认记忆库</option>
+                <option value="feishu">{i18n.t("feishu:memory.feishu")}</option>
+                <option value="default">
+                  {i18n.t("feishu:memory.default")}
+                </option>
               </select>
             </label>
             <label className="field feishu-qr-enable full">
@@ -233,22 +253,24 @@ export function FeishuQrDialog({
                   setAdapter({ ...adapter, enabled: event.target.checked })
                 }
               />
-              保存后启用连接
+              {i18n.t("feishu:enableAfterSave")}
             </label>
           </div>
           {!canEnable && (
-            <p className="muted">已有启用的飞书连接，新实例将保存为未启用。</p>
+            <p className="muted">{i18n.t("feishu:alreadyEnabled")}</p>
           )}
           {adapter.enabled && canEnable && (
-            <p className="muted">连接后，按实例提示发送私聊并绑定主人。</p>
+            <p className="muted">{i18n.t("feishu:bindOwner")}</p>
           )}
         </>
       )}
       {terminal && (
-        <p role="status">{registration.message || TERMINAL_LABELS[stage]}</p>
+        <p role="status">
+          {registration.message || tx(TERMINAL_LABELS[stage])}
+        </p>
       )}
       {status.isError && !terminal && (
-        <p role="alert">暂时无法读取扫码状态，正在重试。</p>
+        <p role="alert">{i18n.t("feishu:statusRetry")}</p>
       )}
       {error && (
         <p className="feishu-qr-error" role="alert">
@@ -257,7 +279,7 @@ export function FeishuQrDialog({
       )}
       <div className="actions adapter-dialog-actions">
         <button type="button" onClick={onClose} disabled={busy && authorized}>
-          取消
+          {i18n.t("feishu:cancel")}
         </button>
         {authorized ? (
           <button
@@ -269,11 +291,11 @@ export function FeishuQrDialog({
             onClick={() => void save()}
           >
             {busy ? (
-              <LoadingBar compact label="正在保存…" />
+              <LoadingBar compact label={i18n.t("feishu:saving")} />
             ) : adapter.enabled && canEnable ? (
-              "保存并连接"
+              i18n.t("feishu:saveConnect")
             ) : (
-              "保存为未启用"
+              i18n.t("feishu:saveDisabled")
             )}
           </button>
         ) : !waiting && stage !== "applied" ? (
@@ -284,11 +306,11 @@ export function FeishuQrDialog({
             onClick={() => void start()}
           >
             {busy ? (
-              <LoadingBar compact label="正在生成…" />
+              <LoadingBar compact label={i18n.t("feishu:generating")} />
             ) : terminal ? (
-              "重新生成二维码"
+              i18n.t("feishu:regenerate")
             ) : (
-              "生成二维码"
+              i18n.t("feishu:generate")
             )}
           </button>
         ) : null}

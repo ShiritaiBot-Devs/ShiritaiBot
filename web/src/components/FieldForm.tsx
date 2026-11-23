@@ -3,7 +3,7 @@ import type { FieldSpec } from "../config/schema";
 import { inferFieldSpec } from "../config/schema";
 import { SecretField } from "./SecretField";
 import { TextFieldList } from "./TextFieldList";
-import { tx } from "../i18n";
+import i18n, { tx } from "../i18n";
 
 /**
  * A spec with its text translated. Specs may hold catalog keys ("settings:…") or,
@@ -30,11 +30,13 @@ export function jsonObjectError(value: unknown): string | null {
   try {
     const parsed = typeof value === "string" ? JSON.parse(value) : value;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return '请填写 JSON 对象，例如 {"temperature": 0.7}';
+      return i18n.t("json.objectRequired", {
+        example: '{"temperature": 0.7}',
+      });
     }
     return null;
   } catch {
-    return "JSON 格式无效，请检查引号、逗号和括号。";
+    return i18n.t("json.invalid");
   }
 }
 
@@ -172,7 +174,7 @@ export function Control({
     return (
       <div className="slider-field">
         <input
-          aria-label={`${spec.label}滑块`}
+          aria-label={i18n.t("field.slider", { label: spec.label })}
           type="range"
           min={spec.min}
           max={spec.max}

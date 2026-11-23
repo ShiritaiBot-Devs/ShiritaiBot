@@ -10,13 +10,14 @@ import { Pagination } from "../components/Pagination";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
 import { MEME_FIELDS } from "../config/schema";
 import type { Action, ConfigPageProps } from "./common";
+import i18n, { tx } from "../i18n";
 
 const PAGE_SIZE = 24;
 const CATEGORY_NAME = /^[a-z][a-z0-9_]{0,31}$/;
 const SOURCES: Record<string, string> = {
-  group: "群聊收录",
-  agent: "模型收藏",
-  manual: "手动上传",
+  group: "memes:sources.group",
+  agent: "memes:sources.agent",
+  manual: "memes:sources.manual",
 };
 
 export function MemesPage({ client, act, config, setConfig }: ConfigPageProps) {
@@ -39,13 +40,8 @@ export function MemesPage({ client, act, config, setConfig }: ConfigPageProps) {
   return (
     <>
       <section className="panel">
-        <h2>表情管理器</h2>
-        <p className="muted">
-          表情管理器由三部分组成：表情库按分类存储表情和文字描述；收录器从白名单群聊收集其他人发的表情包；注入器告诉模型如何用
-          &lt;meme&gt;分类&lt;/meme&gt;
-          发表情，并在发送前把标记换成表情消息。转述与分类所用的模型在“模型与服务
-          → 路由 → 表情转述与分类模型”中配置，语义检索使用 Embedding 路由。
-        </p>
+        <h2>{i18n.t("memes:title")}</h2>
+        <p className="muted">{i18n.t("memes:intro")}</p>
         <FieldForm
           value={meme}
           fields={MEME_FIELDS}
@@ -54,7 +50,7 @@ export function MemesPage({ client, act, config, setConfig }: ConfigPageProps) {
       </section>
       <section className="panel">
         <div className="panel-head">
-          <h2>分类标签</h2>
+          <h2>{i18n.t("memes:categories.title")}</h2>
           <button
             type="button"
             disabled={meme.categories.length >= 30}
@@ -66,13 +62,10 @@ export function MemesPage({ client, act, config, setConfig }: ConfigPageProps) {
             }
           >
             <Plus size={16} />
-            添加分类
+            {i18n.t("memes:categories.add")}
           </button>
         </div>
-        <p className="muted">
-          名称用于 &lt;meme&gt;名称&lt;/meme&gt;
-          标记，只能使用小写字母、数字和下划线，以字母开头；说明告诉模型和分类判断这个分类表达什么。改名或删除分类后，原分类下的表情需要重新归类才能被随机发送。
-        </p>
+        <p className="muted">{i18n.t("memes:categories.hint")}</p>
         <div className="meme-categories">
           {meme.categories.map((item, index) => {
             const invalid = !CATEGORY_NAME.test(item.name);
@@ -83,7 +76,9 @@ export function MemesPage({ client, act, config, setConfig }: ConfigPageProps) {
             return (
               <div className="meme-category" key={index}>
                 <input
-                  aria-label={`分类 ${index + 1} 名称`}
+                  aria-label={i18n.t("memes:categories.nameLabel", {
+                    n: index + 1,
+                  })}
                   aria-invalid={invalid || duplicate}
                   value={item.name}
                   onChange={(event) =>
@@ -97,10 +92,14 @@ export function MemesPage({ client, act, config, setConfig }: ConfigPageProps) {
                   }
                 />
                 <input
-                  aria-label={`分类 ${index + 1} 说明`}
+                  aria-label={i18n.t("memes:categories.descriptionLabel", {
+                    n: index + 1,
+                  })}
                   value={item.description}
                   maxLength={200}
-                  placeholder="这个分类表达的情绪或用途"
+                  placeholder={i18n.t(
+                    "memes:categories.descriptionPlaceholder",
+                  )}
                   onChange={(event) =>
                     setCategories(
                       meme.categories.map((row, position) =>
@@ -111,11 +110,15 @@ export function MemesPage({ client, act, config, setConfig }: ConfigPageProps) {
                     )
                   }
                 />
-                <span className="tag">{counts[item.name] ?? 0} 个</span>
+                <span className="tag">
+                  {i18n.t("memes:count", { count: counts[item.name] ?? 0 })}
+                </span>
                 <button
                   type="button"
                   className="danger"
-                  aria-label={`删除分类 ${item.name}`}
+                  aria-label={i18n.t("memes:categories.delete", {
+                    name: item.name,
+                  })}
                   disabled={meme.categories.length <= 1}
                   onClick={() =>
                     setCategories(
@@ -129,7 +132,9 @@ export function MemesPage({ client, act, config, setConfig }: ConfigPageProps) {
                 </button>
                 {(invalid || duplicate) && (
                   <small role="alert">
-                    {invalid ? "名称格式无效" : "分类名称重复"}
+                    {invalid
+                      ? i18n.t("memes:categories.invalidName")
+                      : i18n.t("memes:categories.duplicate")}
                   </small>
                 )}
               </div>
@@ -139,18 +144,28 @@ export function MemesPage({ client, act, config, setConfig }: ConfigPageProps) {
       </section>
       <section className="panel">
         <div className="panel-head">
-          <h2>表情库</h2>
+          <h2>{i18n.t("memes:library.title")}</h2>
           {listing.data && (
             <span className="tag">
-              {listing.data.count} / {listing.data.capacity} 个 · 向量{" "}
+              {i18n.t("memes:library.usage", {
+                count: listing.data.count,
+                capacity: listing.data.capacity,
+              })}{" "}
               {listing.data.index.model
-                ? `${listing.data.index.indexed} 已索引，${listing.data.index.pending} 待计算`
-                : "未配置 Embedding，检索只用关键词"}
+                ? i18n.t("memes:library.indexed", {
+                    indexed: listing.data.index.indexed,
+                    pending: listing.data.index.pending,
+                  })
+                : i18n.t("memes:library.noEmbedding")}
             </span>
           )}
         </div>
         <UploadForm client={client} act={act} categories={meme.categories} />
-        <div className="range-tabs" role="group" aria-label="表情分类">
+        <div
+          className="range-tabs"
+          role="group"
+          aria-label={i18n.t("memes:library.category")}
+        >
           {[{ name: "", description: "" }, ...meme.categories].map((item) => (
             <button
               type="button"
@@ -162,7 +177,7 @@ export function MemesPage({ client, act, config, setConfig }: ConfigPageProps) {
                 setPage(1);
               }}
             >
-              {item.name || "全部"}
+              {item.name || i18n.t("memes:library.all")}
               {item.name && ` (${counts[item.name] ?? 0})`}
             </button>
           ))}
@@ -176,27 +191,29 @@ export function MemesPage({ client, act, config, setConfig }: ConfigPageProps) {
           }}
         >
           <input
-            aria-label="搜索表情"
+            aria-label={i18n.t("memes:search.label")}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="描述中的关键词或表情 ID"
+            placeholder={i18n.t("memes:search.placeholder")}
           />
           <button type="submit">
             <Search size={16} />
-            搜索
+            {i18n.t("memes:search.submit")}
           </button>
         </form>
         {listing.error && (
           <QueryErrorNotice
-            message={`读取表情失败：${listing.error.message}`}
+            message={i18n.t("memes:loadFailed", {
+              error: listing.error.message,
+            })}
           />
         )}
         {listing.data && !listing.data.items.length ? (
           <EmptyState
             text={
               query || category
-                ? "没有符合条件的表情"
-                : "表情库还是空的。开启群聊自动收录，或在上方上传表情。"
+                ? i18n.t("memes:noMatch")
+                : i18n.t("memes:empty")
             }
           />
         ) : (
@@ -214,7 +231,7 @@ export function MemesPage({ client, act, config, setConfig }: ConfigPageProps) {
         )}
         {listing.data && (
           <Pagination
-            label="表情分页"
+            label={i18n.t("memes:pages")}
             page={listing.data.page}
             total={listing.data.total}
             pageSize={PAGE_SIZE}
@@ -257,27 +274,27 @@ function UploadForm({
           setFile(null);
           setDescription("");
           setReset((value) => value + 1);
-        }, "表情已加入表情库");
+        }, i18n.t("memes:uploaded"));
       }}
     >
       <label className="field">
-        <span className="field-name">上传表情（2 MB 以内）</span>
+        <span className="field-name">{i18n.t("memes:upload.title")}</span>
         <input
           key={reset}
-          aria-label="表情图片"
+          aria-label={i18n.t("memes:upload.image")}
           type="file"
           accept="image/png,image/jpeg,image/gif,image/webp"
           onChange={(event) => setFile(event.target.files?.[0] ?? null)}
         />
       </label>
       <label className="field">
-        <span className="field-name">分类</span>
+        <span className="field-name">{i18n.t("memes:upload.category")}</span>
         <select
-          aria-label="上传分类"
+          aria-label={i18n.t("memes:upload.categoryLabel")}
           value={category}
           onChange={(event) => setCategory(event.target.value)}
         >
-          <option value="">自动判断</option>
+          <option value="">{i18n.t("memes:upload.auto")}</option>
           {categories.map((item) => (
             <option key={item.name} value={item.name}>
               {item.name}
@@ -286,18 +303,18 @@ function UploadForm({
         </select>
       </label>
       <label className="field">
-        <span className="field-name">描述</span>
+        <span className="field-name">{i18n.t("memes:upload.description")}</span>
         <input
-          aria-label="上传描述"
+          aria-label={i18n.t("memes:upload.descriptionLabel")}
           value={description}
           maxLength={300}
-          placeholder="留空由表情转述模型描述"
+          placeholder={i18n.t("memes:upload.descriptionPlaceholder")}
           onChange={(event) => setDescription(event.target.value)}
         />
       </label>
       <button type="submit" className="primary" disabled={!file}>
         <Upload size={16} />
-        上传
+        {i18n.t("memes:upload.submit")}
       </button>
     </form>
   );
@@ -326,22 +343,24 @@ function MemeCard({
       <div className="meme-meta">
         <code>{row.id}</code>
         <span className="muted">
-          {SOURCES[row.source] ?? row.source} ·{" "}
+          {tx(SOURCES[row.source] ?? row.source)} ·{" "}
           {new Date(row.created).toLocaleDateString()}
         </span>
       </div>
       <select
-        aria-label={`表情 ${row.id} 分类`}
+        aria-label={i18n.t("memes:item.categoryLabel", { id: row.id })}
         value={row.category}
         onChange={(event) =>
           void act(
             () => client.updateMeme(row.id, { category: event.target.value }),
-            "分类已更新",
+            i18n.t("memes:item.categoryUpdated"),
           )
         }
       >
         {!known && (
-          <option value={row.category}>{row.category}（未配置）</option>
+          <option value={row.category}>
+            {i18n.t("memes:item.unconfigured", { category: row.category })}
+          </option>
         )}
         {categories.map((item) => (
           <option key={item.name} value={item.name}>
@@ -350,7 +369,7 @@ function MemeCard({
         ))}
       </select>
       <textarea
-        aria-label={`表情 ${row.id} 描述`}
+        aria-label={i18n.t("memes:item.descriptionLabel", { id: row.id })}
         value={description}
         maxLength={300}
         rows={3}
@@ -365,21 +384,24 @@ function MemeCard({
           onClick={() =>
             void act(
               () => client.updateMeme(row.id, { description }),
-              "描述已保存",
+              i18n.t("memes:item.descriptionSaved"),
             )
           }
         >
-          保存描述
+          {i18n.t("memes:item.saveDescription")}
         </button>
         <button
           type="button"
-          title="用表情转述模型重新描述"
+          title={i18n.t("memes:item.redescribeLabel")}
           onClick={() =>
-            void act(() => client.describeMeme(row.id), "已重新转述")
+            void act(
+              () => client.describeMeme(row.id),
+              i18n.t("memes:item.redescribed"),
+            )
           }
         >
           <RefreshCw size={16} />
-          重新转述
+          {i18n.t("memes:item.redescribe")}
         </button>
         {confirming ? (
           <>
@@ -392,20 +414,20 @@ function MemeCard({
                   queryClient.removeQueries({
                     queryKey: ["meme-image", row.id],
                   });
-                }, "表情已删除")
+                }, i18n.t("memes:item.deleted"))
               }
             >
-              确认删除
+              {i18n.t("memes:item.confirmDelete")}
             </button>
             <button type="button" onClick={() => setConfirming(false)}>
-              取消
+              {i18n.t("memes:cancel")}
             </button>
           </>
         ) : (
           <button
             type="button"
             className="danger"
-            aria-label={`删除表情 ${row.id}`}
+            aria-label={i18n.t("memes:item.delete", { id: row.id })}
             onClick={() => setConfirming(true)}
           >
             <Trash2 size={16} />

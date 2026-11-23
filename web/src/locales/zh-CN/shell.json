@@ -1,0 +1,117 @@
+{
+  "nav": {
+    "features": "功能",
+    "config": "配置",
+    "main": "主导航"
+  },
+  "capabilities": {
+    "approvals": "工具",
+    "mcp": "MCP",
+    "skills": "技能"
+  },
+  "brand": {
+    "console": "控制台"
+  },
+  "status": {
+    "restarting": "正在重启…",
+    "online": "系统运行中",
+    "offline": "连接未就绪"
+  },
+  "restart": {
+    "label": "重启",
+    "busy": "正在重启",
+    "hint": "重启 ShiritaiBot 服务",
+    "unsupported": "请使用 shiritaibot run 启动以支持重启",
+    "done": "重启完成",
+    "timeout": "等待重启超时，请检查服务日志或稍后刷新页面。"
+  },
+  "header": {
+    "crumb": "本机控制台",
+    "localOnly": "仅本机",
+    "chatMode": "对话模式",
+    "checkUpdate": "检查更新",
+    "updateAvailable": "有可用的新版本",
+    "newVersion": "有新版本",
+    "logout": "退出"
+  },
+  "footer": {
+    "localData": "本地数据",
+    "tagline": "明确权限 · 持续记忆"
+  },
+  "config": {
+    "loading": "正在读取配置…",
+    "saved": "配置已保存并应用",
+    "savedWithWarnings": "配置已保存，但有以下问题：{warnings}",
+    "unsaved": "请先保存或放弃未保存的配置"
+  },
+  "busy": {
+    "working": "正在执行操作",
+    "wait": "请等待当前操作完成"
+  },
+  "login": {
+    "hint": "打开启动日志中的登录链接，或输入管理令牌。",
+    "token": "管理令牌",
+    "placeholder": "粘贴本机管理令牌",
+    "checking": "验证中…",
+    "submit": "进入控制台"
+  },
+  "pages": {
+    "overview": {
+      "label": "概览",
+      "subtitle": "运行状态、数据统计与最近动态。"
+    },
+    "chat": {
+      "label": "对话",
+      "subtitle": "直接和助手对话，或输入 / 使用命令。"
+    },
+    "routine": {
+      "label": "日程任务",
+      "subtitle": "待办、日程、提醒和定时任务。"
+    },
+    "events": {
+      "label": "主动动态",
+      "subtitle": "主动性引擎收到的事件与分诊结果。"
+    },
+    "logs": {
+      "label": "活动日志",
+      "subtitle": "活动日志，按时间倒序。"
+    },
+    "models": {
+      "label": "模型与服务",
+      "subtitle": "LLM 提供商、模型与路由。"
+    },
+    "memes": {
+      "label": "表情管理",
+      "subtitle": "表情库、分类、自动收录与使用设置。"
+    },
+    "subagents": {
+      "label": "子代理",
+      "subtitle": "内置子代理、外部 CLI 实例与任务记录。"
+    },
+    "plugins": {
+      "label": "插件",
+      "subtitle": "插件启停、配置和重载。"
+    },
+    "approvals": {
+      "label": "能力与权限",
+      "subtitle": "管理工具权限、审批记录、MCP 服务和技能。"
+    },
+    "memory": {
+      "label": "长期记忆",
+      "subtitle": "助手明确记住的长期记忆。"
+    },
+    "knowledge": {
+      "label": "知识库",
+      "subtitle": "存放不会变化的资料，供助手按关键词和语义检索。"
+    },
+    "adapters": {
+      "label": "协议连接",
+      "subtitle": "管理 QQ 和飞书连接。"
+    },
+    "settings": {
+      "label": "设置",
+      "subtitle": "管理ShiritaiBot的各项设置。"
+    }
+  },
+  "documentTitle": "ShiritaiBot · 控制台"
+}

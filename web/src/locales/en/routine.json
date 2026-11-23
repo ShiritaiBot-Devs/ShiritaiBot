@@ -1,0 +1,52 @@
+{
+  "cron": "Cron: {cron}",
+  "cronNext": "Cron: {cron} · next {next}",
+  "empty": "This session has no schedule yet.",
+  "loadFailed": "Couldn't load the schedule: {error}",
+  "create": "Create",
+  "courseHint": "Classes are for reference only: no reminders, and they don't trigger the Proactive Loop.",
+  "new": {
+    "timeLabel": "Time",
+    "time": "Time (browser's local time zone)",
+    "content": "Content",
+    "kind": "Type",
+    "session": "Session",
+    "title": "Schedule the next thing"
+  },
+  "allSessions": "All sessions",
+  "viewSession": "View session",
+  "created": "Created.",
+  "legacy": "Unattributed (history)",
+  "dayEmpty": "Nothing scheduled for this day.",
+  "closeDay": "Close this day's schedule",
+  "unscheduled": "Unscheduled to-dos and scheduled tasks",
+  "calendarHint": "Click a date to see everything on it (including classes)",
+  "dayLabel_one": "{day}, {count} item",
+  "dayLabel_other": "{day}, {count} items",
+  "calendar": "Schedule calendar",
+  "nextMonth": "Next month",
+  "today": "Today",
+  "prevMonth": "Previous month",
+  "cancel": "Cancel",
+  "cancelled": "Cancelled.",
+  "done": "Done",
+  "markedDone": "Marked as done.",
+  "noDue": "No due date",
+  "status": {
+    "cancelled": "Cancelled",
+    "completed": "Completed",
+    "fired": "Triggered",
+    "scheduled": "Scheduled",
+    "open": "In progress"
+  },
+  "kindShort": {
+    "job": "Scheduled task"
+  },
+  "kinds": {
+    "reminder": "Reminder",
+    "course": "Class",
+    "event": "Event",
+    "todo": "To-do",
+    "job": "Scheduled Agent task"
+  }
+}

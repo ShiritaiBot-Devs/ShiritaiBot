@@ -2,6 +2,7 @@
 import { ChevronDown, ChevronRight, Pin, Plus } from "lucide-react";
 import type { SessionGroup, SessionGroupKey } from "../lib/sessions";
 import { ChatSessionActions, type ChatActions } from "./ChatSessionActions";
+import i18n from "../i18n";
 
 interface ChatSidebarProps extends ChatActions {
   groups: SessionGroup[];
@@ -37,15 +38,15 @@ export function ChatSidebar({
     <div className="chat-sidebar">
       <div className="chat-brand">
         <strong>ShiritaiBot</strong>
-        <small>对话</small>
+        <small>{i18n.t("chat:sidebar.title")}</small>
       </div>
       <button type="button" className="chat-new" onClick={onNew}>
         <Plus size={15} aria-hidden="true" />
-        新对话
+        {i18n.t("chat:sidebar.new")}
       </button>
       <nav
         className="chat-groups"
-        aria-label="会话列表"
+        aria-label={i18n.t("chat:sidebar.list")}
         onScroll={(event) => {
           event.currentTarget
             .querySelector<HTMLElement>(".chat-actions-menu:popover-open")
@@ -85,16 +86,29 @@ export function ChatSidebar({
                     aria-current={item.id === selected ? "page" : undefined}
                     title={item.title}
                     aria-label={item.title}
-                    aria-description={item.pinned ? "已置顶" : undefined}
+                    aria-description={
+                      item.pinned ? i18n.t("chat:sidebar.pinned") : undefined
+                    }
                     onClick={() => onSelect(item.id)}
                   >
-                    {item.pinned && <Pin size={12} aria-label="已置顶" />}
+                    {item.pinned && (
+                      <Pin
+                        size={12}
+                        aria-label={i18n.t("chat:sidebar.pinned")}
+                      />
+                    )}
                     <span className="chat-session-title">{item.title}</span>
                     {running.has(item.id) && (
-                      <span className="session-dot" aria-label="运行中" />
+                      <span
+                        className="session-dot"
+                        aria-label={i18n.t("chat:sidebar.running")}
+                      />
                     )}
                     {pending.has(item.id) && (
-                      <span className="session-badge" aria-label="待审批">
+                      <span
+                        className="session-badge"
+                        aria-label={i18n.t("chat:sidebar.pending")}
+                      >
                         !
                       </span>
                     )}
