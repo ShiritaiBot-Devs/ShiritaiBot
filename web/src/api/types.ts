@@ -515,6 +515,11 @@ export interface HelpMenuSection {
   title: string;
 }
 
+export interface SessionLocale {
+  session: string;
+  locale: "zh-CN" | "en";
+}
+
 export interface Settings {
   providers: ProviderConfig[];
   models: ModelConfig[];
@@ -531,6 +536,8 @@ export interface Settings {
   proactive: ProactiveConfig;
   web_search: WebSearchConfig;
   concurrency: number;
+  /** Bot language for sessions without a /lang override. */
+  locale: "zh-CN" | "en";
   persona: string;
   personas: PersonaConfig[];
   default_persona: string;

@@ -750,6 +750,18 @@ export const BASIC_SETTINGS_FIELDS: FieldSpec[] = [
   },
 ];
 
+/** Catalog keys rather than text: FieldForm translates them (docs/I18N.md). */
+export const LANGUAGE_FIELDS: FieldSpec[] = [
+  {
+    key: "locale",
+    label: "settings:language.botLabel",
+    kind: "select",
+    options: ["zh-CN", "en"],
+    optionLabels: { "zh-CN": "简体中文", en: "English" },
+    help: "settings:language.botHelp",
+  },
+];
+
 export const IDENTITY_FIELDS: FieldSpec[] = [
   {
     key: "assistant_name",

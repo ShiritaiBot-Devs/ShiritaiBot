@@ -34,6 +34,7 @@ from shiritaibot.config import (
 )
 from shiritaibot.core import Context, ExternalEvent, Model, PublicError, canonical, logs
 from shiritaibot.core.process import run_process
+from shiritaibot.i18n import normalize, t, use_locale
 from shiritaibot.llm.subscription import LOGIN_SECONDS
 from shiritaibot.llm.subscription import PROTOCOL as SUBSCRIPTION_PROTOCOL
 from shiritaibot.meme.core import MAX_MEME_BYTES
@@ -123,6 +124,30 @@ def ensure_token(home: Path) -> str:
     return path.read_text(encoding="utf-8").strip()
 
 
+class LocaleMiddleware:
+    """Renders API text in the WebUI's language for the duration of each request.
+
+    The WebUI sends its interface language in ``X-ShiritaiBot-Locale``. Without it, the
+    instance's bot language applies; Accept-Language is ignored so the default never
+    depends on a client's environment.
+    """
+
+    def __init__(self, app, settings):
+        self.app, self.settings = app, settings
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+        headers = {
+            key.decode("latin-1").lower(): value.decode("latin-1")
+            for key, value in scope.get("headers", ())
+        }
+        locale = normalize(headers.get("x-shiritaibot-locale")) or self.settings().locale
+        with use_locale(locale):
+            await self.app(scope, receive, send)
+
+
 def create_app(
     home: Path,
     token: str | None = None,
@@ -169,6 +194,7 @@ def create_app(
 
     api = FastAPI(title="ShiritaiBot", version=BOT_VERSION, lifespan=lifespan)
     api.state.runtime = runtime
+    api.add_middleware(LocaleMiddleware, settings=lambda: runtime.config.value)
     api.add_middleware(
         TrustedHostMiddleware,
         allowed_hosts=["localhost", "127.0.0.1", "[::1]", "testserver", *(allowed_hosts or [])],
@@ -186,7 +212,7 @@ def create_app(
     async def auth(request: Request):
         supplied = request.headers.get("authorization", "").removeprefix("Bearer ")
         if not supplied or not hmac.compare_digest(supplied, api.state.token):
-            raise HTTPException(401, "需要 WebUI 管理令牌")
+            raise HTTPException(401, t("web.token_required"))
 
     protected = [Depends(auth)]
 
@@ -201,6 +227,21 @@ def create_app(
             ".".join(map(str, error["loc"][1:])) + ": " + error["msg"] for error in exc.errors()
         )
         return JSONResponse(status_code=422, content={"detail": detail})
+
+    @api.get("/api/session-locales", dependencies=protected)
+    async def session_locales():
+        """Sessions whose language was set with /lang (docs/I18N.md)."""
+        rows = await runtime.store.list("session_locale")
+        return [
+            {"session": row["id"], "locale": locale}
+            for row in rows
+            if (locale := normalize(row.get("locale")))
+        ]
+
+    @api.delete("/api/session-locales", dependencies=protected)
+    async def clear_session_locale(session: str = Query(min_length=1, max_length=400)):
+        await runtime.store.delete("session_locale", session)
+        return {"status": "ok"}
 
     @api.post("/api/providers/discover", dependencies=protected)
     async def discover(body: ProviderConfig):
@@ -229,7 +270,9 @@ def create_app(
         return {
             "saved": True,
             **await runtime.llm.subscriptions.status(provider_id),
-            "usage": await subscription_usage(runtime.store, provider_id),
+            "usage": await subscription_usage(
+                runtime.store, provider_id, runtime.config.value.proactive.timezone
+            ),
         }
 
     @api.post("/api/providers/subscriptions/{provider_id}/start", dependencies=protected)
@@ -260,7 +303,13 @@ def create_app(
         hours: int = Query(default=24, ge=1, le=MAX_STATS_HOURS),
         session: str | None = Query(default=None, max_length=400),
     ):
-        return await statistics(runtime.store, hours, models=runtime.config.value.models, session=session)
+        return await statistics(
+            runtime.store,
+            hours,
+            models=runtime.config.value.models,
+            session=session,
+            zone=runtime.config.value.proactive.timezone,
+        )
 
     @api.get("/api/stats/sessions", dependencies=protected)
     async def stats_sessions():

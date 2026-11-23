@@ -7,6 +7,7 @@ import {
   RotateCw,
 } from "lucide-react";
 import { NAV_GROUPS, pageMeta } from "../navigation";
+import { UiLanguageSelect } from "./LanguageSettings";
 import type { PageId } from "../navigation";
 
 export function AppShell({
@@ -154,6 +155,7 @@ export function AppShell({
                 <span className="update-dot" aria-label="有新版本" />
               )}
             </button>
+            <UiLanguageSelect compact />
             <button type="button" onClick={onLogout}>
               退出
             </button>

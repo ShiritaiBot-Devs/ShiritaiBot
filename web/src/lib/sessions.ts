@@ -1,5 +1,5 @@
 import type { AdapterConfig, TurnRecord, WebChat } from "../api/types";
-import { TIME_ZONE } from "./utils";
+import { dateFormat } from "./utils";
 
 export function isMainSession(value: string): boolean {
   return /^(?:web:[^:\s]{1,128}|(?:group|private):[A-Za-z0-9_-]{1,64}:[^:\s]{1,256})$/.test(
@@ -76,8 +76,7 @@ export function sessionRole(id: string): SessionGroupKey {
 }
 
 function clock(timestamp: number): string {
-  const parts = new Intl.DateTimeFormat("zh-CN", {
-    timeZone: TIME_ZONE,
+  const parts = dateFormat({
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -90,8 +89,7 @@ function clock(timestamp: number): string {
 }
 
 function day(timestamp: number): string {
-  const parts = new Intl.DateTimeFormat("zh-CN", {
-    timeZone: TIME_ZONE,
+  const parts = dateFormat({
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(new Date(timestamp));

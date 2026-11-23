@@ -911,15 +911,7 @@ class AdapterHub:
         ]
 
     async def notify_owner(self, text: str, *, handoff: bool = True) -> None:
-        target = next(
-            (
-                a
-                for a in self.config.value.adapters
-                if a.type == "onebot11" and a.enabled and a.owner_id
-            ),
-            None,
-        )
-        session = target.owner_session() if target else "web:owner"
+        session = self.config.value.owner_notification_session()
         if not handoff:
             # Approval prompts must be visible while the requesting turn waits for approval;
             # plugins cannot rewrite or cancel them.

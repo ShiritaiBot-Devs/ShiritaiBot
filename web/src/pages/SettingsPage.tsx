@@ -1,13 +1,19 @@
 import { PageTabs } from "../components/PageTabs";
 import { ModelOptions } from "../components/ModelOptions";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Field, FieldForm } from "../components/FieldForm";
 import { HelpMenuSections } from "../components/HelpMenuSections";
 import { InstanceCollection } from "../components/InstanceCollection";
 import {
+  SessionLocaleList,
+  UiLanguageSelect,
+} from "../components/LanguageSettings";
+import {
   BASIC_SETTINGS_FIELDS,
   PROACTIVE_FIELDS,
   IDENTITY_FIELDS,
+  LANGUAGE_FIELDS,
   PERSONA_FIELDS,
   CONTEXT_FIELDS,
   EMOTION_FIELDS,
@@ -31,7 +37,13 @@ const SETTINGS_TABS = [
   { id: "extensions", label: "扩展功能" },
 ] as const;
 
-export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
+export function SettingsPage({
+  client,
+  act,
+  config,
+  setConfig,
+}: ConfigPageProps) {
+  const { t } = useTranslation("settings");
   const group = config.group_context;
   const setHeartflow = (heartflow: typeof group.heartflow) =>
     setConfig({ ...config, group_context: { ...group, heartflow } });
@@ -53,6 +65,21 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
         aria-labelledby="settings-tab-general"
         hidden={tab !== "general"}
       >
+        <section className="settings-group">
+          <h2>{t("language.title")}</h2>
+          <div className="field-grid">
+            {LANGUAGE_FIELDS.map((spec) => (
+              <Field
+                key={spec.key}
+                spec={spec}
+                value={config[spec.key as "locale"]}
+                onChange={(next) => setConfig({ ...config, [spec.key]: next })}
+              />
+            ))}
+            <UiLanguageSelect />
+            <SessionLocaleList client={client} act={act} />
+          </div>
+        </section>
         <section className="settings-group">
           <h2>称呼与唤起</h2>
           <FieldForm

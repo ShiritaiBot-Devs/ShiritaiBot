@@ -4,10 +4,11 @@ import type { ApiClient } from "../api/client";
 import type { SubscriptionUsage } from "../api/types";
 import type { Action } from "../pages/common";
 import { QueryErrorNotice } from "./QueryErrorNotice";
+import { formatNumber } from "../lib/utils";
 
 const HELPER_NAME = "shiritaibot-chatgpt-login.py";
 const USAGE_URL = "https://chatgpt.com/settings/usage";
-const number = new Intl.NumberFormat("zh-CN");
+const number = { format: (value: number) => formatNumber(value) };
 
 function UsagePeriod({
   label,

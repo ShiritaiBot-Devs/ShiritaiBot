@@ -1,0 +1,11 @@
+{
+  "language": {
+    "label": "Interface language",
+    "switch": "Change interface language"
+  },
+  "errors": {
+    "unauthorized": "The admin token is invalid or has expired. Please sign in again.",
+    "requestFailed": "Request failed (HTTP {status}). Please check the backend service.",
+    "offline": "Can't reach the backend service. Make sure the process is still running."
+  }
+}

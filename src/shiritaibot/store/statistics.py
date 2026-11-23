@@ -9,6 +9,15 @@ from shiritaibot.core import now
 
 TOKEN_FIELDS = ("input_tokens", "output_tokens", "cached_tokens", "total_tokens")
 MAX_STATS_HOURS = 30 * 24
+DEFAULT_ZONE = "Asia/Shanghai"
+
+
+def owner_zone(name: str | None) -> ZoneInfo:
+    """The owner's configured zone (``proactive.timezone``); invalid names fall back."""
+    try:
+        return ZoneInfo(name or DEFAULT_ZONE)
+    except (ValueError, KeyError):
+        return ZoneInfo(DEFAULT_ZONE)
 
 
 async def statistics_sessions(store) -> list[str]:
@@ -100,10 +109,10 @@ def cost(counts: dict, model) -> float | None:
     ) / 1_000_000
 
 
-async def subscription_usage(store, provider_id: str) -> dict:
+async def subscription_usage(store, provider_id: str, zone: str | None = None) -> dict:
     end = now()
     today = (
-        end.astimezone(ZoneInfo("Asia/Shanghai"))
+        end.astimezone(owner_zone(zone))
         .replace(hour=0, minute=0, second=0, microsecond=0)
         .timestamp()
     )
@@ -129,15 +138,25 @@ async def subscription_usage(store, provider_id: str) -> dict:
 
 
 async def statistics(
-    store, hours: int, end: datetime | None = None, models=(), *, session: str | None = None
+    store,
+    hours: int,
+    end: datetime | None = None,
+    models=(),
+    *,
+    session: str | None = None,
+    zone: str | None = None,
 ):
     """None includes all sessions, and the empty scope selects unattributed calls."""
-    end_stamp = (end or now()).timestamp()
+    tz = owner_zone(zone)
+    end_at = end or now()
+    end_stamp = end_at.timestamp()
     start = end_stamp - hours * 3600
     bucket_hours = 24 if hours > 7 * 24 else 1
     seconds = bucket_hours * 3600
-    # Daily buckets start at midnight in Asia/Shanghai.
-    offset = 8 * 3600 if bucket_hours == 24 else 0
+    # Daily buckets start at the owner's local midnight. The offset is taken at the end of
+    # the window, so days before a DST change in the window are off by that hour.
+    utc_offset = tz.utcoffset(end_at.astimezone(tz).replace(tzinfo=None))
+    offset = int(utc_offset.total_seconds()) if bucket_hours == 24 and utc_offset else 0
     first = int((start + offset) // seconds)
     last = int((end_stamp + offset) // seconds)
     fields = [
@@ -227,7 +246,7 @@ async def statistics(
     return {
         "hours": hours,
         "bucket_hours": bucket_hours,
-        "timezone": "Asia/Shanghai",
+        "timezone": tz.key,
         "buckets": buckets,
         "start": datetime.fromtimestamp(start, timezone.utc).isoformat(),
         "end": datetime.fromtimestamp(end_stamp, timezone.utc).isoformat(),

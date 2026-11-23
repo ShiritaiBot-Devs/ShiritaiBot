@@ -29,6 +29,7 @@ from shiritaibot.core import (
 )
 from shiritaibot.core.logs import Logger, brief, describe_session, get_logger
 from shiritaibot.core.text import clip_image_text
+from shiritaibot.i18n import Locale, normalize, use_locale
 from shiritaibot.meme.inject import meme_prompt
 from shiritaibot.memory.judge import recall_question
 from shiritaibot.memory.recall import MemoryRecall
@@ -210,7 +211,8 @@ class SessionActor:
         self.task = asyncio.create_task(self.run(), name=f"session:{session}")
 
     async def submit(self, ctx: Context, text: str) -> str:
-        if text.strip() in {"/stop", "/cancel", "停", "取消"}:
+        # Only a whole message counts, so "stop" inside a sentence never cancels.
+        if text.strip().casefold() in {"/stop", "/cancel", "停", "取消", "stop", "cancel"}:
             if self.current and self.context and (ctx.owner or ctx.actor == self.context.actor):
                 loop_logger(ctx).log(f"{ctx.actor} 取消了正在执行的任务")
                 self.current.cancel()
@@ -392,6 +394,20 @@ class AgentRuntime:
         self.context_locks: dict[str, asyncio.Lock] = {}
         self.deliver_group_reply: Callable[[str, str, str], Awaitable[None]] | None = None
 
+    async def session_locale(self, session: str) -> tuple[Locale, bool]:
+        """The bot language for ``session`` and whether /lang chose it (docs/I18N.md).
+
+        A /lang override is forced: replies use it whatever language the user writes in.
+        Without one, the global default applies and replies follow the user.
+        """
+        if session.startswith("background:"):
+            # Background work reports to the owner, so it speaks the owner chat's language.
+            session = self.config.value.owner_notification_session()
+        row = await self.store.get("session_locale", session)
+        if locale := normalize(row.get("locale") if row else None):
+            return locale, True
+        return self.config.value.locale, False
+
     async def handoff(self, session: str, text: str, send) -> None:
         # Append between turns, never between an assistant tool call and its result.
         async with self.context_locks.setdefault(session, asyncio.Lock()):
@@ -434,7 +450,8 @@ class AgentRuntime:
                 return "ignored"
         if not ctx.routine_event and text.strip().startswith("/"):
             loop_logger(ctx).log(f"{'主人' if ctx.owner else ctx.actor} 执行指令 {brief(text, 80)}")
-            with record_usage_for(ctx.session):
+            locale, _ = await self.session_locale(ctx.session)
+            with record_usage_for(ctx.session), use_locale(locale):
                 return await command(self, ctx, text)
         if actor_session not in self.actors or self.actors[actor_session].task.done():
             actor = SessionActor(self, actor_session)
@@ -604,8 +621,9 @@ class AgentRuntime:
     async def turn(self, actor: SessionActor, ctx: Context, text: str) -> None:
         async with self.context_locks.setdefault(runtime_session(ctx), asyncio.Lock()):
             token = current_reply.set(ctx.reply_anchor)
+            locale, _ = await self.session_locale(ctx.session)
             try:
-                with record_usage_for(ctx.session):
+                with record_usage_for(ctx.session), use_locale(locale):
                     await self._turn(actor, ctx, text)
             finally:
                 current_reply.reset(token)
@@ -613,7 +631,8 @@ class AgentRuntime:
     async def interjection_candidate(self, ctx: Context, text: str) -> str | None:
         """Generate without acquiring the passive actor, writing chat history or delivering."""
         assert ctx.interject and ctx.group and not ctx.owner
-        with record_usage_for(ctx.session):
+        locale, _ = await self.session_locale(ctx.session)
+        with record_usage_for(ctx.session), use_locale(locale):
             return await self._turn(None, ctx, text)
 
     async def _turn(self, actor: SessionActor | None, ctx: Context, text: str) -> str | None:
@@ -636,9 +655,12 @@ class AgentRuntime:
             ctx = replace(ctx, mode="chat", allowed_tools=())
         cfg = settings.with_session_routes(ctx.session, deep=True)
         selected_persona = await self.store.get("session_persona", ctx.session)
+        locale, forced = await self.session_locale(ctx.session)
         system = cfg.system_prompt(
             selected_persona.get("persona", "") if selected_persona else "",
             owner=ctx.owner,
+            locale=locale,
+            forced=forced,
         )
         chat_system = system
         if not ctx.background and ctx.session.startswith(("private:", "group:")):

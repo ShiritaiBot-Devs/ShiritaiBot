@@ -1,4 +1,5 @@
 import type {
+  SessionLocale,
   CommandInfo,
   ConfigSaveResult,
   ConfigSnapshot,
@@ -44,6 +45,7 @@ import type {
   UpdateStatus,
   WebChat,
 } from "./types";
+import i18n, { currentLocale } from "../i18n";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -66,6 +68,8 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
 export interface ApiClient {
   health(): Promise<Health>;
+  sessionLocales(): Promise<SessionLocale[]>;
+  clearSessionLocale(session: string): Promise<unknown>;
   restart(): Promise<{ status: string; instance_id: string }>;
   updateStatus(): Promise<UpdateStatus>;
   updateReleases(
@@ -206,8 +210,13 @@ export interface ApiClient {
 
 function messageFor(status: number, detail: unknown): string {
   if (typeof detail === "string" && detail.trim()) return detail;
-  if (status === 401) return "管理令牌无效或已过期，请重新登录。";
-  return `请求失败（HTTP ${status}），请检查后端服务。`;
+  if (status === 401) return i18n.t("common:errors.unauthorized");
+  return i18n.t("common:errors.requestFailed", { status });
+}
+
+/** Lets the backend answer in the interface language (errors, labels). */
+function localeHeader(): Record<string, string> {
+  return { "X-ShiritaiBot-Locale": currentLocale() };
 }
 
 export function createClient(getToken: () => string): ApiClient {
@@ -219,6 +228,7 @@ export function createClient(getToken: () => string): ApiClient {
   ): Promise<{ data: T; revision?: string }> {
     const headers: Record<string, string> = {
       Authorization: "Bearer " + getToken(),
+      ...localeHeader(),
     };
     if (revision !== undefined) {
       headers["X-Config-Revision"] = revision;
@@ -239,7 +249,7 @@ export function createClient(getToken: () => string): ApiClient {
           body === undefined ? undefined : binary ? body : JSON.stringify(body),
       });
     } catch {
-      throw new ApiError("无法连接后端服务，请确认进程仍在运行。", 0);
+      throw new ApiError(i18n.t("common:errors.offline"), 0);
     }
     if (response.ok) {
       return {
@@ -274,10 +284,10 @@ export function createClient(getToken: () => string): ApiClient {
     let response: Response;
     try {
       response = await fetch("/api" + path, {
-        headers: { Authorization: "Bearer " + getToken() },
+        headers: { Authorization: "Bearer " + getToken(), ...localeHeader() },
       });
     } catch {
-      throw new ApiError("无法连接后端服务，请确认进程仍在运行。", 0);
+      throw new ApiError(i18n.t("common:errors.offline"), 0);
     }
     if (!response.ok)
       throw new ApiError(messageFor(response.status, null), response.status);
@@ -307,6 +317,9 @@ export function createClient(getToken: () => string): ApiClient {
     applyUpdate: (kind, ref) =>
       request<UpdateStatus>("/update/apply", "POST", { kind, ref }),
     config: () => request<Settings>("/config"),
+    sessionLocales: () => request<SessionLocale[]>("/session-locales"),
+    clearSessionLocale: (session) =>
+      request("/session-locales?" + new URLSearchParams({ session }), "DELETE"),
     configSnapshot: async () => {
       const { data, revision } = await requestSnapshot<Settings>("/config");
       return { settings: data, revision };
@@ -477,10 +490,15 @@ export function createClient(getToken: () => string): ApiClient {
             encodeURIComponent(id) +
             "/file?" +
             new URLSearchParams({ library }),
-          { headers: { Authorization: "Bearer " + getToken() } },
+          {
+            headers: {
+              Authorization: "Bearer " + getToken(),
+              ...localeHeader(),
+            },
+          },
         );
       } catch {
-        throw new ApiError("无法连接后端服务，请确认进程仍在运行。", 0);
+        throw new ApiError(i18n.t("common:errors.offline"), 0);
       }
       if (!response.ok)
         throw new ApiError(messageFor(response.status, null), response.status);

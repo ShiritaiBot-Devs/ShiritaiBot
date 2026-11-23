@@ -7,6 +7,9 @@ import {
   useState,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import { applyInstanceLocale } from "./i18n";
+import { setOwnerTimeZone } from "./lib/utils";
 import { createClient } from "./api/client";
 import type { ApiClient } from "./api/client";
 import { AppShell } from "./components/AppShell";
@@ -131,6 +134,15 @@ function ConsoleApp() {
     [token],
   );
   const draft = useConfigDraft(client);
+  // Re-render the console when the interface language changes.
+  useTranslation();
+  const savedSettings = draft.saved?.settings;
+  // Idempotent module setting read by every date formatter, so it must be set
+  // before this render's children format anything.
+  setOwnerTimeZone(savedSettings?.proactive.timezone);
+  useEffect(() => {
+    applyInstanceLocale(savedSettings?.locale);
+  }, [savedSettings?.locale]);
 
   const health = useQuery({
     queryKey: ["health"],

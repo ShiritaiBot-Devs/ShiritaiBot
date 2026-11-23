@@ -190,6 +190,14 @@ header button {
   background: transparent;
 }
 
+/* Interface language picker: sized to its content like the header buttons. */
+header select.console-language {
+  width: auto;
+  flex: none;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
 .local-badge {
   font-size: 10px;
   letter-spacing: 1.4px;

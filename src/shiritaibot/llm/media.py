@@ -20,6 +20,8 @@ from shiritaibot.adapters.onebot11 import qq_download_url
 from shiritaibot.core import PublicError, canonical
 from shiritaibot.core.logs import get_logger
 from shiritaibot.core.text import IMAGE_REF
+from shiritaibot.i18n import DEFAULT_LOCALE, current_locale
+from shiritaibot.prompts import prompt
 
 log = get_logger("模型")
 
@@ -33,11 +35,6 @@ NO_VISION = canonical(
 # Base64 of this stays within the strictest provider per-image limit (5 MB).
 MAX_IMAGE_BYTES = 3_750_000
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
-CAPTION_PROMPT = (
-    "你是图像转述器，为看不到图片的模型描述图片。用中文客观描述图片内容："
-    "主体、场景、人物动作与表情、关键细节；图中文字按原文转录。"
-    "不要推测图片之外的事，不超过 300 字，只输出描述。"
-)
 
 
 def sniff(data: bytes) -> str | None:
@@ -200,8 +197,14 @@ class ImageResolver:
         return self.captions[ref]
 
     async def _caption(self, ref: str) -> str | None:
+        # Captions are written in the conversation's language (docs/I18N.md).
+        locale = current_locale.get()
         cached = await self.llm.store.get("image_caption", ref)
-        if cached and cached["scope"] == self.scope:
+        if (
+            cached
+            and cached["scope"] == self.scope
+            and cached.get("locale", DEFAULT_LOCALE) == locale
+        ):
             return cached["text"]
         url = await self.image(ref)
         if url is None:
@@ -209,11 +212,14 @@ class ImageResolver:
         try:
             reply = await self.llm.complete(
                 "vision",
-                CAPTION_PROMPT,
+                prompt("IMAGE_CAPTION", locale),
                 [
                     {
                         "role": "user",
-                        "content": [image_part(url), {"type": "text", "text": "请描述这张图片。"}],
+                        "content": [
+                            image_part(url),
+                            {"type": "text", "text": prompt("IMAGE_CAPTION_REQUEST", locale)},
+                        ],
                     }
                 ],
                 [],
@@ -224,7 +230,9 @@ class ImageResolver:
             return None
         text = " ".join(reply.text.split())[:1000]
         if text:
-            await self.llm.store.put("image_caption", ref, {"text": text}, self.scope)
+            await self.llm.store.put(
+                "image_caption", ref, {"text": text, "locale": locale}, self.scope
+            )
         return text or None
 
     async def render(self, messages: list[dict], model) -> list[dict]:

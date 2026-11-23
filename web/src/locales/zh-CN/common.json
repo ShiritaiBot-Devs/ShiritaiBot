@@ -1,0 +1,11 @@
+{
+  "language": {
+    "label": "界面语言",
+    "switch": "切换界面语言"
+  },
+  "errors": {
+    "unauthorized": "管理令牌无效或已过期，请重新登录。",
+    "requestFailed": "请求失败（HTTP {status}），请检查后端服务。",
+    "offline": "无法连接后端服务，请确认进程仍在运行。"
+  }
+}

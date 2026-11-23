@@ -3,6 +3,28 @@ import type { FieldSpec } from "../config/schema";
 import { inferFieldSpec } from "../config/schema";
 import { SecretField } from "./SecretField";
 import { TextFieldList } from "./TextFieldList";
+import { tx } from "../i18n";
+
+/**
+ * A spec with its text translated. Specs may hold catalog keys ("settings:…") or,
+ * until their page is migrated, literal text, which `tx` passes through unchanged.
+ */
+function localized(spec: FieldSpec): FieldSpec {
+  return {
+    ...spec,
+    label: tx(spec.label),
+    help: tx(spec.help),
+    placeholder: tx(spec.placeholder),
+    optionLabels: spec.optionLabels
+      ? Object.fromEntries(
+          Object.entries(spec.optionLabels).map(([key, text]) => [
+            key,
+            tx(text),
+          ]),
+        )
+      : undefined,
+  };
+}
 
 export function jsonObjectError(value: unknown): string | null {
   try {
@@ -65,7 +87,7 @@ function NumberInput({
 }
 
 export function Control({
-  spec,
+  spec: rawSpec,
   value,
   onChange,
 }: {
@@ -73,6 +95,7 @@ export function Control({
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
+  const spec = localized(rawSpec);
   if (spec.kind === "json") {
     const error = jsonObjectError(value);
     return (
@@ -222,7 +245,7 @@ export function Control({
 }
 
 export function Field({
-  spec,
+  spec: rawSpec,
   value,
   onChange,
 }: {
@@ -230,6 +253,7 @@ export function Field({
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
+  const spec = localized(rawSpec);
   const help = spec.help ? (
     <small className="field-help">{spec.help}</small>
   ) : null;
@@ -253,7 +277,7 @@ export function Field({
     <div className={"field" + (spec.full ? " full" : "")}>
       <span className="field-name">{spec.label}</span>
       {help}
-      <Control spec={spec} value={value} onChange={onChange} />
+      <Control spec={rawSpec} value={value} onChange={onChange} />
     </div>
   );
 }

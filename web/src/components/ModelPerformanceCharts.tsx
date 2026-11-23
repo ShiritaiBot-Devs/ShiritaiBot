@@ -2,7 +2,7 @@ import { Activity, Timer, Zap } from "lucide-react";
 import { useId, useState } from "react";
 import type { ModelPerformance, TokenBucket } from "../api/types";
 import { smoothLine, type ChartModel } from "../lib/charts";
-import { formatBucketTime } from "../lib/utils";
+import { dateFormat, formatBucketTime, formatNumber } from "../lib/utils";
 
 const metrics = [
   {
@@ -33,17 +33,9 @@ const left = 34,
   top = 10,
   bottom = 130;
 type Point = { x: number; y: number };
-const hourLabel = new Intl.DateTimeFormat("zh-CN", {
-  timeZone: "Asia/Shanghai",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-const dayLabel = new Intl.DateTimeFormat("zh-CN", {
-  timeZone: "Asia/Shanghai",
-  month: "2-digit",
-  day: "2-digit",
-});
+const hourLabel = () =>
+  dateFormat({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const dayLabel = () => dateFormat({ month: "2-digit", day: "2-digit" });
 function segments(
   values: (number | null)[],
   x: (i: number) => number,
@@ -68,7 +60,7 @@ function axisMax(value: number) {
 }
 
 function display(value: number, key: keyof ModelPerformance) {
-  return value.toLocaleString("zh-CN", {
+  return formatNumber(value, {
     maximumFractionDigits: key === "ttft_ms" ? 0 : key === "error_rate" ? 2 : 1,
   });
 }
@@ -178,7 +170,7 @@ function PerformanceCard({
                   className="performance-gridline"
                 />
                 <text x={left - 6} y={y(f * max) + 3} textAnchor="end">
-                  {(f * max).toLocaleString("zh-CN", {
+                  {formatNumber(f * max, {
                     notation: "compact",
                     maximumSignificantDigits: 3,
                   })}
@@ -198,7 +190,7 @@ function PerformanceCard({
                       : "middle"
                 }
               >
-                {(daily || rows.length > 48 ? dayLabel : hourLabel).format(
+                {(daily || rows.length > 48 ? dayLabel : hourLabel)().format(
                   new Date(rows[i].hour),
                 )}
               </text>

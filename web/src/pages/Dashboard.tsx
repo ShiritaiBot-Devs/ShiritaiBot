@@ -14,7 +14,12 @@ import type {
   Statistics,
   TokenBucket,
 } from "../api/types";
-import { formatBucketTime, formatDateTime, formatNumber } from "../lib/utils";
+import {
+  formatBucketTime,
+  formatDateTime,
+  formatNumber,
+  ownerTimeZone,
+} from "../lib/utils";
 
 const CURRENCY_SYMBOL: Record<Currency, string> = { USD: "$", CNY: "¥" };
 const CURRENCY_STORAGE_KEY = "shiritaibot.cost-currency";
@@ -521,7 +526,7 @@ export function Dashboard({ client }: { client: ApiClient }) {
         <div>
           <h2>数据看板</h2>
           <p className="muted">
-            北京时间 · {daily ? "按日" : "按小时"}汇总 · 每 30 秒更新
+            {ownerTimeZone()} · {daily ? "按日" : "按小时"}汇总 · 每 30 秒更新
           </p>
         </div>
         <div className="dashboard-filters">
@@ -603,7 +608,7 @@ export function Dashboard({ client }: { client: ApiClient }) {
                         <span
                           title={
                             exchange.data?.updated_at
-                              ? `汇率更新于 ${new Date(exchange.data.updated_at * 1000).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}（北京时间）`
+                              ? `汇率更新于 ${formatDateTime(exchange.data.updated_at)}（${ownerTimeZone()}）`
                               : undefined
                           }
                         >

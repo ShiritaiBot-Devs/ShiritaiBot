@@ -1,0 +1,16 @@
+{
+  "language": {
+    "title": "Language",
+    "botLabel": "Bot language",
+    "botHelp": "Used by every session that hasn't set its own language with /lang: for /help, error messages, notifications and the bot's replies, even when the user writes in another language. A persona that asks for a specific reply language still wins.",
+    "uiHelp": "Only changes this admin interface in this browser, not the bot.",
+    "overridesTitle": "Sessions with their own language (/lang)",
+    "overridesHelp": "These sessions use their own language instead of the default above, even if the persona asks for another one.",
+    "overridesEmpty": "No session has set its own language with /lang yet.",
+    "session": "Session",
+    "locale": "Language",
+    "useDefault": "Use default",
+    "cleared": "{session} now uses the default language.",
+    "loadFailed": "Couldn't load the session language settings."
+  }
+}

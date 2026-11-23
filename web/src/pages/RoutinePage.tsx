@@ -7,7 +7,12 @@ import { EmptyState } from "../components/EmptyState";
 import { SessionOptions } from "../components/SessionPicker";
 import type { RoutineKind, RoutineRecord } from "../api/types";
 import { isMainSession, sessionTitle } from "../lib/sessions";
-import { TIME_ZONE, formatDateTime, localInputToIso } from "../lib/utils";
+import {
+  dateFormat,
+  formatDateTime,
+  localInputToIso,
+  ownerTimeZone,
+} from "../lib/utils";
 import type { PageProps } from "./common";
 
 const KINDS: { value: RoutineKind; label: string }[] = [
@@ -40,28 +45,20 @@ const LEGACY_SCOPE = "owner";
 /** Guard against runaway multi-day events. */
 const MAX_SPAN_DAYS = 62;
 
-const dayKeyFormat = new Intl.DateTimeFormat("en-CA", {
-  timeZone: TIME_ZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-const clockFormat = new Intl.DateTimeFormat("zh-CN", {
-  timeZone: TIME_ZONE,
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
+const dayKeyFormat = () =>
+  dateFormat({ year: "numeric", month: "2-digit", day: "2-digit" }, "en-CA");
+const clockFormat = () =>
+  dateFormat({ hour: "2-digit", minute: "2-digit", hour12: false });
 
 /** "YYYY-MM-DD" of the instant in the dashboard time zone. */
 function dayKey(value: string | Date): string | null {
   const date = typeof value === "string" ? new Date(value) : value;
-  return Number.isNaN(date.getTime()) ? null : dayKeyFormat.format(date);
+  return Number.isNaN(date.getTime()) ? null : dayKeyFormat().format(date);
 }
 
 function clock(value: string): string {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : clockFormat.format(date);
+  return Number.isNaN(date.getTime()) ? "" : clockFormat().format(date);
 }
 
 /** Calendar arithmetic on date-only keys, done in UTC so DST never bites. */
@@ -549,7 +546,7 @@ export function RoutinePage({ client, act }: PageProps) {
         title,
         due: localInputToIso(due),
         cron: kind === "job" ? cron : "",
-        timezone: "Asia/Shanghai",
+        timezone: ownerTimeZone(),
       });
       setTitle("");
       setDue("");
@@ -619,7 +616,7 @@ export function RoutinePage({ client, act }: PageProps) {
             </div>
             {kind === "job" ? (
               <div className="field">
-                <span className="field-name">Cron（Asia/Shanghai）</span>
+                <span className="field-name">Cron（{ownerTimeZone()}）</span>
                 <input
                   aria-label="Cron"
                   value={cron}
