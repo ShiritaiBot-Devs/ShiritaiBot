@@ -10,8 +10,12 @@ from shiritaibot.api.event import MessageEvent
 from shiritaibot.config import AdapterConfig, ConfigService
 from shiritaibot.core import ApprovalPort, Context, PublicError, RuntimePort, now
 from shiritaibot.core.logs import get_logger
+from shiritaibot.i18n import Text, t
 
-APPROVAL_REPLY = re.compile(r"(同意|拒绝)\s+([a-f0-9]{10})")
+# Control words work in either language.
+APPROVAL_REPLY = re.compile(r"(同意|拒绝|approve|deny)\s+([a-f0-9]{10})", re.I)
+STOP_WORDS = {"停", "取消", "stop", "cancel"}
+ALLOW_WORDS = {"同意", "approve"}
 
 
 class Feishu:
@@ -53,15 +57,20 @@ class Feishu:
         parts = [self.connection_issue] if self.connection_issue else []
         if self.transport is not None:
             if issue := self.transport.credential_error or self.transport.connection_error:
-                parts.append(issue)
+                parts.append(t(issue))
             if self.config.groups and self.transport.group_message_scope is not True:
-                state = "缺少" if self.transport.group_message_scope is False else "尚未确认"
-                parts.append(f"{state}群消息权限 im:message.group_msg，未 @ 的关键词唤醒待验证。")
+                parts.append(
+                    t(
+                        "adapters.feishu.scopeMissing"
+                        if self.transport.group_message_scope is False
+                        else "adapters.feishu.scopeUnconfirmed"
+                    )
+                )
         if not self.config.owner_id:
             parts.append(
-                f"最近私聊发送者 open_id 为 {self.owner_candidate}，核对后填入主人 ID。"
+                t("adapters.feishu.ownerCandidate", owner_candidate=self.owner_candidate)
                 if self.owner_candidate
-                else "请向机器人发一条私聊，然后在这里查看发送者 open_id。"
+                else t("adapters.feishu.ownerHint")
             )
         return " ".join(parts)
 
@@ -69,10 +78,10 @@ class Feishu:
         try:
             secret = await self.vault.resolve(self.config.app_secret)
         except Exception:
-            self.connection_issue = "无法读取飞书 App Secret，请重新填写。"
+            self.connection_issue = t("adapters.feishu.secretUnreadable")
             return
         if not self.config.app_id or not secret:
-            self.connection_issue = "请填写飞书 App ID 和 App Secret。"
+            self.connection_issue = t("adapters.feishu.credentialsMissing")
             return
         self.transport = FeishuTransport(
             self.config.app_id, secret, self.config.domain, self.accept
@@ -115,7 +124,7 @@ class Feishu:
         try:
             self.events.put_nowait(message)
         except asyncio.QueueFull:
-            self.log.warning("飞书事件队列已满，未处理一条消息。")
+            self.log.warning("adapters.feishu.log.queueFull")
 
     def group_command_allowed(self, message: FeishuInbound) -> bool:
         return message.text.lstrip().startswith("/") and (
@@ -138,7 +147,7 @@ class Feishu:
             try:
                 await self.receive(message)
             except Exception as exc:
-                self.log.warning(f"处理飞书消息失败（{type(exc).__name__}）。")
+                self.log.warning(Text("adapters.feishu.log.messageFailed", name=type(exc).__name__))
 
     async def receive(self, message: FeishuInbound) -> None:
         cfg = self.config
@@ -185,15 +194,15 @@ class Feishu:
             rest = settings.strip_wake_prefix(text)
             if rest != text and (
                 rest.startswith("/")
-                or rest in {"停", "取消"}
+                or rest.lower() in STOP_WORDS
                 or APPROVAL_REPLY.fullmatch(rest)
                 or self.permissions.menu.accepts(session, rest)
             ):
                 text = rest
         if not group and (match := APPROVAL_REPLY.fullmatch(text)):
             try:
-                await self.permissions.resolve(match[2], match[1] == "同意", approver=ctx)
-                await self.reply(session, "审批已处理。")
+                await self.permissions.resolve(match[2], match[1].lower() in ALLOW_WORDS, approver=ctx)
+                await self.reply(session, t("adapters.feishu.approvalHandled"))
             except PublicError as exc:
                 await self.reply(session, str(exc))
             return
@@ -204,7 +213,7 @@ class Feishu:
             and settings.private_require_keyword
             and not settings.matches_wake_keyword(text)
             and not text.startswith("/")
-            and text not in {"停", "取消"}
+            and text.lower() not in STOP_WORDS
         ):
             return
         if self.active_context is not None and not self.active_context(ctx):

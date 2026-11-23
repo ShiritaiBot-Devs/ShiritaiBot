@@ -9,6 +9,7 @@ from shiritaibot.config import is_feishu_session
 from shiritaibot.core import Context, PublicError, Tool, canonical, uid
 from shiritaibot.core.logs import brief
 from shiritaibot.i18n import t
+from shiritaibot.prompts import prompt as prompt_text
 
 if TYPE_CHECKING:
     from shiritaibot.auth import Permissions
@@ -17,17 +18,11 @@ WINDOW = 2.0
 REASON_BUDGET = 2.0
 QUICK_SECONDS = 300
 PAGE_SIZE = 5
-RISK_LABELS = {"safe": "安全", "normal": "一般", "sensitive": "敏感", "dangerous": "危险"}
+RISK_LABELS = {level: f"approvals.risk.{level}" for level in ("safe", "normal", "sensitive", "dangerous")}
 RISK_ORDER = {"dangerous": 0, "sensitive": 1, "normal": 2, "safe": 3}
 # Credential-bearing files are never auto-approved: the prompt must always be one-shot.
 SENSITIVE_FILE = re.compile(
     r"config\.toml|master\.key|web\.token|\.credentials|state\.sqlite3|profiles[\\/]", re.I
-)
-REASON_SYSTEM = (
-    "你在为主人撰写工具调用的审批说明。只输出两行纯文本，不要解释：\n"
-    "要做：一句话说明这次调用打算做什么\n"
-    "为什么：一句话说明为什么需要做（结合对话）\n"
-    "每行不超过40字。"
 )
 
 
@@ -230,14 +225,14 @@ class _ChatMenu:
                 )
             except PublicError:
                 return False
-            await self._send(f"五分钟内 {req.tool.name} 的审批将自动同意")
+            await self._send(t("approvals.menu.quickGranted", name=req.tool.name))
             await self._refresh_locked()
             return True
         if number not in {1, 2}:
             return False
         if await self._resolve(req, number == 1, approver):
-            verb = "同意" if number == 1 else "拒绝"
-            await self._send(f"已{verb}：{req.tool.name} {req.key}")
+            verb = t("approvals.menu.verb.allow") if number == 1 else t("approvals.menu.verb.deny")
+            await self._send(t("approvals.menu.settled", verb=verb, name=req.tool.name, key=req.key))
         await self._refresh_locked()
         return True
 
@@ -247,16 +242,16 @@ class _ChatMenu:
         count = 0
         for req in requests:
             count += await self._resolve(req, allow, approver)
-        verb = "同意" if allow else "拒绝"
+        verb = t("approvals.menu.verb.allow") if allow else t("approvals.menu.verb.deny")
         if count:
-            await self._send(f"已全部{verb}：{count} 条")
+            await self._send(t("approvals.menu.settledAll", verb=verb, count=count))
         await self._finish()
 
     async def _open_detail(self, batch: Batch, requests: list[Request]) -> bool:
         groups = self._groups(requests)
         if not groups:
             return False
-        await self._send("已打开详情。")
+        await self._send(t("approvals.menu.detailOpened"))
         if len(groups) == 1:
             batch.stage = "single"
             await self._show_single(requests)
@@ -280,9 +275,9 @@ class _ChatMenu:
         count = 0
         for req in group:
             count += await self._resolve(req, allow, approver)
-        verb = "同意" if allow else "拒绝"
+        verb = t("approvals.menu.verb.allow") if allow else t("approvals.menu.verb.deny")
         if count:
-            await self._send(f"{name}：已全部{verb} {count} 条")
+            await self._send(t("approvals.menu.settledGroup", name=name, verb=verb, count=count))
         await self._refresh_locked()
         return True
 
@@ -463,13 +458,14 @@ class _ChatMenu:
             async with asyncio.timeout(REASON_BUDGET):
                 reply = await llm.complete(
                     "light",
-                    REASON_SYSTEM,
+                    prompt_text("APPROVAL_REASON"),
                     [{"role": "user", "content": request}],
                     [],
                     settings=self.permissions.config.value,
                 )
             lines = [line.strip() for line in reply.text.splitlines() if line.strip()]
-            if lines and lines[0].startswith("要做"):
+            # The first line starts with "To do" in the active language.
+            if lines and lines[0].startswith(("要做", "To do")):
                 return "\n".join(lines[:2])
         except Exception:
             pass
@@ -477,8 +473,7 @@ class _ChatMenu:
 
     def _fallback(self, req: Request) -> str:
         return (
-            f"要做：{req.tool.name} {brief(canonical(req.args), 160)}\n"
-            "为什么：（说明生成失败，请按上面的参数判断）"
+            t("approvals.menu.fallback", name=req.tool.name, brief=brief(canonical(req.args), 160))
         )
 
     def _can_grant(self, req: Request) -> bool:
@@ -495,21 +490,21 @@ class _ChatMenu:
 
     def _single_text(self, req: Request) -> str:
         lines = [
-            f"需要确认：{req.tool.name}",
+            t("approvals.menu.needsConfirm", name=req.tool.name),
             *(req.reason or self._fallback(req)).splitlines(),
-            f"参数：{brief(canonical(req.args), 300)}",
-            "回数字：",
-            "1 同意",
-            "2 拒绝",
+            t("approvals.menu.args", brief=brief(canonical(req.args), 300)),
+            t("approvals.menu.replyNumber"),
+            t("approvals.menu.option.allow"),
+            t("approvals.menu.option.deny"),
         ]
         if self._can_grant(req):
-            lines.append(f"3 五分钟内 {req.tool.name} 都同意")
-            warning = "（⚠ 高危，慎重）" if req.tool.risk in {"sensitive", "dangerous"} else ""
-            lines.append(f"4 以后 {req.tool.name} 都同意，不再问{warning}")
+            lines.append(t("approvals.menu.option.quick", name=req.tool.name))
+            warning = t("approvals.menu.option.dangerous") if req.tool.risk in {"sensitive", "dangerous"} else ""
+            lines.append(t("approvals.menu.option.always", name=req.tool.name, warning=warning))
         elif req.ctx.require_manual_approval:
-            lines.append("此子代理要求逐次审批")
+            lines.append(t("approvals.menu.option.perCall"))
         elif not is_feishu_session(req.ctx.session):
-            lines.append("（本次命令涉及密钥文件或来自后台会话，只提供 1/2）")
+            lines.append(t("approvals.menu.option.limited"))
         return "\n".join(lines)
 
     def _list_text(self, requests: list[Request]) -> str:
@@ -517,23 +512,23 @@ class _ChatMenu:
             requests,
             key=lambda req: (RISK_ORDER.get(req.tool.risk, 9), req.tool.name, req.key),
         )
-        lines = [f"有 {len(ordered)} 条待确认："]
+        lines = [t("approvals.menu.batch.title", count=len(ordered))]
         for index, req in enumerate(ordered, 1):
             summary = (req.reason or self._fallback(req)).splitlines()[0]
-            summary = summary.removeprefix("要做：").strip()
+            summary = summary.removeprefix("要做：").removeprefix("To do:").strip()
             lines.append(
-                f"{index}. {req.tool.name}（{RISK_LABELS.get(req.tool.risk, req.tool.risk)}）— {brief(summary, 30)}"
+                f"{index}. {req.tool.name}（{t(RISK_LABELS.get(req.tool.risk, req.tool.risk))}）— {brief(summary, 30)}"
             )
-        lines += ["回数字：", "1 全部同意", "2 全部拒绝", "3 看详情"]
+        lines += [t("approvals.menu.replyNumber"), t("approvals.menu.batch.allowAll"), t("approvals.menu.batch.denyAll"), t("approvals.menu.batch.details")]
         return "\n".join(lines)
 
     def _detail_text(self, groups: list[tuple[str, str, list[Request]]]) -> str:
-        lines = ["详情，按类型分："]
+        lines = [t("approvals.menu.detail.title")]
         for risk, name, group in groups:
-            lines.append(f"[{RISK_LABELS.get(risk, risk)} · {name}] {len(group)} 条")
-        lines.append("回数字：")
+            lines.append(t("approvals.menu.detail.group", risk=t(RISK_LABELS.get(risk, risk)), name=name, count=len(group)))
+        lines.append(t("approvals.menu.replyNumber"))
         for index, (_, name, _) in enumerate(groups):
-            lines.append(f"{2 * index + 1} {name} 全部同意")
-            lines.append(f"{2 * index + 2} {name} 全部拒绝")
-        lines.append(f"{2 * len(groups) + 1} 逐条处理")
+            lines.append(t("approvals.menu.detail.allowGroup", value=2 * index + 1, name=name))
+            lines.append(t("approvals.menu.detail.denyGroup", value=2 * index + 2, name=name))
+        lines.append(t("approvals.menu.detail.oneByOne", value=2 * len(groups) + 1))
         return "\n".join(lines)

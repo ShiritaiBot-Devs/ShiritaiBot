@@ -8,6 +8,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
+from shiritaibot.i18n import Text, t
+from shiritaibot.prompts import prompt as prompt_text
+
 if TYPE_CHECKING:
     from shiritaibot.subagent.native import NativeRunner
 
@@ -15,19 +18,13 @@ from shiritaibot.core import Context, ExternalEvent, PublicError, uid
 from shiritaibot.core.logs import brief, get_logger
 from shiritaibot.core.process import run_process
 
-log = get_logger("子代理")
+log = get_logger("subagent.log.source")
 
 
 # Runs are unattended: stdin is closed after the prompt, so a CLI can never block on a
 # question. Instead the agent ends its turn with this marker and the run becomes
 # needs_input; Proactive Agent then answers (subagent_send) or asks the owner.
 NEEDS_INPUT = "NEEDS_INPUT:"
-UNATTENDED = (
-    "\n\n---\n[运行说明] 你在无人值守的后台运行，运行期间没有人能回答你的问题。"
-    "能自行合理决定的就直接决定并说明理由；只有缺少关键信息、需要确认不可逆或高风险的操作，"
-    "或因权限不足无法继续时，才先完成能做的部分，然后在最终回复的最后一行单独写："
-    f"{NEEDS_INPUT} <你需要的回答或权限>，再结束。收到回复后会在同一会话中继续。"
-)
 
 
 # Stdout retained by run_process. NDJSON kinds lose nothing important past this, since their
@@ -279,7 +276,7 @@ class OutputParser:
         response = response.strip() if isinstance(response, str) else ""
         reason = final.get("finished_reason")
         if status == "WAITING" and self.out["native"]:
-            self.out["question"] = question_in(response) or response or "子代理请求补充输入"
+            self.out["question"] = question_in(response) or response or t("subagent.needsInputDefault")
         else:
             self.out["error"] = (
                 status != "SUCCESS"
@@ -289,9 +286,9 @@ class OutputParser:
         detail = (final.get("error") or reason) if self.out["error"] else None
         if self.out["error"] and not detail:
             detail = (
-                f"Antigravity CLI 状态为 {status}。"
+                t("subagent.antigravity.status", status=status)
                 if status
-                else "Antigravity CLI 未返回最终结果。"
+                else t("subagent.antigravity.noResult")
             )
         self.out["result"] = "\n".join(str(part) for part in (response, detail) if part)
         self.complete = self.final is not None
@@ -334,7 +331,7 @@ def clip(text: str, limit: int = RESULT_LIMIT) -> str:
     if len(text) <= limit:
         return text
     head = limit // 4
-    marker = "\n\n[中间内容已省略]\n\n"
+    marker = prompt_text("SUBAGENT_OMITTED")
     return text[:head] + marker + text[-(limit - head - len(marker)) :]
 
 
@@ -343,7 +340,7 @@ def question_in(text: str) -> str | None:
     for line in reversed(text.strip().splitlines()[-5:]):
         line = line.strip().strip("*`").strip()
         if line.upper().startswith(NEEDS_INPUT):
-            return line[len(NEEDS_INPUT) :].strip() or "子代理请求补充输入"
+            return line[len(NEEDS_INPUT) :].strip() or t("subagent.needsInputDefault")
     return None
 
 
@@ -389,7 +386,7 @@ class SubagentManager:
     def instance(self, name: str):
         config = next((x for x in self.config.value.subagents if x.id == name and x.enabled), None)
         if not config:
-            raise PublicError("子代理实例不存在或未启用")
+            raise PublicError("subagent.missing")
         return config.model_copy(deep=True)
 
     def launch(self, row, ctx: Context, config, workspace: Path, prompt: str, resume=None):
@@ -403,21 +400,21 @@ class SubagentManager:
         if not model:
             return ""
         if not self.config.value.policy.dynamic_subagent_model_override:
-            raise PublicError("当前策略不允许动态子代理指定模型")
+            raise PublicError("subagent.noModelOverride")
         available = self.config.value.text_generation_models()
         if model not in available:
-            hint = f"；可用模型：{', '.join(available)}" if available else ""
-            raise PublicError(f"模型 {model} 不存在、未启用或不是文本生成模型{hint}")
+            hint = t("subagent.availableModels", models=', '.join(available)) if available else ""
+            raise PublicError("subagent.modelInvalid", model=model, hint=hint)
         return model
 
     def _dynamic_spec(self, row: dict):
         from shiritaibot.subagent.native import DynamicSubagentSpec
 
         if not self.config.value.policy.dynamic_subagent:
-            raise PublicError("动态内置子代理未启用")
+            raise PublicError("subagent.dynamicDisabled")
         raw = row.get("dynamic_spec")
         if not isinstance(raw, dict):
-            raise PublicError("动态子代理配置缺失，请新建任务")
+            raise PublicError("subagent.dynamicConfigMissing")
         model = self._validate_dynamic_model(str(raw.get("model", "")))
         tools = raw.get("tools")
         skills = raw.get("skills")
@@ -449,7 +446,7 @@ class SubagentManager:
     async def start(self, ctx: Context, instance: str, prompt: str) -> dict:
         config = self.instance(instance)
         if len(self.tasks) >= 20:
-            raise PublicError("子代理队列已满")
+            raise PublicError("subagent.queueFull")
         key = uid()
         workspace = self.home / "workspaces" / key
         await asyncio.to_thread(workspace.mkdir, parents=True, exist_ok=True)
@@ -466,7 +463,7 @@ class SubagentManager:
             body["origin"] = self._origin_snapshot(ctx)
         row = await self.store.put("subagent_run", key, body, ctx.session)
         self.launch(row, ctx, config, workspace, prompt)
-        log.log(f"已排队 {instance}（{config.kind}）：{brief(prompt, 80)}", key[:8])
+        log.log(Text("subagent.log.queued", instance=instance, kind=config.kind, brief=brief(prompt, 80)), key[:8])
         return row
 
     async def spawn(
@@ -482,9 +479,9 @@ class SubagentManager:
         model: str = "",
     ) -> dict:
         if not self.config.value.policy.dynamic_subagent:
-            raise PublicError("动态内置子代理未启用")
+            raise PublicError("subagent.dynamicDisabled")
         if len(self.tasks) >= 20:
-            raise PublicError("子代理队列已满")
+            raise PublicError("subagent.queueFull")
         validated_model = self._validate_dynamic_model(model)
         label = f"dynamic:{role.strip()[:80] or 'worker'}"
         clean_tools = (
@@ -523,7 +520,7 @@ class SubagentManager:
         spec = self._dynamic_spec(body)
         row = await self.store.put("subagent_run", key, body, ctx.session)
         self.launch(row, ctx, spec, workspace, prompt)
-        log.log(f"已排队动态子代理 {label}：{brief(prompt, 80)}", key[:8])
+        log.log(Text("subagent.log.queuedDynamic", label=label, brief=brief(prompt, 80)), key[:8])
         return row
 
     async def send(self, ctx: Context, key: str, message: str) -> dict:
@@ -535,13 +532,13 @@ class SubagentManager:
         row = await self.store.get("subagent_run", key)
         # Owner contexts include the Proactive loop that received the needs_input event.
         if not row or (row.get("scope") != ctx.session and not ctx.owner):
-            raise PublicError("当前会话不存在该子代理任务")
+            raise PublicError("subagent.taskMissing")
         if key in self.tasks or row["status"] in {"queued", "running"}:
-            raise PublicError("子代理任务仍在运行，请等它停下后再发送")
+            raise PublicError("subagent.stillRunning")
         if not row.get("native_session_id"):
-            raise PublicError("该子代理任务没有可续接的原生会话（generic 类型或启动即失败）")
+            raise PublicError("subagent.noResume")
         if len(self.tasks) >= 20:
-            raise PublicError("子代理队列已满")
+            raise PublicError("subagent.queueFull")
         if row.get("dynamic"):
             config = self._dynamic_spec(row)
         else:
@@ -549,11 +546,11 @@ class SubagentManager:
         if ("kind" in row and row["kind"] != config.kind) or (
             config.kind == "shiritaibot" and "origin" not in row
         ):
-            raise PublicError("子代理实例类型已变更，请新建任务")
+            raise PublicError("subagent.kindChanged")
         if config.kind == "shiritaibot":
             origin = Context(row["scope"], **row["origin"])
             if not ctx.owner and (origin.owner or ctx.actor != origin.actor):
-                raise PublicError("仅任务发起人或主人可以续接此子代理")
+                raise PublicError("subagent.resumeOwnerOnly")
             if ctx.allowed_tools is not None:
                 allowed = set(ctx.allowed_tools)
                 if origin.allowed_tools is not None:
@@ -567,14 +564,14 @@ class SubagentManager:
         else:
             origin = Context(row["scope"], ctx.actor, ctx.mode, ctx.owner, ctx.group)
         if config.kind == "generic":
-            raise PublicError("generic 类型的子代理不支持续接")
+            raise PublicError("subagent.genericNoResume")
         row.update(status="queued", round=row.get("round", 0) + 1, reply=message[:4000])
         row.pop("result", None)
         row.pop("question", None)
         row.pop("error", None)
         row = await self.store.put("subagent_run", key, row, row["scope"])
         self.launch(row, origin, config, Path(row["workspace"]), message, row["native_session_id"])
-        log.log(f"续接 {config.id}（第 {row['round']} 轮）：{brief(message, 80)}", key[:8])
+        log.log(Text("subagent.log.resumed", id=config.id, round=row['round'], brief=brief(message, 80)), key[:8])
         return row
 
     async def run(
@@ -585,13 +582,13 @@ class SubagentManager:
             async with self.semaphore:
                 row["status"] = "running"
                 await self.store.put("subagent_run", key, row, ctx.session)
-                log.log(f"{config.id} 开始运行", key[:8])
+                log.log(Text("subagent.log.started", id=config.id), key[:8])
                 if config.kind == "shiritaibot":
                     if self.native is None:
-                        raise PublicError("内置子代理运行器未初始化")
+                        raise PublicError("subagent.runnerMissing")
                     async with asyncio.timeout(config.timeout):
                         summary = await self.native.run(
-                            key, ctx, config, workspace, prompt, self.notes() + UNATTENDED
+                            key, ctx, config, workspace, prompt, self.notes() + prompt_text("SUBAGENT_UNATTENDED", marker=NEEDS_INPUT)
                         )
                     question = question_in(summary)
                     row.update(
@@ -604,25 +601,25 @@ class SubagentManager:
                 # Raw stderr is deliberately not written into the activity feed.
         except asyncio.CancelledError:
             row["status"] = "cancelled"
-            log.log(f"{config.id} 已取消", key[:8])
+            log.log(Text("subagent.log.cancelled", id=config.id), key[:8])
             raise
         except TimeoutError:
             row.update(
                 status="failed",
                 error="TimeoutError",
-                result=f"运行超过 {config.timeout} 秒，已终止",
+                result=t("subagent.timeout", timeout=config.timeout),
             )
-            log.warning(f"{config.id} 运行超时", key[:8])
+            log.warning(Text("subagent.log.timeout", id=config.id), key[:8])
         except Exception as exc:
             row.update(status="failed", error=type(exc).__name__)
             if isinstance(exc, PublicError):
                 row["result"] = str(exc)
-            log.error(f"{config.id} 运行失败（{type(exc).__name__}）", key[:8])
+            log.error(Text("subagent.log.failed", id=config.id, name=type(exc).__name__), key[:8])
         finally:
             status = row["status"]
             if status in {"completed", "failed", "needs_input"} and "error" not in row:
-                label = {"completed": "完成", "failed": "失败", "needs_input": "等待输入"}[status]
-                exit_detail = f"（退出码 {row['exit_code']}）" if "exit_code" in row else ""
+                label = {"completed": t("subagent.status.completed"), "failed": t("subagent.status.failed"), "needs_input": t("subagent.status.needs_input")}[status]
+                exit_detail = t("subagent.exitCode", exit_code=row['exit_code']) if "exit_code" in row else ""
                 (log.log if status == "completed" else log.warning)(
                     f"{config.id} {label}{exit_detail}：{brief(row.get('result', ''), 100)}",
                     key[:8],
@@ -636,7 +633,7 @@ class SubagentManager:
                     kind="subagent.needs_input" if waiting else "subagent.completed",
                     # One event per round: a resumed run reports again under a new key.
                     dedup_key=f"{key}:{row.get('round', 0)}",
-                    title=f"子代理 {config.id}: {'等待输入' if waiting else status}",
+                    title=t("subagent.event.title", id=config.id, value=t("subagent.status.needs_input") if waiting else status),
                     urgency="normal" if status == "cancelled" else "high",
                     payload={
                         "run_id": key,
@@ -657,7 +654,7 @@ class SubagentManager:
             stdin = prompt
         else:
             # Resumed runs already saw the plugin notes in their native session.
-            stdin = prompt + ("" if resume else self.notes()) + UNATTENDED
+            stdin = prompt + ("" if resume else self.notes()) + prompt_text("SUBAGENT_UNATTENDED", marker=NEEDS_INPUT)
         if config.kind == "antigravity":
             stdin = json.dumps({"event": "user", "message": {"content": stdin}}) + "\n"
         parser = OutputParser(config.kind)
@@ -675,11 +672,11 @@ class SubagentManager:
         notice = ""
         if result["truncated"]:
             notice = (
-                f"\n\n[输出截断] 子进程输出超过 {limit} 字节，超出部分已丢弃，以上结果可能不完整。"
+                prompt_text("SUBAGENT_TRUNCATED", limit=limit)
             )
             if not parser.complete:
                 # A raw prefix of events is not a result, and exit code 0 proves nothing.
-                parsed.update(error=True, result="子进程输出过长，未能取得最终结果。")
+                parsed.update(error=True, result=t("subagent.outputTooLong"))
         failed = result["exit_code"] != 0 or parsed["error"]
         summary = parsed["result"]
         question = (
@@ -687,9 +684,9 @@ class SubagentManager:
         )
         if parsed["denied"]:
             denied = "、".join(dict.fromkeys(parsed["denied"]))
-            summary += f"\n\n[被拒绝的权限请求] {denied}"
+            summary += prompt_text("SUBAGENT_DENIED", denied=denied)
             # A denial the agent could not work around means it is stuck, not done.
-            question = question or f"运行中以下操作因权限不足被拒绝：{denied}"
+            question = question or prompt_text("SUBAGENT_DENIED_SUMMARY", denied=denied)
         row.update(
             status="needs_input"
             if question

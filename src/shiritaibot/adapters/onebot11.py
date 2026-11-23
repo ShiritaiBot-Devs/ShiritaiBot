@@ -38,7 +38,9 @@ from shiritaibot.core import (
 )
 from shiritaibot.core.logs import brief, get_logger
 from shiritaibot.core.text import clean_outbound, clip_image_text
+from shiritaibot.i18n import Text, t
 from shiritaibot.meme.inject import MemeInjector
+from shiritaibot.prompts import prompt as prompt_text
 
 if TYPE_CHECKING:
     from shiritaibot.heartflow import Heartflow, Observation
@@ -108,9 +110,15 @@ def qq_download_url(url: str) -> bool:
     )
 
 
+# Control words work in either language.
+STOP_WORDS = {"停", "取消", "stop", "cancel"}
+ALLOW_WORDS = {"同意", "approve"}
+
+
 def approval_reply(text: str) -> re.Match | None:
-    """「同意」/「拒绝」单独发即可；带 10 位 id 时指名道姓地处理某一条。"""
-    return re.fullmatch(r"(同意|拒绝)\s*([a-f0-9]{10})?", text)
+    """Approve or deny (同意 / 拒绝) on its own handles the latest request; with a
+    10-character ID it handles that one."""
+    return re.fullmatch(r"(同意|拒绝|approve|deny)\s*([a-f0-9]{10})?", text, re.I)
 
 
 async def file_ref(store, adapter: str, group_id: str, data: dict, session: str) -> str:
@@ -129,14 +137,14 @@ class OneBotNotConnected(PublicError):
 class OneBotActionError(PublicError):
     def __init__(self, action: str, result: dict):
         retcode = result.get("retcode")
-        detail = f"OneBot {action} 失败（retcode={retcode if type(retcode) is int else '未知'}）"
+        detail = t("adapters.action.failed", action=action, value=retcode if type(retcode) is int else t("adapters.action.unknown"))
         reason = " ".join(str(result[key]) for key in ("wording", "message") if result.get(key))
         if "onMsgInfoListUpdate" in reason:
-            detail += "：协议端等待 QQ 发送回执超时"
+            detail += t("adapters.action.receiptTimeout")
         elif "timeout" in reason.lower() or "超时" in reason:
-            detail += "：协议端操作超时"
+            detail += t("adapters.action.timeout")
         elif reason:
-            detail += "：协议端返回错误"
+            detail += t("adapters.action.error")
         super().__init__(detail)
 
 
@@ -157,7 +165,7 @@ class OneBot:
 
     async def call(self, action: str, params: dict) -> Any:
         if not self.ws:
-            raise OneBotNotConnected("OneBot 未连接")
+            raise OneBotNotConnected(t("adapters.notConnected"))
         key = uid()
         future = asyncio.get_running_loop().create_future()
         self.pending[key] = future
@@ -196,15 +204,15 @@ class OneBot:
                             data = self.action_data("get_file", result)
                             if isinstance(data, dict):
                                 return data
-                            raise PublicError("OneBot 文件响应格式无效")
+                            raise PublicError("adapters.file.invalid")
         except TimeoutError:
-            raise PublicError("OneBot 下载文件超时") from None
+            raise PublicError("adapters.file.timeout") from None
         except ConnectionClosed as exc:
             if exc.sent and exc.sent.code == 1009:
-                raise PublicError("OneBot 文件响应超过大小上限") from None
-            raise PublicError("OneBot 文件连接已断开") from None
+                raise PublicError("adapters.file.tooLarge") from None
+            raise PublicError("adapters.file.disconnected") from None
         except (WebSocketException, OSError, ValueError):
-            raise PublicError("OneBot 文件接口不可用") from None
+            raise PublicError("adapters.file.unavailable") from None
 
     async def friend_ids(self) -> frozenset[str]:
         """协议端好友列表，缓存 300 秒；拉取失败时沿用旧缓存。"""
@@ -215,7 +223,7 @@ class OneBot:
                 ids = frozenset(str(row.get("user_id")) for row in data or () if row.get("user_id"))
                 self._friends = (monotonic(), ids)
             except Exception as exc:
-                self.log.warning("获取好友列表失败，沿用缓存判断", exc=exc)
+                self.log.warning("adapters.log.friendsFailed", exc=exc)
         return ids
 
     def invalidate_friends(self) -> None:
@@ -227,7 +235,7 @@ class OneBot:
             try:
                 await self.sink(self, data)
             except Exception as exc:
-                self.log.error(f"处理 OneBot 事件失败（{type(exc).__name__}）", exc=exc)
+                self.log.error(Text("adapters.log.eventFailed", name=type(exc).__name__), exc=exc)
                 await self.store.activity(
                     "adapter.event_failed", f"{self.config.id}: {type(exc).__name__}"
                 )
@@ -237,7 +245,7 @@ class OneBot:
         actual = str(result.get("user_id", ""))
         if self.config.self_id and actual != self.config.self_id:
             self.log.error(
-                f"登录账号 {actual} 与配置的 self_id {self.config.self_id} 不一致，已断开"
+                Text("adapters.log.wrongAccount", actual=actual, self_id=self.config.self_id)
             )
             if self.ws:
                 await self.ws.close(code=1008, reason="self_id mismatch")
@@ -245,14 +253,14 @@ class OneBot:
         self.self_id = actual
         self.status = "connected"
         self.failed_since = None
-        self.log.log(f"已连接 OneBot，登录账号 {result.get('nickname') or actual}（{actual}）")
+        self.log.log(Text("adapters.log.connected", value=result.get('nickname') or actual, actual=actual))
 
     async def run(self) -> None:
         delay = 1
         warned = False
         while True:
             try:
-                self.log.debug(f"正在连接 {self.config.url}")
+                self.log.debug(Text("adapters.log.connecting", url=self.config.url))
                 token = await self.vault.resolve(self.config.token)
                 async with connect(
                     self.config.url,
@@ -279,7 +287,7 @@ class OneBot:
                                     try:
                                         self.events.put_nowait(data)
                                     except asyncio.QueueFull:
-                                        self.log.warning("事件队列已满，丢弃一条 OneBot 事件")
+                                        self.log.warning("adapters.log.queueFull")
                                         await self.store.activity(
                                             "adapter.overflow", self.config.id
                                         )
@@ -290,7 +298,7 @@ class OneBot:
                 raise
             except Exception as exc:
                 # Only the first failure of a reconnect streak is a warning; retries stay quiet.
-                message = f"连接断开或无法连接（{type(exc).__name__}），约 {delay} 秒后重连"
+                message = t("adapters.reconnect", name=type(exc).__name__, delay=delay)
                 (self.log.debug if warned else self.log.warning)(message)
                 warned = True
                 await self.store.activity(
@@ -301,7 +309,7 @@ class OneBot:
                 self.ws, self.status = None, "disconnected"
                 for future in self.pending.values():
                     if not future.done():
-                        future.set_exception(PublicError("OneBot 连接断开"))
+                        future.set_exception(PublicError("adapters.disconnected"))
             await asyncio.sleep(delay + random.random())
             delay = min(60, delay * 2)
 
@@ -319,7 +327,7 @@ class OneBot:
         if clock < self.next_auto_start:
             return
         self.next_auto_start = clock + 300
-        self.log.log(f"协议端已连续不可达，尝试自动启动：{command[0]}")
+        self.log.log(Text("adapters.log.autoStart", value=command[0]))
         try:
             self.auto_process = await asyncio.create_subprocess_exec(
                 *command,
@@ -330,7 +338,7 @@ class OneBot:
             await self.store.activity("adapter.autostart", f"{self.config.id}: {command[0]}")
         except Exception as exc:
             # Usually a missing path or a launcher that needs elevation and cannot ask for it.
-            self.log.warning(f"自动启动失败（{type(exc).__name__}）：{exc}")
+            self.log.warning(Text("adapters.log.autoStartFailed", name=type(exc).__name__, exc=exc))
             await self.store.activity(
                 "adapter.autostart_failed", f"{self.config.id}: {type(exc).__name__}"
             )
@@ -361,7 +369,7 @@ class AdapterHub:
             bot: OneBot | Feishu | QQOfficial
             if cfg.type == "feishu":
                 assert self.runtime is not None and self.permissions is not None
-                get_logger(cfg.id).log("启动飞书应用机器人长连接")
+                get_logger(cfg.id).log("adapters.log.feishuStart")
                 bot = Feishu(
                     cfg,
                     self.vault,
@@ -375,10 +383,10 @@ class AdapterHub:
                 )
             elif cfg.type == "qq_official":
                 logger = get_logger(cfg.id)
-                logger.log("启动 QQ 官方机器人 Webhook")
+                logger.log("adapters.log.qqOfficialStart")
                 bot = QQOfficial(cfg, self.vault, self.receive_qq_official, logger)
             else:
-                get_logger(cfg.id).log(f"启动协议端（OneBot 11 → {cfg.url}）")
+                get_logger(cfg.id).log(Text("adapters.log.oneBotStart", url=cfg.url))
                 bot = OneBot(cfg, self.vault, self.store, self.receive)
             self.instances[cfg.id] = bot
             self.tasks.append(asyncio.create_task(bot.run()))
@@ -406,8 +414,8 @@ class AdapterHub:
         group, target, user = incoming.group, incoming.target, incoming.user
         session = cfg.session(target, group=group)
         if not settings.active_qq_official_session(session):
-            field = "群 OpenID" if group else "用户 OpenID"
-            bot.log.debug(f"忽略未配置的 QQ 官方会话（{field} {target}）")
+            field = t("adapters.field.groupOpenId") if group else t("adapters.field.userOpenId")
+            bot.log.debug(Text("adapters.log.ignoredOfficial", field=field, target=target))
             return
         if user in cfg.ignore_users:
             return
@@ -430,7 +438,7 @@ class AdapterHub:
         rest = settings.strip_wake_prefix(text)
         if rest != text and (
             rest.startswith("/")
-            or rest in {"停", "取消"}
+            or rest.lower() in STOP_WORDS
             or approval_reply(rest)
             or self.permissions.menu.accepts(session, rest)
         ):
@@ -447,13 +455,13 @@ class AdapterHub:
             if owner and (reply := approval_reply(text)):
                 try:
                     if reply[2]:
-                        await self.permissions.resolve(reply[2], reply[1] == "同意", approver=ctx)
+                        await self.permissions.resolve(reply[2], reply[1].lower() in ALLOW_WORDS, approver=ctx)
                     else:
-                        await self.permissions.resolve_latest(ctx, reply[1] == "同意")
+                        await self.permissions.resolve_latest(ctx, reply[1].lower() in ALLOW_WORDS)
                 except PublicError as exc:
                     await self.enqueue(session, str(exc), decorate=False)
                 else:
-                    await self.enqueue(session, "已处理审批。", decorate=False)
+                    await self.enqueue(session, t("adapters.approvalHandled"), decorate=False)
                 return
             if owner and await self.permissions.menu.reply(session, text, approver=ctx):
                 return
@@ -461,7 +469,7 @@ class AdapterHub:
                 not group
                 and settings.private_require_keyword
                 and not keyword
-                and not (text.startswith("/") or text in {"停", "取消"})
+                and not (text.startswith("/") or text.lower() in STOP_WORDS)
             ):
                 return
             event = MessageEvent(
@@ -503,7 +511,7 @@ class AdapterHub:
         sender = event.get("sender") or {}
         speaker = f"{sender.get('card') or sender.get('nickname') or user}({user})"
         if group and target not in cfg.groups:
-            bot.log.debug(f"忽略未启用群 {target} 的消息", speaker)
+            bot.log.debug(Text("adapters.log.ignoredGroup", target=target), speaker)
             return
         if (
             not group
@@ -511,7 +519,7 @@ class AdapterHub:
             and user not in cfg.friends
             and user not in await bot.friend_ids()
         ):
-            bot.log.debug("忽略非好友私聊（不在协议端好友列表和 friends 白名单中）", speaker)
+            bot.log.debug("adapters.log.ignoredStranger", speaker)
             return
         session = f"{'group' if group else 'private'}:{cfg.id}:{target}"
         parts = segments(event.get("message", []))
@@ -532,7 +540,7 @@ class AdapterHub:
         )
         message_id = f"{cfg.id}:{event.get('message_id')}"
         arrival = flow.arrival(session, wake=mentioned or keyword) if flow else None
-        where = f"群 {target}" if group else "私聊"
+        where = t("adapters.where.group", target=target) if group else t("adapters.where.private")
         # Untriggered group chatter is only context, so it stays at debug level.
         (bot.log.log if not group or mentioned or keyword else bot.log.debug)(
             brief(describe(parts), 200) or "[空消息]", where, speaker
@@ -583,8 +591,8 @@ class AdapterHub:
             owner_reply = user == cfg.owner_id and (
                 approval_reply(text) or self.permissions.menu.accepts(session, text)
             )
-            if not (text.startswith("/") or text in {"停", "取消"} or owner_reply):
-                bot.log.debug("私聊未包含唤醒词，不处理", speaker)
+            if not (text.startswith("/") or text.lower() in STOP_WORDS or owner_reply):
+                bot.log.debug("adapters.log.noWakeWord", speaker)
                 return
         passive_group = group and not (mentioned or keyword)
         direct_command = (
@@ -593,7 +601,7 @@ class AdapterHub:
         if (not passive_group or direct_command) and not await self.store.execute(
             "INSERT OR IGNORE INTO seen_messages VALUES(?,?)", (message_id, now().timestamp())
         ):
-            bot.log.debug("重复消息，已跳过", speaker)
+            bot.log.debug("adapters.log.duplicate", speaker)
             return
         wake = flow.wake(session) if flow and not passive_group else ""
         if passive_group:
@@ -617,7 +625,7 @@ class AdapterHub:
         rest = settings.strip_wake_prefix(text)
         if rest != text and (
             rest.startswith("/")
-            or rest in {"停", "取消"}
+            or rest.lower() in STOP_WORDS
             or approval_reply(rest)
             or self.permissions.menu.accepts(session, rest)
         ):
@@ -626,7 +634,7 @@ class AdapterHub:
             approver = Context(session, user, owner=True)
             match = approval_reply(text)
             if match:
-                allow = match[1] == "同意"
+                allow = match[1].lower() in ALLOW_WORDS
                 try:
                     if match[2]:
                         await self.permissions.resolve(match[2], allow, approver=approver)
@@ -635,10 +643,21 @@ class AdapterHub:
                         # 不带 id：作用于最新一条待审批，回复里说明处理的是哪条。
                         row = await self.permissions.resolve_latest(approver, allow)
                         key, label = row["id"], f"{row.get('tool')} "
-                    bot.log.log(f"主人{match[1]}了审批 {key}", where)
-                    await self.enqueue(session, f"审批已处理：{label}{match[1]} {key}")
+                    bot.log.log(
+                        Text("adapters.log.ownerAllowed" if allow else "adapters.log.ownerDenied", key=key),
+                        where,
+                    )
+                    await self.enqueue(
+                        session,
+                        t(
+                            "adapters.approvalResolved",
+                            label=label,
+                            verdict=t("adapters.verdict.allow" if allow else "adapters.verdict.deny"),
+                            key=key,
+                        ),
+                    )
                 except PublicError as exc:
-                    bot.log.warning(f"审批处理失败：{exc}", where)
+                    bot.log.warning(Text("adapters.log.approvalFailed", exc=exc), where)
                     await self.enqueue(session, str(exc))
                 return
             if await self.permissions.menu.reply(session, text, approver=approver):
@@ -716,11 +735,9 @@ class AdapterHub:
         self.interject_at[session] = clock
         recent.append(clock)
         prompt = (
-            "[群聊观察] 群里刚有人发言，这条没有 @ 你。\n"
-            f"最新一条来自 {speaker}：{brief(text, 300)}\n"
-            "能顺着话题自然接一句就写要发到群里的内容，否则只输出 <pass>。"
+            prompt_text("GROUP_OBSERVE", speaker=speaker, brief=brief(text, 300))
         )
-        bot.log.debug(f"群聊观察：可能插话（{speaker}）")
+        bot.log.debug(Text("adapters.log.mayInterject", speaker=speaker))
         asyncio.create_task(self._interject(session, user, prompt))
 
     async def _interject(self, session: str, user: str, prompt: str) -> None:
@@ -730,7 +747,7 @@ class AdapterHub:
                 Context(session, user, "chat", group=True, interject=True), prompt
             )
         except Exception as exc:
-            get_logger("群聊").debug(f"插话失败（{type(exc).__name__}）")
+            get_logger("adapters.log.groupSource").debug(Text("adapters.log.interjectFailed", name=type(exc).__name__))
 
     async def request(self, bot: OneBot, event: dict) -> None:
         kind, flag = event.get("request_type"), str(event.get("flag", ""))
@@ -740,11 +757,11 @@ class AdapterHub:
         user, group = str(event.get("user_id", "")), str(event.get("group_id") or "")
         sub_type = str(event.get("sub_type", "")) if kind == "group" else ""
         title = (
-            f"QQ 好友申请：{user}"
+            t("adapters.request.friend", user=user)
             if kind == "friend"
-            else f"QQ 群邀请：{user} 邀请加入群 {group}"
+            else t("adapters.request.groupInvite", user=user, group=group)
             if sub_type == "invite"
-            else f"QQ 入群申请：{user} 申请加入群 {group}"
+            else t("adapters.request.groupJoin", user=user, group=group)
         )
         record = {
             "adapter": bot.config.id,
@@ -759,7 +776,7 @@ class AdapterHub:
         }
         if not await self.store.insert("qq_request", key, record):
             return
-        bot.log.log(f"{title}（{brief(record['comment'], 80) or '无附言'}）")
+        bot.log.log(f"{title}（{brief(record['comment'], 80) or t("adapters.request.noNote")}）")
         if self.emit is not None:
             await self.emit(
                 ExternalEvent(
@@ -771,7 +788,7 @@ class AdapterHub:
                         "request": key,
                         "comment": record["comment"],
                         "group_id": group,
-                        "how_to_handle": "用 qq_request_handle 处理该 request",
+                        "how_to_handle": prompt_text("QQ_REQUEST_HOW"),
                     },
                     actors=[Actor(identity=f"qq:{user}", role="requester")] if user else [],
                 )
@@ -842,7 +859,7 @@ class AdapterHub:
         if official:
             anchor = current_reply.get()
             if anchor is None or anchor.session != session:
-                get_logger(session.split(":")[1]).warning("QQ 官方回复缺少对应的入站消息，已跳过")
+                get_logger(session.split(":")[1]).warning("adapters.log.officialNoInbound")
                 return
             delivery.update(qq_reply_to=anchor.message_id, expires=anchor.expires)
         if approval_batch:
@@ -940,7 +957,7 @@ class AdapterHub:
                     row["status"] = "expired"
                 elif row["expires"] < now().timestamp():
                     row["status"] = "expired"
-                    get_logger(adapter_id).warning("消息超过发送有效期，已放弃")
+                    get_logger(adapter_id).warning("adapters.log.expired")
                 elif kind == "group" and row.get(
                     "memory_profile", "default"
                 ) != self.config.value.session_memory(row["scope"]):
@@ -975,7 +992,7 @@ class AdapterHub:
                     continue
                 elif (message := await self.outgoing(row)) is None:
                     row["status"] = "failed"
-                    get_logger(adapter_id).warning(f"表情 {row['meme']} 已被删除，跳过发送")
+                    get_logger(adapter_id).warning(Text("adapters.log.memeDeleted", meme=row['meme']))
                 else:
                     await self.flush_onebot(bot, row, kind, target, message)
                     continue
@@ -988,10 +1005,10 @@ class AdapterHub:
         self, bot: OneBot, row: dict, kind: str, target: str, message: list[dict]
     ) -> None:
         group = kind == "group"
-        where = f"→ {'群' if group else '私聊'} {target}"
+        where = f"→ {t("adapters.where.groupShort") if group else t("adapters.where.privateShort")} {target}"
         if not target.isascii() or not target.isdecimal():
             row["status"] = "failed"
-            bot.log.warning("无效的 OneBot 目标，已跳过", where)
+            bot.log.warning("adapters.log.invalidTarget", where)
             await self.store.put("outbox", row["id"], row, row["scope"])
             if row.get("heartflow") and self.heartflow:
                 self.heartflow.settled(row["scope"], row)
@@ -1016,14 +1033,14 @@ class AdapterHub:
                 params["message"] = message
             receipt = await bot.call(action, params)
             if not isinstance(receipt, dict) or receipt.get("message_id") is None:
-                raise PublicError("OneBot 回包未包含 message_id")
+                raise PublicError("adapters.noMessageId")
         except OneBotNotConnected:
             # call() did not submit anything, so the queue can wait for a reconnect.
             row["status"] = "pending"
             await self.store.put("outbox", row["id"], row, row["scope"])
         except Exception as exc:
             reason = str(exc) if isinstance(exc, PublicError) else type(exc).__name__
-            bot.log.warning(f"发送未确认（{reason}），为避免重复不再重试", where)
+            bot.log.warning(Text("adapters.log.unconfirmed", reason=reason), where)
         else:
             row.update(status="sent", receipt=receipt)
             row.pop("image", None)
@@ -1043,8 +1060,8 @@ class AdapterHub:
                         memory_profile=row["memory_profile"],
                     )
                 except Exception as exc:
-                    bot.log.warning(f"插话已发送，记录会话历史失败（{type(exc).__name__}）", where)
-            bot.log.debug(f"已发送：{brief(row['text'], 80)}", where)
+                    bot.log.warning(Text("adapters.log.interjectHistoryFailed", name=type(exc).__name__), where)
+            bot.log.debug(Text("adapters.log.sent", brief=brief(row['text'], 80)), where)
             await self.record_sent_group(
                 bot.self_id, row, kind, enabled=self.config.value.group_context.enabled
             )
@@ -1060,7 +1077,7 @@ class AdapterHub:
         limit = 5 if kind == "group" else 4
         if not message_id or seq["sequence"] >= limit:
             row["status"] = "failed"
-            bot.log.warning("QQ 官方回复缺少消息 ID 或已达到单条消息回复上限", row["scope"])
+            bot.log.warning("adapters.log.officialNoId", row["scope"])
             await self.store.put("outbox", row["id"], row, row["scope"])
             return
         seq.update(sequence=seq["sequence"] + 1, expires=row["expires"])
@@ -1076,9 +1093,9 @@ class AdapterHub:
             if not isinstance(exc, QQOfficialSendError) or not exc.uncertain:
                 row["status"] = "failed"
                 await self.store.put("outbox", row["id"], row, row["scope"])
-            bot.log.warning(f"QQ 官方回复未成功（{exc}）", row["scope"])
+            bot.log.warning(Text("adapters.log.officialFailed", exc=exc), row["scope"])
         except Exception as exc:
-            bot.log.warning(f"QQ 官方回复未确认（{type(exc).__name__}）", row["scope"])
+            bot.log.warning(Text("adapters.log.officialUnconfirmed", name=type(exc).__name__), row["scope"])
         else:
             row.update(status="sent", receipt=receipt)
             row.pop("image", None)
@@ -1103,7 +1120,7 @@ class AdapterHub:
             )
         except Exception as exc:
             get_logger(row["scope"].split(":", 2)[1]).warning(
-                f"消息已发送，记录群聊上下文失败（{type(exc).__name__}）"
+                Text("adapters.log.groupContextFailed", name=type(exc).__name__)
             )
 
     def current_feishu_delivery(self, row: dict) -> bool:
@@ -1140,7 +1157,7 @@ class AdapterHub:
                 await self.store.put("outbox", row["id"], row, row["scope"])
             bot.log.warning(str(exc))
         except Exception as exc:
-            bot.log.warning(f"飞书发送未确认（{type(exc).__name__}）。")
+            bot.log.warning(Text("adapters.log.feishuUnconfirmed", name=type(exc).__name__))
         else:
             row.update(status="sent", receipt=receipt)
             row.pop("image", None)

@@ -1,0 +1,27 @@
+{
+  "log": {
+    "fired": "{kind}触发：{brief}",
+    "firedLate": "{kind}触发：{brief}（延迟 {delay:.0f} 秒）",
+    "source": "日程",
+    "retry": "日程 {key} 触发失败，{backoff:g} 秒后重试",
+    "schedulerError": "日程调度出错（{name}），5 秒后重试",
+    "cleaned": "自动清理 {count} 条结束超过 {value} 天的日程",
+    "deleted": "删除{kind}「{brief}」",
+    "status": "{kind}「{brief}」状态改为 {status}"
+  },
+  "kinds": {
+    "todo": "待办",
+    "event": "日程",
+    "course": "课程",
+    "reminder": "提醒",
+    "job": "定时任务"
+  },
+  "onlyUpdate": "只能修改 {fields}",
+  "statusInvalid": "日程状态无效",
+  "lateTitle": "（延迟提醒）",
+  "missing": "日程不存在或已删除",
+  "invalidUpdate": "修改后的日程无效：时间须带时区，结束须晚于开始，定时任务须为五段 cron",
+  "created": "新建{kind}「{brief}」",
+  "createdAt": "，时间 {when:%Y-%m-%d %H:%M}",
+  "updated": "修改{kind}「{brief}」："
+}

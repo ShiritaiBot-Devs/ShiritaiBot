@@ -1,0 +1,100 @@
+{
+  "log": {
+    "source": "审批",
+    "secretFile": "命令涉及含密钥的文件，改为人工审批",
+    "ownerDenied": "主人拒绝了 {name}",
+    "ownerApproved": "主人批准了 {name}",
+    "grantMemoryFailed": "免问授权的记忆写入失败：{note}",
+    "decisionIncomplete": "决策模型返回的审批结果不完整，改用文本模型",
+    "quickGrant": "五分钟免问生效，直接放行 {name}",
+    "timeout": "审批 {key} 超时，{name} 未执行",
+    "jevHandoff": "决策模型审批{verdict}（批准概率 {allow:.2f}），交给文本模型复核",
+    "waiting": "等待主人审批 {key}：{name}（{brief}）"
+  },
+  "verdict": {
+    "approved": "通过",
+    "denied": "拒绝"
+  },
+  "jev": {
+    "denied": "拒绝",
+    "unsure": "不确定",
+    "approved": "决策模型（Jev）判定批准（批准概率 {allow:.2f}）",
+    "verdict": "决策模型（Jev）判定{verdict}（批准概率 {allow:.2f}）"
+  },
+  "cancelled": "审批已取消",
+  "sessionInvalid": "会话标识无效。",
+  "waitCancelled": "审批等待已取消",
+  "timedOut": "审批超时，未执行",
+  "menuExpired": "审批菜单已失效。",
+  "grant": {
+    "remembered": "，已记入长期记忆",
+    "notRemembered": "（记忆没写成，当前配置仍然生效）",
+    "memoryTitle": "审批授权：{tool} 以后都同意",
+    "done": "以后 {tool} 都同意{tail}",
+    "memoryBody": "主人在会话 {session} 批准了 {tool} 的长期免问（{now:%Y-%m-%d}）"
+  },
+  "noPending": "没有待处理的审批",
+  "autoUnavailable": "自动审批模型不可用",
+  "autoDenied": "模型自动审批拒绝：",
+  "policyDenied": "工具被权限策略拒绝",
+  "deniedByOwner": "主人拒绝了本次调用",
+  "bindingChanged": "协议端会话绑定已变更。",
+  "changedDuring": "审批期间权限已变更，未执行",
+  "notFound": "审批不存在、已处理或已过期",
+  "autoFailedError": "自动审批失败：{exc}，未执行",
+  "revoke": {
+    "memoryTitle": "审批撤销：{tool} 不再免问",
+    "memoryBody": "主人撤销了 {tool} 的长期免问（{now:%Y-%m-%d}）",
+    "done": "已撤销 {target} 的 {tool} 免问授权，之后需要人工确认。"
+  },
+  "scheduledManual": "本次定时执行需要人工审批，工具未执行",
+  "autoFailed": "自动审批失败、超时或返回格式无效，未执行",
+  "elapsed": "，耗时 {elapsed}s",
+  "noGrant": "{target} 没有 {tool} 的免问授权。",
+  "proactiveDefaultsOnly": "Proactive Loop 只能配置新任务的默认权限",
+  "reuse": "复用一分钟内相同调用的批准结论：{value}",
+  "autoResult": "模型自动审批{verdict} {name}（{args}）：{reason}{elapsed}",
+  "risk": {
+    "safe": "安全",
+    "normal": "一般",
+    "sensitive": "敏感",
+    "dangerous": "危险"
+  },
+  "menu": {
+    "verb": {
+      "allow": "同意",
+      "deny": "拒绝"
+    },
+    "replyNumber": "回数字：",
+    "option": {
+      "allow": "1 同意",
+      "deny": "2 拒绝",
+      "dangerous": "（⚠ 高危，慎重）",
+      "perCall": "此子代理要求逐次审批",
+      "quick": "3 五分钟内 {name} 都同意",
+      "limited": "（本次命令涉及密钥文件或来自后台会话，只提供 1/2）",
+      "always": "4 以后 {name} 都同意，不再问{warning}"
+    },
+    "batch": {
+      "details": "3 看详情",
+      "allowAll": "1 全部同意",
+      "denyAll": "2 全部拒绝",
+      "title_other": "有 {count} 条待确认："
+    },
+    "detailOpened": "已打开详情。",
+    "detail": {
+      "title": "详情，按类型分：",
+      "oneByOne": "{value} 逐条处理",
+      "allowGroup": "{value} {name} 全部同意",
+      "denyGroup": "{value} {name} 全部拒绝",
+      "group": "[{risk} · {name}] {count} 条"
+    },
+    "settledAll": "已全部{verb}：{count} 条",
+    "needsConfirm": "需要确认：{name}",
+    "settledGroup": "{name}：已全部{verb} {count} 条",
+    "quickGranted": "五分钟内 {name} 的审批将自动同意",
+    "settled": "已{verb}：{name} {key}",
+    "args": "参数：{brief}",
+    "fallback": "要做：{name} {brief}\n为什么：（说明生成失败，请按上面的参数判断）"
+  }
+}

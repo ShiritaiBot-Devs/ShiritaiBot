@@ -1,0 +1,27 @@
+{
+  "log": {
+    "fired": "{kind} fired: {brief}",
+    "firedLate": "{kind} fired: {brief} (delayed {delay:.0f} s)",
+    "source": "Schedule",
+    "retry": "Schedule item {key} failed to fire; retrying in {backoff:g} s",
+    "schedulerError": "Scheduler error ({name}); retrying in 5 s",
+    "cleaned": "Cleaned up {count} schedule items that ended more than {value} days ago",
+    "deleted": "Deleted {kind} “{brief}”",
+    "status": "{kind} “{brief}” status changed to {status}"
+  },
+  "kinds": {
+    "todo": "to-do",
+    "event": "event",
+    "course": "class",
+    "reminder": "reminder",
+    "job": "scheduled task"
+  },
+  "onlyUpdate": "Can only change {fields}",
+  "statusInvalid": "Invalid schedule status",
+  "lateTitle": "(late) ",
+  "missing": "The schedule item doesn't exist or was deleted",
+  "invalidUpdate": "The updated schedule item is invalid: times need a time zone, the end must come after the start, and scheduled tasks need a five-field cron",
+  "created": "New {kind} “{brief}”",
+  "createdAt": ", at {when:%Y-%m-%d %H:%M}",
+  "updated": "Updated {kind} “{brief}”: "
+}

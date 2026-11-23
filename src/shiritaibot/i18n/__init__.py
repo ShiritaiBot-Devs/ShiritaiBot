@@ -156,7 +156,12 @@ class Text:
         return t(self.key, **self.params)
 
     def render(self, locale: Locale | None = None) -> str:
-        return t(self.key, locale=locale, **self.params)
+        """Renders in ``locale``, including any Text passed as a param."""
+        params = {
+            name: value.render(locale) if isinstance(value, Text) else value
+            for name, value in self.params.items()
+        }
+        return t(self.key, locale=locale, **params)
 
     def __repr__(self) -> str:
         return f"Text({self.key!r})"

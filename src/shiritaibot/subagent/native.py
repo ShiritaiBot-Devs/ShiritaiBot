@@ -15,6 +15,7 @@ from shiritaibot.core import (
     fingerprint,
     uid,
 )
+from shiritaibot.prompts import prompt as prompt_text
 from shiritaibot.subagent import NEEDS_INPUT
 
 
@@ -105,7 +106,7 @@ class NativeRunner:
             require_manual_approval=require_manual_approval,
         )
         system = (
-            f"你是 ShiritaiBot 的子代理 {instance.id}。请完成委派的任务并向主 Agent 汇报结果。"
+            prompt_text("SUBAGENT_SYSTEM", id=instance.id)
             + system
         )
         if instance.instructions:
@@ -128,9 +129,9 @@ class NativeRunner:
             if not settings.adapter_context_valid(ctx) or (
                 not ctx.background and ctx.memory_profile != settings.session_memory(ctx.session)
             ):
-                raise PublicError("来源会话绑定已变更")
+                raise PublicError("subagent.sourceChanged")
             if context_chars(history) > cfg.policy.max_context_chars * 2:
-                raise PublicError("子代理上下文达到上限")
+                raise PublicError("subagent.contextFull")
             reply = await self.llm.complete(
                 "agent", system, history, self.registry.specs(ctx), settings=cfg, scope=ctx.session
             )
@@ -141,14 +142,14 @@ class NativeRunner:
             await checkpoint()
             if not reply.calls:
                 if not reply.text.strip():
-                    raise PublicError("模型未返回子代理任务结果")
+                    raise PublicError("subagent.noResult")
                 return reply.text
             for call in reply.calls:
                 fn = call["function"]
                 signature = fingerprint(fn)
                 repeats[signature] += 1
                 if repeats[signature] >= 5:
-                    raise PublicError("子代理重复调用同一工具已达上限")
+                    raise PublicError("subagent.repeatLimit")
                 token = delegated_workspace.set((ctx.session, workspace))
                 try:
                     output = await self.registry.execute(
@@ -168,4 +169,4 @@ class NativeRunner:
                     delegated_workspace.reset(token)
                 history.append({"role": "tool", "tool_call_id": call["id"], "content": output})
                 await checkpoint()
-        raise PublicError(f"子代理已达到本轮步数限制（{cfg.policy.max_steps} 步）")
+        raise PublicError("subagent.stepLimit", max_steps=cfg.policy.max_steps)

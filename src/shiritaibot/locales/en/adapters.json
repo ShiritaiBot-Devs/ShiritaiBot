@@ -1,0 +1,116 @@
+{
+  "log": {
+    "ownerAllowed": "The owner approved {key}",
+    "ownerDenied": "The owner denied {key}",
+    "groupSource": "Group chat",
+    "duplicate": "Duplicate message; skipped",
+    "feishuStart": "Starting the Feishu app bot long connection",
+    "noWakeWord": "Private message without a wake word; ignored",
+    "approvalFailed": "Couldn't handle the approval: {exc}",
+    "expired": "The message passed its send deadline; dropped",
+    "friendsFailed": "Couldn't get the friend list; using the cached one",
+    "invalidTarget": "Invalid OneBot target; skipped",
+    "officialFailed": "The official QQ reply didn't go through ({exc})",
+    "qqOfficialStart": "Starting the official QQ bot webhook",
+    "ignoredGroup": "Ignoring messages from group {target}, which isn't enabled",
+    "officialNoInbound": "The official QQ reply has no matching incoming message; skipped",
+    "queueFull": "Event queue full; dropped a OneBot event",
+    "mayInterject": "Group observation: might join in ({speaker})",
+    "connecting": "Connecting to {url}",
+    "unconfirmed": "Send not confirmed ({reason}); not retrying, to avoid duplicates",
+    "interjectFailed": "Couldn't join the conversation ({name})",
+    "memeDeleted": "Sticker {meme} was deleted; skipped",
+    "officialNoId": "The official QQ reply has no message ID or hit the per-message reply limit",
+    "oneBotStart": "Starting the protocol client (OneBot 11 → {url})",
+    "sent": "Sent: {brief}",
+    "autoStart": "The protocol client has been unreachable repeatedly; trying to start it: {value}",
+    "feishuUnconfirmed": "Feishu send not confirmed ({name}).",
+    "ignoredStranger": "Ignoring a private chat from someone who isn't a friend (not in the protocol client's friend list or the friends allow list)",
+    "ignoredOfficial": "Ignoring an unconfigured official QQ session ({field} {target})",
+    "officialUnconfirmed": "The official QQ reply wasn't confirmed ({name})",
+    "autoStartFailed": "Auto-start failed ({name}): {exc}",
+    "eventFailed": "Failed to handle a OneBot event ({name})",
+    "interjectHistoryFailed": "The group message was sent, but recording the session history failed ({name})",
+    "groupContextFailed": "Message sent, but recording the group context failed ({name})",
+    "wrongAccount": "Signed-in account {actual} doesn't match the configured self_id {self_id}; disconnected",
+    "connected": "Connected to OneBot as {value} ({actual})"
+  },
+  "approvalResolved": "Approval handled: {label}{verdict} {key}",
+  "verdict": {
+    "allow": "approved",
+    "deny": "denied"
+  },
+  "where": {
+    "groupShort": "group",
+    "private": "private chat",
+    "privateShort": "private chat",
+    "group": "group {target}"
+  },
+  "action": {
+    "unknown": "unknown",
+    "timeout": ": the protocol client operation timed out",
+    "error": ": the protocol client returned an error",
+    "receiptTimeout": ": the protocol client timed out waiting for QQ's delivery receipt",
+    "failed": "OneBot {action} failed (retcode={value})"
+  },
+  "request": {
+    "noNote": "No message",
+    "friend": "QQ friend request: {user}",
+    "groupInvite": "QQ group invitation: {user} invited you to group {group}",
+    "groupJoin": "QQ join request: {user} asked to join group {group}"
+  },
+  "approvalHandled": "Approval handled.",
+  "field": {
+    "groupOpenId": "group OpenID",
+    "userOpenId": "user OpenID"
+  },
+  "notConnected": "OneBot isn't connected",
+  "disconnected": "OneBot disconnected",
+  "file": {
+    "timeout": "OneBot file download timed out",
+    "disconnected": "The OneBot file connection was closed",
+    "unavailable": "The OneBot file API isn't available",
+    "invalid": "Invalid OneBot file response",
+    "tooLarge": "The OneBot file response exceeds the size limit"
+  },
+  "noMessageId": "The OneBot response didn't include a message_id",
+  "reconnect": "Disconnected or couldn't connect ({name}); reconnecting in about {delay} seconds",
+  "feishu": {
+    "scopeMissing": "The group message permission im:message.group_msg is missing, so wake words without an @ are unverified.",
+    "scopeUnconfirmed": "The group message permission im:message.group_msg isn't confirmed yet, so wake words without an @ are unverified.",
+    "approvalHandled": "Approval handled.",
+    "log": {
+      "queueFull": "Feishu event queue full; a message wasn't handled.",
+      "messageFailed": "Couldn't handle a Feishu message ({name}).",
+      "source": "Feishu",
+      "connected": "Feishu long connection established",
+      "closeError": "The Feishu long connection closed with an error",
+      "stopSlow": "The Feishu long connection didn't stop in time",
+      "taskError": "An internal task of the Feishu long connection failed"
+    },
+    "secretUnreadable": "Can't read the Feishu App Secret. Enter it again.",
+    "credentialsMissing": "Enter the Feishu App ID and App Secret.",
+    "ownerHint": "Send the bot a private message, then look up the sender's open_id here.",
+    "ownerCandidate": "The latest private message came from open_id {owner_candidate}. Check it, then enter it as the owner ID.",
+    "token": {
+      "20048": "The app doesn't exist",
+      "20002": "Invalid app secret",
+      "20069": "The app isn't enabled yet",
+      "20130": "App authentication failed",
+      "20009": "The app isn't installed in the tenant yet"
+    },
+    "alreadyConnected": "This process already has a Feishu long connection",
+    "sendInvalid": "Sending to Feishu needs a target and non-empty text",
+    "sendFailed": "Couldn't send the Feishu message ({code})",
+    "notConnected": "The Feishu long connection isn't established. Check the app settings and the network."
+  },
+  "qqOfficial": {
+    "errorCode": ", error code {code}",
+    "log": {
+      "ready": "Official QQ bot credentials work; waiting for the Open Platform webhook",
+      "messageFailed": "Couldn't handle an official QQ bot message ({name})"
+    },
+    "notReady": "The official QQ bot has no App Secret yet, or the connection isn't ready",
+    "tokenFailed": "Couldn't get the official QQ bot's access token (HTTP {status_code})"
+  }
+}

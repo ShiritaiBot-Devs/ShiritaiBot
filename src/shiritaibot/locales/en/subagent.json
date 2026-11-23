@@ -1,0 +1,47 @@
+{
+  "status": {
+    "completed": "completed",
+    "failed": "failed",
+    "needs_input": "waiting for input"
+  },
+  "log": {
+    "source": "Subagents",
+    "cancelled": "{id} cancelled",
+    "started": "{id} started",
+    "timeout": "{id} timed out",
+    "queuedDynamic": "Queued dynamic subagent {label}: {brief}",
+    "failed": "{id} failed ({name})",
+    "queued": "Queued {instance} ({kind}): {brief}",
+    "resumed": "Continuing {id} (round {round}): {brief}"
+  },
+  "queueFull": "The subagent queue is full",
+  "needsInputDefault": "The subagent asked for more input",
+  "dynamicDisabled": "Dynamic built-in subagents aren't enabled",
+  "missing": "The subagent instance doesn't exist or isn't enabled",
+  "runnerMissing": "The built-in subagent runner isn't initialized",
+  "taskMissing": "This session has no such subagent task",
+  "dynamicConfigMissing": "The dynamic subagent's settings are missing. Start a new task.",
+  "noModelOverride": "The current policy doesn't let dynamic subagents choose a model",
+  "kindChanged": "The subagent instance type changed. Start a new task.",
+  "resumeOwnerOnly": "Only the person who started the task, or the owner, can continue this subagent",
+  "outputTooLong": "The subprocess output was too long to get a final result.",
+  "stillRunning": "The subagent task is still running. Wait for it to stop before sending.",
+  "genericNoResume": "Generic subagents can't be continued",
+  "antigravity": {
+    "noResult": "Antigravity CLI returned no final result.",
+    "status": "Antigravity CLI status: {status}."
+  },
+  "exitCode": " (exit code {exit_code})",
+  "timeout": "Ran longer than {timeout} seconds; stopped",
+  "availableModels": "; available models: {models}",
+  "modelInvalid": "Model {model} doesn't exist, isn't enabled, or isn't a text model{hint}",
+  "noResume": "This subagent task has no native session to continue (generic type, or it failed at start)",
+  "event": {
+    "title": "Subagent {id}: {value}"
+  },
+  "sourceChanged": "The originating session's binding changed",
+  "contextFull": "The subagent's context reached its limit",
+  "noResult": "The model returned no result for the subagent task",
+  "repeatLimit": "The subagent called the same tool too many times",
+  "stepLimit": "The subagent reached this turn's step limit ({max_steps} steps)"
+}

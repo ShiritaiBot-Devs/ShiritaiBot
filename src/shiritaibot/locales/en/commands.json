@@ -8,5 +8,123 @@
     "unknown": "Unsupported language: {value}. Options: {options}.",
     "owner_only": "Only the owner can change the session language.",
     "status": "Language: {name}"
+  },
+  "sections": {
+    "session": "Session",
+    "models": "Models and personas",
+    "tools": "Tools and approvals",
+    "memory": "Memory and tasks",
+    "plugin": "Plugin · {plugin}"
+  },
+  "log": {
+    "source": "Commands",
+    "helpImageFailed": "Couldn't render the help menu image; sent text instead ({exc})"
+  },
+  "status": {
+    "idle": "idle",
+    "notConfigured": "not configured",
+    "busy": "running",
+    "autoSplit": " (split automatically per message)",
+    "description": "Show the current session, model, and status",
+    "persona": "\nPersona: {value}",
+    "summary": "Session: {session}\nMode: {mode}\nModel: {models}",
+    "state": "\nStatus: {state}\nQueued: {queued}"
+  },
+  "risk": {
+    "safe": "Safe",
+    "normal": "Normal",
+    "sensitive": "Sensitive",
+    "dangerous": "Dangerous"
+  },
+  "persona": {
+    "base": "base persona",
+    "nextTurn": "\nThe persona applies from the next turn.",
+    "missing": "That persona doesn't exist or isn't enabled. Use /personas to see the IDs.",
+    "description": "Show the current persona; /persona <ID> switches; /persona default goes back (owner only)",
+    "current": "Current persona: {value}"
+  },
+  "permission": {
+    "deny": "Blocked",
+    "allow": "No approval needed",
+    "manual": "Needs manual approval",
+    "auto": "Model auto-approval"
+  },
+  "tasks": {
+    "none": "No tasks",
+    "title": "Recent subagent tasks:\n",
+    "description": "Show background subagent tasks (owner's private chat only)"
+  },
+  "help": {
+    "description": "Show command help",
+    "empty": "No commands are available in this session.",
+    "title": "{assistant_name} command help\n\n{body}"
+  },
+  "models": {
+    "description": "List available models",
+    "title": "Available models:\n",
+    "none": "Nothing configured yet. Add a provider and models in the WebUI.",
+    "item": "{display_name} (ID: {id})"
+  },
+  "clear": {
+    "description": "Same as /new"
+  },
+  "approve": {
+    "allowed": "Approval granted.",
+    "denied": "Approval denied.",
+    "usage": "Usage: /{name} <approval ID>",
+    "description": "/approve <approval ID> allows an operation once (owner's private chat only)"
+  },
+  "tools": {
+    "unavailable": " (not available now)",
+    "saved": "\nSaved. The mode applies from the next turn; tool permissions apply now.",
+    "ownerOnly": "Only the owner can change a Main session's mode and tool permissions.",
+    "invalid": "Invalid tool, mode, preset, or permission. Use /tools to see the tools.",
+    "chatHint": "\nChat mode only offers basic conversation tools; switch to Agent for the rest.",
+    "summary": "Session: {session}\nMode: {mode}\nPreset: {preset_name} ({risk_summary})",
+    "description": "List all tool permissions; /tools <tool> deny|manual|auto|allow|inherit; /tools risk safe|normal|sensitive|dangerous <permission>; /tools preset <preset>",
+    "usage": "Usage: /tools <tool> deny|manual|auto|allow|inherit; /tools risk safe|normal|sensitive|dangerous deny|manual|auto|allow; /tools mode agent|chat; /tools preset strict|balanced|autonomous|full_access; /tools reset"
+  },
+  "memory": {
+    "title": "Long-term memory:\n",
+    "none": "No matching memories",
+    "description": "Show long-term memory; /memory <keywords> searches (owner's private chat only)"
+  },
+  "grants": {
+    "title": "Standing grants:\n",
+    "none": "There are no standing grants.",
+    "usage": "Usage: /grants revoke <tool> [session]",
+    "revokeHint": "\nRevoke: /grants revoke <tool> [session]",
+    "description": "Show standing grants; /grants revoke <tool> [session] (owner's private chat only)"
+  },
+  "personas": {
+    "description": "List the IDs and names of available personas",
+    "none": "No personas yet; using the base persona.",
+    "title": "Available personas (ID · name):\n"
+  },
+  "model": {
+    "unknownProvider": "unknown provider/{ref}",
+    "nextTurn": "\nThe model applies from the next turn.",
+    "missing": "That model doesn't exist or isn't enabled. Use /models to see the IDs.",
+    "description": "Show the current model; /model <ID> switches; /model default goes back to the route"
+  },
+  "stop": {
+    "description": "Stop the current task and your own queued messages",
+    "sent": "Stop requested; only tasks you're allowed to control will stop."
+  },
+  "permissions": {
+    "description": "Show the current tools' permissions and approval requirements"
+  },
+  "ownerOnlyReset": "Only the owner can reset the session or switch models or personas.",
+  "ownerPrivateOnly": "This command is only available in the owner's private chat or the WebUI.",
+  "new": {
+    "description": "Start a new context, keeping history and long-term memory (owner only)",
+    "done": "Started a new context. History and long-term memory are kept."
+  },
+  "deny": {
+    "description": "/deny <approval ID> denies an operation (owner's private chat only)"
+  },
+  "unknown": "Unknown command. Type /help to see the supported commands.",
+  "mode": {
+    "description": "Show the session mode; /mode agent|chat switches (owner only)"
   }
 }
