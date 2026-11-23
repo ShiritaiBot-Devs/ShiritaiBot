@@ -463,6 +463,15 @@ async def weather(self, ctx: ToolContext, city: str, days: int = 1):
 | `get_plugins()` | 已加载插件的元数据 |
 | `get_platform(adapter_id)` | OneBot 协议端实例；`await platform.call(action, params)` 可直接调用协议端 API |
 
+### 多语言
+
+插件可以同时支持中文和英文（[I18N.md](I18N.md)）：
+
+- 用户看到的文字放在插件目录的 `locales/zh-CN.json` 和 `locales/en.json`，代码里用 `self.t("键", 参数=值)` 取用；文字里的 `{参数}` 会被替换，字面花括号写成 `{{ }}`。找不到当前语言时回退到中文，再找不到就原样返回键名。
+- `metadata.yaml` 的 `display_name`、`desc`、`short_desc`，以及 `_conf_schema.json` 的 `description`、`hint`、`labels` 都可以写成按语言区分的映射：`{"zh-CN": "默认城市", "en": "Default city"}`。WebUI 会按查看者的语言显示。
+- 当前语言跟随会话（`/lang` 或全局默认）；日志始终使用全局默认语言。
+- 示例见技能 `shiritai-plugin-dev` 的 `assets/hello_world/`。
+
 ### 运行约定
 
 - 所有处理函数和 hook 都不经过插件的重载锁，慢工具不会阻塞消息处理。插件被重载或停用后，旧实例的处理函数不再被调用。

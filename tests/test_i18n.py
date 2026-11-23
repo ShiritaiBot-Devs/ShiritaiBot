@@ -422,3 +422,19 @@ def test_english_words_match_their_other_forms():
     assert search("meeting") == [1]
     assert search("Meet") == [1]
     assert search("周会") == [2]
+
+
+def test_skills_read_their_language_variant(tmp_path):
+    from shiritaibot.skill import localized
+
+    skill = tmp_path / "demo"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text("---\nname: demo\ndescription: 中文\n---\n", encoding="utf-8")
+    assert localized(skill / "SKILL.md") == skill / "SKILL.md"
+    (skill / "SKILL.en.md").write_text(
+        "---\nname: demo\ndescription: English\n---\n", encoding="utf-8"
+    )
+    with use_locale("en"):
+        assert localized(skill / "SKILL.md") == skill / "SKILL.en.md"
+    with use_locale("zh-CN"):
+        assert localized(skill / "SKILL.md") == skill / "SKILL.md"

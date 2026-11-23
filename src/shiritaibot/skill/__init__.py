@@ -20,7 +20,7 @@ import yaml
 from shiritaibot.config import SKILL_NAME
 from shiritaibot.core import PublicError
 from shiritaibot.core.logs import get_logger
-from shiritaibot.i18n import Text, t
+from shiritaibot.i18n import Text, active_locale, t
 from shiritaibot.plugin.core.packages import check_entries, extract_entries
 from shiritaibot.prompts import prompt as prompt_text
 
@@ -33,6 +33,13 @@ MAX_FILE_CHARS = 200_000
 MAX_FILES = 500
 MAX_DESCRIPTION = 1024
 READ_CHUNK = 12000
+
+
+def localized(path: Path) -> Path:
+    """The active language's variant of a skill file (``SKILL.en.md`` for ``SKILL.md``,
+    ``references/x.en.md`` for ``references/x.md``) when the skill ships one."""
+    variant = path.with_name(f"{path.stem}.{active_locale()}{path.suffix}")
+    return variant if variant.is_file() and not variant.is_symlink() else path
 
 
 def parse_skill(text: str) -> tuple[dict, str]:
@@ -133,7 +140,7 @@ class SkillManager:
                     "error": "",
                 }
                 try:
-                    meta, _ = parse_skill((directory / SKILL_FILE).read_text("utf-8"))
+                    meta, _ = parse_skill(localized(directory / SKILL_FILE).read_text("utf-8"))
                     if meta["name"] != directory.name:
                         raise PublicError("skills.nameMismatch")
                     entry["description"] = meta["description"].strip()
@@ -206,6 +213,8 @@ class SkillManager:
 
         def load():
             target = directory.joinpath(*rel.parts)
+            if target.is_file() and not target.is_symlink():
+                target = localized(target)
             if target.is_symlink() or not target.is_file():
                 available = [f.relative_to(directory).as_posix() for f in tree_files(directory)]
                 raise PublicError("skills.fileMissingIn", path=path, files=', '.join(available))
