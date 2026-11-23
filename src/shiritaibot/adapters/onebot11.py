@@ -776,7 +776,13 @@ class AdapterHub:
         }
         if not await self.store.insert("qq_request", key, record):
             return
-        bot.log.log(f"{title}（{brief(record['comment'], 80) or t("adapters.request.noNote")}）")
+        bot.log.log(
+                    t(
+                        "common.withDetail",
+                        label=title,
+                        detail=brief(record["comment"], 80) or t("adapters.request.noNote"),
+                    )
+                )
         if self.emit is not None:
             await self.emit(
                 ExternalEvent(

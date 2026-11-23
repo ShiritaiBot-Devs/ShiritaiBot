@@ -39,7 +39,7 @@ from shiritaibot.api import (
     PublicError,
     brief,
 )
-from shiritaibot.i18n import Text, t
+from shiritaibot.i18n import Text, join_list, t
 
 Security = Literal["ssl", "starttls", "none"]
 
@@ -261,7 +261,7 @@ class EmailPlugin(Plugin):
                             t("emailPlugin.event.single", subject=mails[0][1]['subject'])
                             if len(mails) == 1
                             else t("emailPlugin.event.many", count=len(mails))
-                            + "、".join(mail["subject"] for _, mail in mails)
+                            + join_list(mail["subject"] for _, mail in mails)
                         )[:1000],
                         payload={
                             "mailbox": self.settings.mailbox,
@@ -293,7 +293,10 @@ class EmailPlugin(Plugin):
             if mails:
                 self.logger.log(
                     t("emailPlugin.event.many", count=len(mails))
-                    + "、".join(brief(mail["subject"] or t("emailPlugin.noSubject"), 40) for _, mail in mails[:3])
+                    + join_list(
+                        brief(mail["subject"] or t("emailPlugin.noSubject"), 40)
+                        for _, mail in mails[:3]
+                    )
                     + (t("emailPlugin.andMore") if len(mails) > 3 else "")
                 )
             else:

@@ -446,7 +446,10 @@ export function MemoryPage(props: SessionConfigPageProps) {
                         “{item.quote}”
                         <small className="muted">
                           {" "}
-                          —— {item.source}，{item.recorded}
+                          {i18n.t("memory:evidenceSource", {
+                            source: item.source,
+                            recorded: item.recorded,
+                          })}
                         </small>
                       </blockquote>
                     ))}

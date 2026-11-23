@@ -405,6 +405,7 @@ CONTEXT_COMPRESS = (
 )
 
 # meme/inject.py
+MEME_INJECT_END = "."
 MEME_INJECT_BY_ID = (
     ";"
     " write <meme>sticker ID</meme> to send a specific sticker (IDs come from meme_search)."

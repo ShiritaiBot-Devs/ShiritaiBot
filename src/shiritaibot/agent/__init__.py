@@ -162,7 +162,7 @@ def _plain(message: dict) -> str:
     return content.split("\n<context")[0].strip() if isinstance(content, str) else ""
 
 
-_PASS = re.compile(r"^[\s\"“”'‘’]*(?:<pass>|</pass>|/pass|pass)[\s.。!！\"“”'‘’]*$", re.I)
+_PASS = re.compile(r"^[\s\"“”'‘’]*(?:<pass>|</pass>|/pass|pass)[\s.。!！\"“”'‘’]*$", re.I)  # i18n: ok
 
 
 def _is_pass(text: str) -> bool:
@@ -552,7 +552,11 @@ class AgentRuntime:
             ctx.session, limit=4, include_commands=False, memory_profile=ctx.memory_profile
         )
         lines = [
-            f"{prompt_text("ROLE_USER") if m['role'] == 'user' else prompt_text("ROLE_ASSISTANT")}：{_plain(m)[:300]}"
+            t(
+                "common.labeled",
+                label=prompt_text("ROLE_USER") if m["role"] == "user" else prompt_text("ROLE_ASSISTANT"),
+                value=_plain(m)[:300],
+            )
             for m in recent
             if m.get("role") in {"user", "assistant"} and _plain(m)
         ]

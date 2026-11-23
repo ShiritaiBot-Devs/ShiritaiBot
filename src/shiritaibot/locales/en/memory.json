@@ -118,7 +118,7 @@
       "conflict": "Recorded, but it conflicts with f{id} ({conflict}); the owner needs to confirm"
     },
     "render": {
-      "aliases": " (aliases: ",
+      "aliases": " (aliases: {aliases})",
       "planned": "planned for ",
       "new": " (newly learned)",
       "invalid": " (no longer valid)",

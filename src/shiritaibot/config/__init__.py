@@ -740,7 +740,7 @@ class Policy(Model):
     debounce_max_seconds: float = Field(default=6.0, ge=0, le=60)
     # A message ending with any of these flushes the window immediately.
     debounce_suffixes: list[str] = Field(
-        default_factory=lambda: ["?", "？", "。", ".", "!", "！"], max_length=50
+        default_factory=lambda: ["?", "？", "。", ".", "!", "！"], max_length=50  # i18n: ok
     )
 
     @model_validator(mode="after")
@@ -956,7 +956,7 @@ class Settings(Model):
             if not MAIN_SESSION.fullmatch(session):
                 raise ValueError(t("config.sessionRouteId"))
             if invalid := routes.keys() - SESSION_ROUTE_KEYS:
-                raise ValueError(t("config.routesNotPerSession", routes='、'.join(sorted(invalid))))
+                raise ValueError(t("config.routesNotPerSession", routes=join_list(sorted(invalid))))
             if active := {key: models for key, models in routes.items() if models}:
                 overrides[session] = active
         return overrides
@@ -1002,7 +1002,7 @@ class Settings(Model):
     def strip_wake_prefix(self, text: str) -> str:
         for word in sorted(self.wake_keywords, key=len, reverse=True):
             if text.startswith(word):
-                return text[len(word) :].lstrip(" ，,：:！!、\t\n")
+                return text[len(word) :].lstrip(" ，,：:！!、\t\n")  # i18n: ok (separators in either language)
         return text
 
     def selected_persona(self, selected: str = "") -> PersonaConfig | None:
@@ -1184,13 +1184,13 @@ class Settings(Model):
         models = {m.id for m in self.models}
         missing = [m.id for m in self.models if m.provider not in providers]
         if missing:
-            raise ValueError(t("config.modelProviderMissing", models='、'.join(missing)))
+            raise ValueError(t("config.modelProviderMissing", models=join_list(missing)))
         routes = [*self.routes.items()]
         for overrides in self.session_routes.values():
             routes.extend(overrides.items())
         lost = sorted({m for _, route in routes for m in route if m not in models})
         if lost:
-            raise ValueError(t("config.routeModelMissing", models='、'.join(lost)))
+            raise ValueError(t("config.routeModelMissing", models=join_list(lost)))
         decision = {
             m.id
             for m in self.models
@@ -1328,7 +1328,11 @@ class ConfigService:
                 set_instance_locale(self.value.locale)
             except ValidationError as error:
                 fields = join_list(
-                    f"{'.'.join(map(str, row['loc']))}（{row['type']}）"
+                    t(
+                        "common.withDetail",
+                        label=".".join(map(str, row["loc"])),
+                        detail=row["type"],
+                    )
                     for row in error.errors(include_input=False, include_url=False)
                 )
                 raise PublicError(

@@ -74,5 +74,6 @@
     "all": "All"
   },
   "sessionCount_one": "{count} session",
-  "sessionCount_other": "{count} sessions"
+  "sessionCount_other": "{count} sessions",
+  "evidenceSource": "— {source}, {recorded}"
 }

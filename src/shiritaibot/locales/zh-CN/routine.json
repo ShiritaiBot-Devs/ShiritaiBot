@@ -23,5 +23,6 @@
   "invalidUpdate": "修改后的日程无效：时间须带时区，结束须晚于开始，定时任务须为五段 cron",
   "created": "新建{kind}「{brief}」",
   "createdAt": "，时间 {when:%Y-%m-%d %H:%M}",
-  "updated": "修改{kind}「{brief}」："
+  "updated": "修改{kind}「{brief}」：",
+  "createdCron": "，cron {cron}"
 }

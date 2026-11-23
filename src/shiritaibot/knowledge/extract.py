@@ -28,7 +28,7 @@ MAX_CHARS = 20_000_000
 MAX_UNZIPPED = 400 * 1024 * 1024
 OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 ZIP_MAGIC = b"PK\x03\x04"
-SENTENCE = re.compile(r"(?<=[。！？；!?;])|(?<=[.]\s)")
+SENTENCE = re.compile(r"(?<=[。！？；!?;])|(?<=[.]\s)")  # i18n: ok (sentence ends in either language)
 MD_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 DOCX_HEADING = re.compile(r"^(?:heading|标题)\s*(\d)$", re.IGNORECASE)  # i18n: ok
 

@@ -179,7 +179,9 @@ class SkillManager:
             rows = [row for row in rows if row["name"] in allowed]
         if not rows:
             return ""
-        lines = "\n".join(f"- {row['name']}：{row['description']}" for row in rows)
+        lines = "\n".join(
+            "- " + t("common.labeled", label=row["name"], value=row["description"]) for row in rows
+        )
         return (
             prompt_text("SKILLS_BLOCK", lines=lines)
         )

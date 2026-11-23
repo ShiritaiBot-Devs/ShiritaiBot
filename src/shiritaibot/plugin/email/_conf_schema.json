@@ -138,12 +138,20 @@
         "Custom time"
       ]
     },
-    "subtitles": [
-      "插件启动或重载之前的邮件不处理",
-      "首次无记录时使用本次启动时间",
-      "首次也会读取已有邮件",
-      "使用下方的自定义过滤时间"
-    ],
+    "subtitles": {
+      "zh-CN": [
+        "插件启动或重载之前的邮件不处理",
+        "首次无记录时使用本次启动时间",
+        "首次也会读取已有邮件",
+        "使用下方的自定义过滤时间"
+      ],
+      "en": [
+        "Mail from before the plugin started or reloaded is skipped",
+        "Uses this start time when there's no record yet",
+        "Existing mail is read on the first check too",
+        "Uses the custom filter time below"
+      ]
+    },
     "default": "startup"
   },
   "filter_before": {

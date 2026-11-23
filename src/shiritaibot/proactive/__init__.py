@@ -744,7 +744,7 @@ class ProactiveEngine:
             reason = t("proactive.reason.highest") if must_notify else t("proactive.reason.reminder") if explicit_reminder else ""
             recipient = t("proactive.recipient.session") if session and session != "owner" else t("proactive.recipient.owner")
             event_log(row["id"]).log(
-                Text("proactive.log.willNotify", recipient=recipient, value=f'（{reason}）' if reason else '', brief=brief(result.message, 100))
+                Text("proactive.log.willNotify", recipient=recipient, value=Text("common.detail", detail=reason) if reason else "", brief=brief(result.message, 100))
             )
         else:
             event_log(row["id"]).log(Text("proactive.log.noNotify", brief=brief(result.reason, 120)))

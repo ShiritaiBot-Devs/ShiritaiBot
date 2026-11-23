@@ -305,7 +305,10 @@ class MemeCore:
         if (fit and score is None) or (category and picked is None):
             material = (
                 prompt_text("MEME_JUDGE_REQUEST", persona=persona, description=description)
-                + "\n".join(f"{name}：{text}" for name, text in categories.items())
+                + "\n".join(
+                    t("common.labeled", label=name, value=text)
+                    for name, text in categories.items()
+                )
             )
             reply = await self.llm.complete(
                 "meme", prompt_text("MEME_JUDGE"), [{"role": "user", "content": material}], [], settings=cfg

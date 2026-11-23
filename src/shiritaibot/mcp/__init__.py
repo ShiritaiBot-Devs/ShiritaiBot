@@ -160,7 +160,7 @@ class McpManager:
                 title = item.get("title") or (item.get("annotations") or {}).get("title")
                 description = (
                     f"[MCP {key}] "
-                    + (f"{title}：" if title and title != original else "")
+                    + (title + t("common.colon") if title and title != original else "")
                     + (entry["description"] or original)
                 )
                 self.registry.add(

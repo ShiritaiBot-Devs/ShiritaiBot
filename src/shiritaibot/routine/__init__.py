@@ -79,7 +79,7 @@ class RoutineManager:
         result = await self.store.put("routine", key, body, session)
         log.log(
             t("routine.created", kind=Text(KINDS[item.kind]), brief=brief(item.title, 60))
-            + (f"，cron {item.cron}" if item.cron else "")
+            + (t("routine.createdCron", cron=item.cron) if item.cron else "")
             + (
                 t("routine.createdAt", when=item.due.astimezone(ZoneInfo(item.timezone)))
                 if item.due

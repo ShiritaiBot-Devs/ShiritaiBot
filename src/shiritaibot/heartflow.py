@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 from shiritaibot.config import HeartflowConfig
 from shiritaibot.core import Context, canonical, now, record_usage_for, uid
 from shiritaibot.core.logs import get_logger
-from shiritaibot.i18n import Text
+from shiritaibot.i18n import Text, t
 from shiritaibot.proactive import quiet_hours
 from shiritaibot.prompts import prompt as prompt_text
 
@@ -211,7 +211,7 @@ class Heartflow:
         group.last = monotonic()
         if not group.batch:
             group.first = group.last
-        group.batch.append((user, f"{speaker[:100]}：{text[:500]}"))
+        group.batch.append((user, t("common.labeled", label=speaker[:100], value=text[:500])))
         self.schedule(session, group)
 
     def schedule(self, session: str, group: Group) -> None:

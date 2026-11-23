@@ -117,7 +117,7 @@
       "conflict": "已记录，但与 f{id} 冲突（{conflict}），需要主人确认"
     },
     "render": {
-      "aliases": "（别名：",
+      "aliases": "（别名：{aliases}）",
       "planned": "计划于 ",
       "new": "（新认识）",
       "invalid": "（已失效）",

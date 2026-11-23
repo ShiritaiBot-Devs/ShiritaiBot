@@ -188,7 +188,7 @@ class Feishu:
                 memory_profile=ctx.memory_profile,
             )
         if prefix:
-            text = text[len(prefix) :].lstrip(" ，,：:！!、\t\n") or prefix
+            text = text[len(prefix) :].lstrip(" ，,：:！!、\t\n") or prefix  # i18n: ok (separators in either language)
         settings = self.settings.value
         if not group:
             rest = settings.strip_wake_prefix(text)

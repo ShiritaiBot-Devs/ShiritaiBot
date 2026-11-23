@@ -213,11 +213,11 @@ async def command(runtime, ctx, text):
             else:
                 models = " → ".join(map(display, routes["agent"])) or t("commands.status.notConfigured")
                 if cfg.agent_split and routes["agent_chat"] and routes["router"]:
-                    models = (
-                        f"Work {models}；Chat "
-                        + " → ".join(map(display, routes["agent_chat"]))
-                        + t("commands.status.autoSplit")
-                    )
+                    models = t(
+                        "commands.status.splitModels",
+                        work=models,
+                        chat=" → ".join(map(display, routes["agent_chat"])),
+                    ) + t("commands.status.autoSplit")
             answer = t("commands.status.summary", session=ctx.session, mode=ctx.mode, models=models)
             if argument:
                 answer += t("commands.model.nextTurn")

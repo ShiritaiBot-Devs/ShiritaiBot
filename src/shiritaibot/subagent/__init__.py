@@ -8,7 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from shiritaibot.i18n import Text, t
+from shiritaibot.i18n import Text, join_list, t
 from shiritaibot.prompts import prompt as prompt_text
 
 if TYPE_CHECKING:
@@ -621,7 +621,11 @@ class SubagentManager:
                 label = {"completed": t("subagent.status.completed"), "failed": t("subagent.status.failed"), "needs_input": t("subagent.status.needs_input")}[status]
                 exit_detail = t("subagent.exitCode", exit_code=row['exit_code']) if "exit_code" in row else ""
                 (log.log if status == "completed" else log.warning)(
-                    f"{config.id} {label}{exit_detail}：{brief(row.get('result', ''), 100)}",
+                    t(
+                        "common.labeled",
+                        label=f"{config.id} {label}{exit_detail}",
+                        value=brief(row.get("result", ""), 100),
+                    ),
                     key[:8],
                 )
             await self.store.put("subagent_run", key, row, ctx.session)
@@ -683,7 +687,7 @@ class SubagentManager:
             None if config.kind == "generic" else parsed.get("question") or question_in(summary)
         )
         if parsed["denied"]:
-            denied = "、".join(dict.fromkeys(parsed["denied"]))
+            denied = join_list(dict.fromkeys(parsed["denied"]))
             summary += prompt_text("SUBAGENT_DENIED", denied=denied)
             # A denial the agent could not work around means it is stuck, not done.
             question = question or prompt_text("SUBAGENT_DENIED_SUMMARY", denied=denied)

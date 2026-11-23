@@ -1,3 +1,10 @@
 {
-  "separator": ", "
+  "separator": ", ",
+  "labeled": "{label}: {value}",
+  "colon": ": ",
+  "withDetail": "{label} ({detail})",
+  "detail": " ({detail})",
+  "quoted": "“{text}”",
+  "clauseSeparator": "; ",
+  "sourceTag": " [{label}]"
 }

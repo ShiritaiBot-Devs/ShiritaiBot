@@ -652,7 +652,12 @@ export function RoutinePage({ client, act }: PageProps) {
             </div>
             {kind === "job" ? (
               <div className="field">
-                <span className="field-name">Cron（{ownerTimeZone()}）</span>
+                <span className="field-name">
+                  {i18n.t("withDetail", {
+                    label: "Cron",
+                    detail: ownerTimeZone(),
+                  })}
+                </span>
                 <input
                   aria-label="Cron"
                   value={cron}

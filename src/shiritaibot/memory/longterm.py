@@ -530,7 +530,7 @@ class MemoryManager:
     def head(self, entity: dict) -> str:
         text = entity["name"]
         if entity["aliases"]:
-            text += t("memory.longterm.render.aliases") + join_list(entity["aliases"]) + "）"
+            text += t("memory.longterm.render.aliases", aliases=join_list(entity["aliases"]))
         if entity["status"] == "candidate":
             text += t("memory.longterm.render.new")
         return text
@@ -551,13 +551,19 @@ class MemoryManager:
         for fact in facts:
             stamp = month(fact["as_of"], self.zone)
             if run and stamp != current:
-                parts.append("；".join(run) + t("memory.longterm.render.asOf", current=current))
+                parts.append(
+                    t("common.clauseSeparator").join(run)
+                    + t("memory.longterm.render.asOf", current=current)
+                )
                 run = []
             run.append(self.fact_text(fact))
             current = stamp
         if run:
-            parts.append("；".join(run) + t("memory.longterm.render.asOf", current=current))
-        return "；".join(parts)
+            parts.append(
+                t("common.clauseSeparator").join(run)
+                + t("memory.longterm.render.asOf", current=current)
+            )
+        return t("common.clauseSeparator").join(parts)
 
     def source_label(self, source: str) -> str:
         kind, _, rest = source.partition(":")
@@ -582,14 +588,14 @@ class MemoryManager:
         if event["status"] == "superseded":
             text += t("memory.longterm.render.corrected", superseded_by=event['superseded_by'])
         label = self.source_label(event["source"])
-        return text + (f"〔{label}〕" if label else "")
+        return text + (t("common.sourceTag", label=label) if label else "")
 
     def plain(self, item: dict) -> str:
         if item["type"] == "entity":
             text = self.head(item)
-            return text + (f"：{item['summary']}" if item["summary"] else "")
+            return text + (t("common.colon") + item["summary"] if item["summary"] else "")
         if item["type"] == "fact":
-            prefix = self.head(item["entity"]) + "：" if item["entity"] else ""
+            prefix = self.head(item["entity"]) + t("common.colon") if item["entity"] else ""
             return prefix + item["content"]
         if item["type"] == "event":
             names = " ".join(p["name"] for p in item["participants"])
@@ -600,9 +606,13 @@ class MemoryManager:
         """One injected or listed line; entity cards carry the given facts."""
         if item["type"] == "entity":
             label = t("memory.longterm.labels.personCap") if item["role"] == "owner" else LABELS.get(item["kind"], t("memory.longterm.labels.thing"))
-            body = "；".join(x for x in [item["summary"], self.facts_text(facts or [])] if x)
+            body = t("common.clauseSeparator").join(
+                x for x in [item["summary"], self.facts_text(facts or [])] if x
+            )
             return (
-                f"[{label}] {self.head(item)}" + (f"：{body}" if body else "") + f"  #{item['ref']}"
+                f"[{label}] {self.head(item)}"
+                + (t("common.colon") + body if body else "")
+                + f"  #{item['ref']}"
             )
         if item["type"] == "fact":
             if item["entity"]:
@@ -1136,7 +1146,7 @@ class MemoryManager:
         if decision.startswith("keep:"):
             kept = decision.removeprefix("keep:").strip()
             if kept not in items:
-                raise PublicError("memory.longterm.keptInvalid", kept=kept, key=key, entries='、'.join(items))
+                raise PublicError("memory.longterm.keptInvalid", kept=kept, key=key, entries=join_list(items))
             prefix, kept_id = parse_ref(kept, "fv")
             table = TABLES[prefix]
             async with self.tx() as db:
@@ -1176,7 +1186,7 @@ class MemoryManager:
             raise PublicError(
                 "memory.longterm.decisionInvalid"
             )
-        resolution = decision + (f"：{note.strip()}" if note.strip() else "")
+        resolution = decision + (t("common.colon") + note.strip() if note.strip() else "")
         await self.store.execute(
             "UPDATE mem_conflict SET status='resolved',resolution=?,resolved=? WHERE id=?",
             (resolution, stamp, key),

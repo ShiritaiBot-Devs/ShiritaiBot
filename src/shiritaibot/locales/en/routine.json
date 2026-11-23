@@ -23,5 +23,6 @@
   "invalidUpdate": "The updated schedule item is invalid: times need a time zone, the end must come after the start, and scheduled tasks need a five-field cron",
   "created": "New {kind} “{brief}”",
   "createdAt": ", at {when:%Y-%m-%d %H:%M}",
-  "updated": "Updated {kind} “{brief}”: "
+  "updated": "Updated {kind} “{brief}”: ",
+  "createdCron": ", cron {cron}"
 }

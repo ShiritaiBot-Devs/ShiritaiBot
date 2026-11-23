@@ -277,6 +277,7 @@ CONTEXT_COMPRESS = (
 )
 
 # meme/inject.py
+MEME_INJECT_END = "。"
 MEME_INJECT_BY_ID = "；写 <meme>表情ID</meme> 发送指定表情（ID 来自 meme_search）。"
 MEME_SENT = "[表情：{value}]"
 MEME_INJECT_HEAD = (

@@ -73,5 +73,6 @@
     "entity": "人物与事物",
     "all": "全部"
   },
-  "sessionCount_other": "{count} 个会话"
+  "sessionCount_other": "{count} 个会话",
+  "evidenceSource": "—— {source}，{recorded}"
 }

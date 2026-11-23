@@ -28,7 +28,8 @@
     "description": "Show the current session, model, and status",
     "persona": "\nPersona: {value}",
     "summary": "Session: {session}\nMode: {mode}\nModel: {models}",
-    "state": "\nStatus: {state}\nQueued: {queued}"
+    "state": "\nStatus: {state}\nQueued: {queued}",
+    "splitModels": "Work {work}; Chat {chat}"
   },
   "risk": {
     "safe": "Safe",

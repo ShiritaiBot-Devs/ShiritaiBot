@@ -517,7 +517,13 @@ class _ChatMenu:
             summary = (req.reason or self._fallback(req)).splitlines()[0]
             summary = summary.removeprefix("要做：").removeprefix("To do:").strip()  # i18n: ok
             lines.append(
-                f"{index}. {req.tool.name}（{t(RISK_LABELS.get(req.tool.risk, req.tool.risk))}）— {brief(summary, 30)}"
+                f"{index}. "
+                + t(
+                    "common.withDetail",
+                    label=req.tool.name,
+                    detail=t(RISK_LABELS.get(req.tool.risk, req.tool.risk)),
+                )
+                + f" — {brief(summary, 30)}"
             )
         lines += [t("approvals.menu.replyNumber"), t("approvals.menu.batch.allowAll"), t("approvals.menu.batch.denyAll"), t("approvals.menu.batch.details")]
         return "\n".join(lines)

@@ -649,7 +649,7 @@ export function ModelsPage({
                         }}
                       >
                         <option value="">
-                          ＋{" "}
+                          +{" "}
                           {perSession && !route.length
                             ? i18n.t("models:addSessionModel")
                             : i18n.t("models:addModel")}

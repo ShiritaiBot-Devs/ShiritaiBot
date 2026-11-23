@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 
 from shiritaibot.config import meme_description
+from shiritaibot.i18n import t
 from shiritaibot.prompts import prompt as prompt_text
 
 # Chat models sometimes drift on the tag name ("<mememe>"), so accept any run of
@@ -26,14 +27,17 @@ def meme_prompt(cfg, *, tool_guidance: bool = True) -> str:
     if not (meme.enabled and meme.inject):
         return ""
     categories = "\n".join(
-        f"- {c.name}：{meme_description(c)}" if c.description else f"- {c.name}" for c in meme.categories
+        "- " + t("common.labeled", label=c.name, value=meme_description(c))
+        if c.description
+        else f"- {c.name}"
+        for c in meme.categories
     )
     return (
         prompt_text("MEME_INJECT_HEAD")
         + (
             prompt_text("MEME_INJECT_BY_ID")
             if tool_guidance
-            else "。"
+            else prompt_text("MEME_INJECT_END")
         )
         + prompt_text("MEME_INJECT_RULES", categories=categories, max_per_reply=meme.max_per_reply)
         + (

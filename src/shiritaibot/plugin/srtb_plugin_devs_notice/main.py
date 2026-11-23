@@ -185,7 +185,11 @@ class DevsNoticePlugin(Plugin):
             source=SOURCE,
             kind="devs_notice.updated" if updated else "devs_notice.published",
             dedup_key=f"notice:{notice.id}:r{notice.revision}",
-            title=f"ShiritaiBot Devs {label}{t("devsNotice.updated") if updated else ''}：{notice.title}",
+            title=t(
+                "common.labeled",
+                label=f"ShiritaiBot Devs {label}" + (t("devsNotice.updated") if updated else ""),
+                value=notice.title,
+            ),
             urgency=URGENCY[notice.level],  # type: ignore[arg-type]
             payload={
                 "notice": notice.model_dump(exclude={"deleted", "seq"}),

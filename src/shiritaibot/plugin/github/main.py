@@ -20,7 +20,7 @@ from urllib.parse import quote
 import httpx
 
 from shiritaibot.api import Plugin, PublicError, check_proxy, run_process, schema
-from shiritaibot.i18n import Text, t
+from shiritaibot.i18n import Text, join_list, t
 
 API = "https://api.github.com"
 GIT = "https://github.com/"
@@ -195,7 +195,7 @@ ADMIN_ACTIONS = ["repo_create", "repo_update", "topics_set", "branch_protect"]
 def need(args: dict, *keys: str):
     missing = [key for key in keys if args.get(key) in (None, "")]
     if missing:
-        raise PublicError("githubPlugin.argsRequired", action=args['action'], fields='、'.join(missing))
+        raise PublicError("githubPlugin.argsRequired", action=args['action'], fields=join_list(missing))
     return [args[key] for key in keys]
 
 
@@ -484,7 +484,7 @@ class GitHubPlugin(Plugin):
                     if isinstance(e, dict)
                 ]
                 if details:
-                    message += "：" + "；".join(filter(None, details))
+                    message += t("common.colon") + t("common.clauseSeparator").join(filter(None, details))
             except ValueError:
                 pass
             if response.status_code in {401, 403} and not message:

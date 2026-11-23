@@ -370,7 +370,7 @@ class MemoryExtractor:
                 speaker = message.get("_speaker") or "??"
                 return Line(
                     "participant",
-                    f"{speaker}：{text}"[:LINE_CHARS],
+                    t("common.labeled", label=speaker, value=text)[:LINE_CHARS],
                     row["created"],
                     "msg:" + source,
                 )
@@ -469,7 +469,7 @@ class MemoryExtractor:
                 role = {"sender": prompt_text("MEMORY_SENDER"), "recipient": prompt_text("MEMORY_RECIPIENT")}.get(entry.role, entry.role)
                 catalog.append(
                     f"[{key}] {entry.name} <{entry.identity}>"
-                    + (f"（{role}）" if role else "")
+                    + (t("common.detail", detail=role) if role else "")
                     + prompt_text("MEMORY_NOT_RECORDED")
                 )
             else:
@@ -491,7 +491,8 @@ class MemoryExtractor:
             who = speakers[line.role]
             if line.authors:
                 who += prompt_text("MEMORY_FROM", authors=join_list(sorted(line.authors)))
-            body.append(f"[{number}] {stamp} {who}：{MARKER.sub('［', line.text)}")
+            text = MARKER.sub("［", line.text)  # i18n: ok (escapes marker brackets)
+            body.append(f"[{number}] {stamp} " + t("common.labeled", label=who, value=text))
         parts = [prompt_text("MEMORY_SECTION_CATALOG"), *catalog]
         if window.known:
             parts += [prompt_text("MEMORY_SECTION_KNOWN"), *window.known[:60]]
@@ -912,7 +913,7 @@ class MemoryExtractor:
             questions.append(
                 {
                     "i": len(pending),
-                    "new": "、".join(names) + (f" <{entry.identity}>" if entry else ""),
+                    "new": join_list(names) + (f" <{entry.identity}>" if entry else ""),
                     "existing": [{"id": k, "card": memory.plain(v)} for k, v in cards.items()],
                 }
             )
@@ -944,8 +945,8 @@ class MemoryExtractor:
                         db,
                         "identity",
                         [target, ref("e", key)],
-                        f"「{names[0]}」"
-                        + (f"（{entry.identity}）" if entry else "")
+                        t("common.quoted", text=names[0])
+                        + (t("common.detail", detail=entry.identity) if entry else "")
                         + t("memory.extract.conflict.maybeSame", target=target, name=other['name'])
                         + LABELS.get(kind, t("memory.extract.conflict.thing")),
                     )

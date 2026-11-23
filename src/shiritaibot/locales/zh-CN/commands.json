@@ -28,7 +28,8 @@
     "description": "查看当前会话、模型和运行状态",
     "persona": "\n人格：{value}",
     "summary": "会话：{session}\n模式：{mode}\n模型：{models}",
-    "state": "\n状态：{state}\n排队：{queued}"
+    "state": "\n状态：{state}\n排队：{queued}",
+    "splitModels": "Work {work}；Chat {chat}"
   },
   "risk": {
     "safe": "安全",
