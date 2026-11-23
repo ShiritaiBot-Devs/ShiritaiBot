@@ -14,11 +14,12 @@ from pathlib import Path
 
 from shiritaibot.core import PublicError, now
 from shiritaibot.core.logs import get_logger
+from shiritaibot.i18n import Text
 from shiritaibot.knowledge.extract import chunk_sections, extract
 from shiritaibot.memory.longterm import keywords, tokenize_sync
 from shiritaibot.memory.vectors import VectorIndex
 
-log = get_logger("知识库")
+log = get_logger("knowledge.log.source")
 RRF_K = 60
 # How far each retriever reaches before fusion.
 POOL = 50
@@ -68,7 +69,7 @@ class KnowledgeBase:
     def document_key(self, ref: str) -> int:
         match = DOCUMENT_REF.fullmatch(ref)
         if not match or (match[1] or "default") != self.library:
-            raise PublicError("文档编号不属于当前知识库，请重新查询")
+            raise PublicError("knowledge.documentOtherLibrary")
         return int(match[2])
 
     def public(self, row: dict) -> dict:
@@ -82,9 +83,9 @@ class KnowledgeBase:
         """Store one file; identical content returns the existing document."""
         settings = self.config.value.knowledge
         if len(data) > settings.max_file_mb * 1024 * 1024:
-            raise PublicError(f"文件超过 {settings.max_file_mb} MiB 上限")
+            raise PublicError("knowledge.fileTooLarge", max_file_mb=settings.max_file_mb)
         if not data:
-            raise PublicError("文件是空的")
+            raise PublicError("knowledge.fileEmpty")
         filename = clean_filename(filename)
         title = " ".join(title.split())[:200] or Path(filename).stem or filename
         digest = hashlib.sha256(data).hexdigest()
@@ -99,7 +100,7 @@ class KnowledgeBase:
 
         name, chunks, tokens = await asyncio.to_thread(prepare)
         if not chunks:
-            raise PublicError("文件里没有可提取的文本")
+            raise PublicError("knowledge.noText")
         path = self.folder / digest
         async with self.lock:
             if existing := await self.by_hash(digest):
@@ -128,7 +129,7 @@ class KnowledgeBase:
             document = await self.get(self.ref(key))
             assert document is not None
         self.wake.set()
-        log.log(f"已收录《{title}》：{len(chunks)} 个分块")
+        log.log(Text("knowledge.log.added", title=title, count=len(chunks)))
         return {**document, "duplicate": False}
 
     async def insert(self, document: tuple, chunks: list, tokens: list) -> int:
@@ -173,7 +174,7 @@ class KnowledgeBase:
         async with self.lock:
             document = await self.get(ref)
             if document is None:
-                raise PublicError("文档不存在")
+                raise PublicError("knowledge.documentMissing")
             async with self.store.lock:
                 try:
                     for sql in (
@@ -190,7 +191,7 @@ class KnowledgeBase:
                     raise
             self.vectors.cache.clear()
             await asyncio.to_thread((self.folder / document["sha256"]).unlink, missing_ok=True)
-        log.log(f"已删除文档 {ref}")
+        log.log(Text("knowledge.log.deleted", ref=ref))
 
     # ---- reads ---------------------------------------------------------------------
 
@@ -372,13 +373,13 @@ class KnowledgeBase:
                 )
                 done = await self.embed_pending() if active else 0
                 if done:
-                    log.debug(f"已为 {done} 个分块计算向量")
+                    log.debug(Text("knowledge.log.vectors", done=done))
                 backoff = 30.0
             except Exception as exc:
                 if isinstance(exc, PublicError):
-                    log.warning(f"知识库向量计算暂停：{exc}，{backoff:.0f} 秒后重试")
+                    log.warning(Text("knowledge.log.vectorsPaused", exc=exc, backoff=backoff))
                 else:
-                    log.error(f"知识库向量循环出错（{type(exc).__name__}）", exc=exc)
+                    log.error(Text("knowledge.log.vectorsError", name=type(exc).__name__), exc=exc)
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 900)
                 continue

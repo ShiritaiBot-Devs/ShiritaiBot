@@ -1,0 +1,58 @@
+{
+  "log": {
+    "source": "Models",
+    "contextTooLong": "{display_name}'s estimated context exceeds its limit of {max_context}; skipped",
+    "decisionFailed": "Decision model {display_name} failed ({failure})",
+    "candidateFailed": "{display_name} failed ({failure}); trying the next candidate model",
+    "embeddingFailed": "Embedding model {display_name} failed ({failure})",
+    "mediaSource": "Models"
+  },
+  "protocolUnsupported": "Unsupported LLM protocol",
+  "modelsInvalid": "The provider didn't return a valid model list",
+  "modelEntryInvalid": "The provider returned an invalid model entry",
+  "modelNameInvalid": "The provider returned an invalid model name",
+  "noEmbedding": "No embedding model is configured",
+  "cursorRepeated": "The provider's model pagination cursor repeated. Try again later.",
+  "tooManyPages": "The model list has too many pages. Narrow what the provider returns.",
+  "modelsUnreadable": "Couldn't read the provider's model list. Check the connection and API protocol.",
+  "modelsInvalidHint": "The provider didn't return a valid model list. Check the API protocol and service URL.",
+  "toolCalls": ", calling {count} tools",
+  "subscriptionModels": "Couldn't get the ChatGPT plan's model list. Check the authorization and network.",
+  "allFailed": "All candidate models failed. Check the provider URL, credentials, and model names.",
+  "subscriptionLimit": "The ChatGPT plan's usage limit is reached. Check ChatGPT's usage settings.",
+  "embeddingFailed": "Embedding call failed. Check the provider URL, credentials, and model name.",
+  "contextTooLong": "Candidate models failed, and some exceeded their estimated context limit. Shorten the input or adjust the models' context settings.",
+  "routeMissing": "The {route} model route isn't configured. Set up a provider, models, and routes in the WebUI.",
+  "decisionOnly": "The candidate models of the {route} route failed. Decision models such as Jev don't generate text, so add a text model too.",
+  "modelsHttp": "Couldn't get models (HTTP {status_code}). Check the API key, URL, and permissions.",
+  "replied": "{display_name} replied in {value:.1f}s",
+  "subscription": {
+    "expired": "The authorization expired. Start again.",
+    "incomplete": "ChatGPT authorization didn't finish. Start again.",
+    "invalidResponse": "The ChatGPT authorization service returned an invalid response.",
+    "revoked": "ChatGPT authorization is no longer valid. Reconnect.",
+    "invalidCredentials": "ChatGPT returned invalid credentials. Authorize again.",
+    "noIdToken": "ChatGPT didn't return an identity token. Authorize again.",
+    "refreshUnavailable": "ChatGPT credentials can't be renewed right now. Try again later.",
+    "refreshFailed": "ChatGPT credentials couldn't be renewed just now. Try again later.",
+    "identity": "Couldn't verify the ChatGPT sign-in. Authorize again.",
+    "exchangeFailed": "Couldn't exchange the ChatGPT authorization code. Start the authorization again.",
+    "callbackInvalid": "The ChatGPT callback is missing a valid authorization code or client ID.",
+    "notAuthorized": "Authorize the ChatGPT plan in the provider settings first.",
+    "noPlanScope": "Permission to use the ChatGPT plan wasn't granted. Authorize again.",
+    "noKeys": "Can't get ChatGPT's identity verification keys right now. Try again later.",
+    "stateMismatch": "The callback URL or authorization state doesn't match. Paste the full URL the helper showed for this authorization.",
+    "offline": "Can't reach the ChatGPT authorization service. Check the server's network or proxy."
+  },
+  "media": {
+    "noVision": "The current model doesn't accept images, so meme_view can't show the sticker; use the text description from meme_search instead",
+    "noImage": "No image attached",
+    "log": {
+      "cacheFailed": "Couldn't write the QQ image cache",
+      "tooLarge": "The QQ image exceeds the download limit",
+      "captionFailed": "Image description failed: {exc}",
+      "unsupported": "The QQ image couldn't be converted to a supported format",
+      "downloadFailed": "Image download failed ({name})"
+    }
+  }
+}

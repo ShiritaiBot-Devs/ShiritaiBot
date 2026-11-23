@@ -20,9 +20,11 @@ import yaml
 from shiritaibot.config import SKILL_NAME
 from shiritaibot.core import PublicError
 from shiritaibot.core.logs import get_logger
+from shiritaibot.i18n import Text, t
 from shiritaibot.plugin.core.packages import check_entries, extract_entries
+from shiritaibot.prompts import prompt as prompt_text
 
-log = get_logger("技能")
+log = get_logger("skills.log.source")
 
 SKILL_FILE = "SKILL.md"
 MAX_ARCHIVE = 10 * 1024 * 1024
@@ -37,7 +39,7 @@ def parse_skill(text: str) -> tuple[dict, str]:
     """Split SKILL.md into validated frontmatter and the Markdown body."""
     text = text.lstrip("﻿")
     if not text.startswith("---"):
-        raise PublicError("SKILL.md 必须以 --- 包围的 YAML frontmatter 开头")
+        raise PublicError("skills.frontmatterStart")
     parts = text.split("\n", 1)
     rest = parts[1] if len(parts) > 1 else ""
     end = rest.find("\n---")
@@ -45,30 +47,30 @@ def parse_skill(text: str) -> tuple[dict, str]:
         end = -1
         header, body = "", rest[3:]
     elif end < 0:
-        raise PublicError("SKILL.md 的 frontmatter 缺少结束的 ---")
+        raise PublicError("skills.frontmatterEnd")
     else:
         header, body = rest[:end], rest[end + 4 :]
     try:
         meta = yaml.safe_load(header) or {}
     except yaml.YAMLError:
-        raise PublicError("SKILL.md 的 frontmatter 不是有效的 YAML") from None
+        raise PublicError("skills.frontmatterYaml") from None
     if not isinstance(meta, dict):
-        raise PublicError("SKILL.md 的 frontmatter 必须是键值表")
+        raise PublicError("skills.frontmatterMapping")
     name, description = meta.get("name"), meta.get("description")
     if not isinstance(name, str) or not SKILL_NAME.fullmatch(name):
         raise PublicError(
-            "技能 name 只能包含小写字母、数字和短横线（1–64 字符，不以短横线开头结尾）"
+            "skills.nameFormat"
         )
     if not isinstance(description, str) or not description.strip():
-        raise PublicError("技能必须填写 description，说明做什么、何时使用")
+        raise PublicError("skills.descriptionRequired")
     if len(description) > MAX_DESCRIPTION:
-        raise PublicError(f"技能 description 不能超过 {MAX_DESCRIPTION} 字符")
+        raise PublicError("skills.descriptionTooLong", MAX_DESCRIPTION=MAX_DESCRIPTION)
     return meta, body.lstrip("\n")
 
 
 def check_name(name: str) -> None:
     if not SKILL_NAME.fullmatch(name):
-        raise PublicError("技能名称只能包含小写字母、数字和短横线")
+        raise PublicError("skills.nameChars")
 
 
 def relative(path: str) -> PurePosixPath:
@@ -82,7 +84,7 @@ def relative(path: str) -> PurePosixPath:
         or any(part in {"", ".", ".."} or part.startswith(".") for part in value.parts)
         or len(path) > 300
     ):
-        raise PublicError("文件路径必须是技能目录内的相对路径，不能包含 .. 或隐藏文件")
+        raise PublicError("skills.pathInvalid")
     return value
 
 
@@ -91,14 +93,14 @@ def tree_files(directory: Path) -> list[Path]:
     files = []
     for item in sorted(directory.rglob("*")):
         if item.is_symlink():
-            raise PublicError("技能目录不能包含符号链接")
+            raise PublicError("skills.noSymlinks")
         rel = item.relative_to(directory)
         if any(part.startswith(".") or part == "__pycache__" for part in rel.parts):
             continue
         if item.is_file():
             files.append(item)
     if len(files) > MAX_FILES:
-        raise PublicError(f"技能文件数量不能超过 {MAX_FILES}")
+        raise PublicError("skills.tooManyFiles", MAX_FILES=MAX_FILES)
     return files
 
 
@@ -133,13 +135,13 @@ class SkillManager:
                 try:
                     meta, _ = parse_skill((directory / SKILL_FILE).read_text("utf-8"))
                     if meta["name"] != directory.name:
-                        raise PublicError("frontmatter 的 name 与目录名不一致")
+                        raise PublicError("skills.nameMismatch")
                     entry["description"] = meta["description"].strip()
                     entry["license"] = str(meta.get("license", ""))
                 except PublicError as exc:
                     entry["error"] = str(exc)
                 except (OSError, UnicodeDecodeError):
-                    entry["error"] = "无法读取 SKILL.md"
+                    entry["error"] = t("skills.unreadable")
                 result[directory.name] = entry
         return result
 
@@ -155,9 +157,9 @@ class SkillManager:
         check_name(name)
         row = (await asyncio.to_thread(self._scan)).get(name)
         if row is None:
-            raise PublicError(f"技能 {name} 不存在，可用 skill_list 查看已安装技能")
+            raise PublicError("skills.missing", name=name)
         if enabled_only and name in self.config.value.skills.disabled:
-            raise PublicError(f"技能 {name} 已停用")
+            raise PublicError("skills.disabled", name=name)
         return row
 
     async def prompt(self, allowed: tuple[str, ...] | None = None) -> str:
@@ -172,10 +174,7 @@ class SkillManager:
             return ""
         lines = "\n".join(f"- {row['name']}：{row['description']}" for row in rows)
         return (
-            "\n\n<skills>\n以下是已安装的技能（Skill）。当任务与某个技能的描述相符时，"
-            "先调用 skill_read 读取它的 SKILL.md，再严格按其中说明执行；"
-            "SKILL.md 提到的其他文件也用 skill_read 按需读取，不要一次全部读入。\n"
-            f"{lines}\n</skills>"
+            prompt_text("SKILLS_BLOCK", lines=lines)
         )
 
     # ----- reading ---------------------------------------------------------------------
@@ -209,7 +208,7 @@ class SkillManager:
             target = directory.joinpath(*rel.parts)
             if target.is_symlink() or not target.is_file():
                 available = [f.relative_to(directory).as_posix() for f in tree_files(directory)]
-                raise PublicError(f"技能内没有文件 {path}；可用文件：{', '.join(available)}")
+                raise PublicError("skills.fileMissingIn", path=path, files=', '.join(available))
             data = target.read_bytes()
             if b"\0" in data[:4096]:
                 return {"binary": True, "bytes": len(data)}
@@ -221,7 +220,7 @@ class SkillManager:
                 "name": name,
                 "path": path,
                 **text,
-                "note": "二进制文件，请用 shell 按需处理",
+                "note": t("skills.binary"),
                 "directory": str(directory),
             }
         end = offset + READ_CHUNK
@@ -238,22 +237,22 @@ class SkillManager:
 
     def _check_writable(self) -> None:
         if self.root.is_symlink():
-            raise PublicError("技能目录不能是符号链接")
+            raise PublicError("skills.folderSymlink")
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     async def create(self, name: str, files: dict[str, str], replace: bool = False) -> dict:
         """Write a new skill from text files; SKILL.md is required."""
         check_name(name)
         if SKILL_FILE not in files:
-            raise PublicError("新技能必须包含 SKILL.md")
+            raise PublicError("skills.needsSkillMd")
         if len(files) > 50:
-            raise PublicError("一次最多写入 50 个文件")
+            raise PublicError("skills.tooManyWrites")
         paths = {relative(path): content for path, content in files.items()}
         if any(len(content) > MAX_FILE_CHARS for content in paths.values()):
-            raise PublicError(f"单个文件不能超过 {MAX_FILE_CHARS} 字符")
+            raise PublicError("skills.fileTooLong", MAX_FILE_CHARS=MAX_FILE_CHARS)
         meta, _ = parse_skill(files[SKILL_FILE])
         if meta["name"] != name:
-            raise PublicError("SKILL.md frontmatter 的 name 必须与技能名称一致")
+            raise PublicError("skills.frontmatterName")
         async with self.lock:
 
             def write():
@@ -267,7 +266,7 @@ class SkillManager:
                     self._commit(stage, name, replace)
 
             await asyncio.to_thread(write)
-        log.log(f"已写入技能 {name}（{len(files)} 个文件）")
+        log.log(Text("skills.log.written", name=name, count=len(files)))
         return await self.detail(name)
 
     async def update(
@@ -284,11 +283,11 @@ class SkillManager:
         row = await self._locate(name)
         rel = relative(path)
         if sum(x is not None for x in (content, old_text)) + int(delete) != 1:
-            raise PublicError("content、old_text/new_text 与 delete 三选一")
+            raise PublicError("skills.editOneOf")
         if old_text is not None and new_text is None:
-            raise PublicError("使用 old_text 时必须同时提供 new_text")
+            raise PublicError("skills.newTextRequired")
         if delete and rel.as_posix() == SKILL_FILE:
-            raise PublicError("不能删除 SKILL.md；要删除整个技能请使用 skill_remove")
+            raise PublicError("skills.keepSkillMd")
         async with self.lock:
 
             def apply():
@@ -300,49 +299,49 @@ class SkillManager:
                     )
                 target = directory.joinpath(*rel.parts)
                 if target.is_symlink():
-                    raise PublicError("不能修改符号链接")
+                    raise PublicError("skills.noSymlinkEdit")
                 previous = target.read_text("utf-8") if target.is_file() else None
                 if delete:
                     if previous is None:
-                        raise PublicError(f"文件 {path} 不存在")
+                        raise PublicError("skills.fileMissing", path=path)
                     target.unlink()
                     return
                 if old_text is not None:
                     if previous is None:
-                        raise PublicError(f"文件 {path} 不存在")
+                        raise PublicError("skills.fileMissing", path=path)
                     count = previous.count(old_text)
                     if count != 1:
                         raise PublicError(
-                            "old_text 未找到"
+                            t("skills.oldTextMissing")
                             if count == 0
-                            else f"old_text 出现了 {count} 次，请提供更长的唯一片段"
+                            else t("skills.oldTextAmbiguous", count=count)
                         )
                     text = previous.replace(old_text, new_text or "", 1)
                 else:
                     text = content or ""
                 if len(text) > MAX_FILE_CHARS:
-                    raise PublicError(f"单个文件不能超过 {MAX_FILE_CHARS} 字符")
+                    raise PublicError("skills.fileTooLong", MAX_FILE_CHARS=MAX_FILE_CHARS)
                 if rel.as_posix() == SKILL_FILE:
                     meta, _ = parse_skill(text)
                     if meta["name"] != name:
-                        raise PublicError("不能通过修改 name 改名；请新建技能后删除旧技能")
+                        raise PublicError("skills.noRename")
                 target.parent.mkdir(parents=True, exist_ok=True)
                 temp = target.with_name(target.name + ".tmp")
                 temp.write_text(text, encoding="utf-8")
                 temp.replace(target)
 
             await asyncio.to_thread(apply)
-        log.log(f"已修改技能 {name} 的 {rel.as_posix()}")
+        log.log(Text("skills.log.edited", name=name, as_posix=rel.as_posix()))
         return await self.detail(name)
 
     def _commit(self, stage: Path, name: str, replace: bool) -> None:
         """Move a validated staging directory into place (runs in a worker thread)."""
         destination = self.root / name
         if destination.is_symlink():
-            raise PublicError("同名技能目录是符号链接，拒绝覆盖")
+            raise PublicError("skills.targetSymlink")
         if destination.exists():
             if not replace:
-                raise PublicError(f"技能 {name} 已安装；如需覆盖请设置 replace")
+                raise PublicError("skills.alreadyInstalled", name=name)
             trash = stage.parent / ".old"
             destination.rename(trash)
         stage.rename(destination)
@@ -354,11 +353,11 @@ class SkillManager:
             else [d for d in stage.iterdir() if d.is_dir() and (d / SKILL_FILE).is_file()]
         )
         if len(candidates) != 1:
-            raise PublicError("技能包中应只有一个包含 SKILL.md 的技能目录")
+            raise PublicError("skills.oneSkillPerPackage")
         directory = candidates[0]
         files = tree_files(directory)
         if sum(f.stat().st_size for f in files) > MAX_UNPACKED:
-            raise PublicError("技能包解压后超过 50 MiB")
+            raise PublicError("skills.packageTooLargeUnpacked")
         meta, _ = parse_skill((directory / SKILL_FILE).read_text("utf-8"))
         name = meta["name"]
         if directory == stage:
@@ -373,7 +372,7 @@ class SkillManager:
     async def install_bytes(self, data: bytes, replace: bool = False) -> dict:
         """Install a .skill / .zip archive, or a bare SKILL.md."""
         if len(data) > MAX_ARCHIVE:
-            raise PublicError("技能包不能超过 10 MiB")
+            raise PublicError("skills.packageTooLarge")
         async with self.lock:
 
             def install():
@@ -384,36 +383,36 @@ class SkillManager:
                     if data.startswith(b"PK"):
                         try:
                             with zipfile.ZipFile(io.BytesIO(data)) as archive:
-                                check_entries(archive, MAX_UNPACKED, "技能包")
+                                check_entries(archive, MAX_UNPACKED, t("skills.package"))
                                 extract_entries(archive, stage)
                         except zipfile.BadZipFile:
-                            raise PublicError("技能包不是有效的 ZIP（.skill）文件") from None
+                            raise PublicError("skills.packageInvalid") from None
                     else:
                         try:
                             text = data.decode("utf-8")
                         except UnicodeDecodeError:
                             raise PublicError(
-                                "无法识别的技能文件：需要 .skill/.zip 包或 SKILL.md"
+                                "skills.fileUnknown"
                             ) from None
                         (stage / SKILL_FILE).write_text(text, encoding="utf-8")
                     return self._install_stage(stage, replace)
 
             name = await asyncio.to_thread(install)
-        log.log(f"已安装技能 {name}")
+        log.log(Text("skills.log.installed", name=name))
         return await self.detail(name)
 
     async def install_path(self, path: Path, replace: bool = False) -> dict:
         """Install from a local .skill/.zip/SKILL.md file or a skill directory."""
         if await asyncio.to_thread(path.is_dir):
             if not await asyncio.to_thread((path / SKILL_FILE).is_file):
-                raise PublicError("目录中没有 SKILL.md")
+                raise PublicError("skills.noSkillMd")
             async with self.lock:
 
                 def copy():
                     self._check_writable()
                     files = tree_files(path)
                     if sum(f.stat().st_size for f in files) > MAX_UNPACKED:
-                        raise PublicError("技能目录超过 50 MiB")
+                        raise PublicError("skills.folderTooLarge")
                     with tempfile.TemporaryDirectory(prefix=".install-", dir=self.root) as staging:
                         stage = Path(staging) / "content"
                         for item in files:
@@ -423,21 +422,21 @@ class SkillManager:
                         return self._install_stage(stage, replace)
 
                 name = await asyncio.to_thread(copy)
-            log.log(f"已从目录安装技能 {name}")
+            log.log(Text("skills.log.installedFolder", name=name))
             return await self.detail(name)
         if not await asyncio.to_thread(path.is_file):
-            raise PublicError("文件不存在")
+            raise PublicError("skills.fileNotFound")
         if (await asyncio.to_thread(path.stat)).st_size > MAX_ARCHIVE:
-            raise PublicError("技能包不能超过 10 MiB")
+            raise PublicError("skills.packageTooLarge")
         return await self.install_bytes(await asyncio.to_thread(path.read_bytes), replace)
 
     async def remove(self, name: str) -> dict:
         row = await self._locate(name)
         if row["source"] == "bundled":
-            raise PublicError("内置技能不能删除，可在设置中停用")
+            raise PublicError("skills.bundledNoDelete")
         async with self.lock:
             await asyncio.to_thread(shutil.rmtree, self.root / name)
-        log.log(f"已删除技能 {name}")
+        log.log(Text("skills.log.deleted", name=name))
         restored = (await asyncio.to_thread(self._scan)).get(name)
         return {"removed": name, "bundled_restored": restored is not None}
 

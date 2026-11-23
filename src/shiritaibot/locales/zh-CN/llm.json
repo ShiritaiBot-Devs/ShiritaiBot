@@ -1,0 +1,58 @@
+{
+  "log": {
+    "source": "模型",
+    "contextTooLong": "{display_name} 的估算上下文超过上限 {max_context}，跳过",
+    "decisionFailed": "决策模型 {display_name} 调用失败（{failure}）",
+    "candidateFailed": "{display_name} 调用失败（{failure}），尝试下一个候选模型",
+    "embeddingFailed": "Embedding 模型 {display_name} 调用失败（{failure}）",
+    "mediaSource": "模型"
+  },
+  "protocolUnsupported": "不支持的 LLM 协议",
+  "modelsInvalid": "提供商未返回有效的模型列表",
+  "modelEntryInvalid": "提供商返回了无效的模型条目",
+  "modelNameInvalid": "提供商返回了无效的模型名称",
+  "noEmbedding": "尚未配置 Embedding 模型",
+  "cursorRepeated": "提供商的模型分页游标重复，请稍后重试",
+  "tooManyPages": "模型列表分页超过限制，请缩小提供商返回范围",
+  "modelsUnreadable": "无法读取提供商模型列表，请检查连接和接口协议",
+  "modelsInvalidHint": "提供商未返回有效的模型列表，请检查接口协议和服务地址",
+  "toolCalls": "，请求调用 {count} 个工具",
+  "subscriptionModels": "无法获取 ChatGPT 套餐的模型列表，请检查授权和网络。",
+  "allFailed": "所有候选模型调用失败，请检查 Provider 地址、凭据与模型名称",
+  "subscriptionLimit": "ChatGPT 套餐用量已达上限，请在 ChatGPT 用量设置中查看。",
+  "embeddingFailed": "Embedding 调用失败，请检查 Provider 地址、凭据与模型名称",
+  "contextTooLong": "候选模型调用失败，部分模型的估算上下文超过上限，请减少输入或调整模型上下文配置",
+  "routeMissing": "尚未配置 {route} 模型路由，请在 WebUI 配置 Provider、模型和路由",
+  "decisionOnly": "{route} 路由的候选模型调用失败；Jev 等决策模型不生成文本，请再添加一个文本模型",
+  "modelsHttp": "获取模型失败（HTTP {status_code}），请检查 API Key、地址与权限",
+  "replied": "{display_name} 应答，用时 {value:.1f}s",
+  "subscription": {
+    "expired": "授权已过期，请重新发起。",
+    "incomplete": "ChatGPT 授权未完成，请重新发起。",
+    "invalidResponse": "ChatGPT 授权服务返回了无效响应。",
+    "revoked": "ChatGPT 授权已失效，请重新连接。",
+    "invalidCredentials": "ChatGPT 返回的凭据无效，请重新授权。",
+    "noIdToken": "ChatGPT 未返回身份令牌，请重新授权。",
+    "refreshUnavailable": "ChatGPT 凭据暂不能续期，请稍后重试。",
+    "refreshFailed": "ChatGPT 凭据暂时无法续期，请稍后重试。",
+    "identity": "无法验证 ChatGPT 登录身份，请重新授权。",
+    "exchangeFailed": "ChatGPT 授权码换取失败，请重新发起授权。",
+    "callbackInvalid": "ChatGPT 回调缺少有效的授权码或客户端标识。",
+    "notAuthorized": "请先在提供商设置中授权使用 ChatGPT 套餐。",
+    "noPlanScope": "未授予使用 ChatGPT 套餐的权限，请重新授权。",
+    "noKeys": "暂时无法取得 ChatGPT 的身份验证公钥，请稍后重试。",
+    "stateMismatch": "回调地址或授权状态不匹配，请粘贴本次授权助手显示的完整地址。",
+    "offline": "无法连接 ChatGPT 授权服务，请检查服务器网络或代理。"
+  },
+  "media": {
+    "noVision": "当前模型不支持图像输入，meme_view 无法查看表情图片；请改用 meme_search 返回的文字描述",
+    "noImage": "未附带图片",
+    "log": {
+      "cacheFailed": "QQ 图片缓存写入失败",
+      "tooLarge": "QQ 图片超过下载上限",
+      "captionFailed": "图像转述失败：{exc}",
+      "unsupported": "QQ 图片无法转换成受支持的图像",
+      "downloadFailed": "图片下载失败（{name}）"
+    }
+  }
+}

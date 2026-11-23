@@ -1,0 +1,24 @@
+{
+  "event": {
+    "homeworkChanged": "Web Learning homework changed",
+    "syncFailed": "Web Learning sync failed",
+    "checkLogin": "Web Learning needs a sign-in check"
+  },
+  "noStderr": "no stderr output",
+  "syncedChanged": ", {changed} changed",
+  "outputTruncated": "The Web Learning adapter output exceeded the 1 MB limit and was truncated",
+  "loginHint": "Sign in to Web Learning and complete any verification in the owner's private chat.",
+  "invalidJson": "The OneLearn adapter didn't return valid JSON",
+  "synced": "Sync complete: {count} assignments",
+  "noCommand": "Configure the OneLearn adapter process command",
+  "log": {
+    "syncFailed": "Sync failed ({name})",
+    "loginState": "Web Learning sign-in state problem: {state}"
+  },
+  "firstSync": "First sync: recorded {count} assignments as the baseline",
+  "adapterExited": "The Web Learning adapter process exited abnormally (exit code {exit_code}): {detail}",
+  "tools": {
+    "query": "Query courses, announcements, unsubmitted homework, course files, and homework attachments; homework_detail needs homework_id and returns one assignment's details. When authentication is needed, use the school plugin's login and verification code tools.",
+    "download": "Download a course file or homework attachment to this plugin's private folder. download needs course_id + file_id (from the files query); download_homework_attachment needs homework_id + file_id (from the homework_attachments query)."
+  }
+}

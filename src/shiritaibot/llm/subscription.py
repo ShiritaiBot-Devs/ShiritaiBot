@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from shiritaibot.core import PublicError
+from shiritaibot.i18n import t
 
 PROTOCOL = "openai_subscription"
 RESOURCE = "https://api.openai.com/v1"
@@ -115,7 +116,7 @@ def verify_identity(raw: str, keys: dict, login: Login, client_id: str) -> dict:
             raise ValueError
         return claims
     except (AttributeError, InvalidSignature, KeyError, StopIteration, TypeError, ValueError):
-        raise SubscriptionError("无法验证 ChatGPT 登录身份，请重新授权。") from None
+        raise SubscriptionError(t("llm.subscription.identity")) from None
 
 
 def token_fields(data: dict, previous_scope: str = "") -> dict:
@@ -124,7 +125,7 @@ def token_fields(data: dict, previous_scope: str = "") -> dict:
     lifetime = data.get("expires_in")
     earliest = data.get("earliest_refresh_at", 0)
     if not isinstance(scope, str) or DIRECT_SCOPE not in scope.split():
-        raise SubscriptionError("未授予使用 ChatGPT 套餐的权限，请重新授权。")
+        raise SubscriptionError(t("llm.subscription.noPlanScope"))
     if (
         not isinstance(access, str)
         or not access
@@ -134,7 +135,7 @@ def token_fields(data: dict, previous_scope: str = "") -> dict:
         or lifetime <= 0
         or str(data.get("token_type", "Bearer")).lower() != "bearer"
     ):
-        raise SubscriptionError("ChatGPT 返回的凭据无效，请重新授权。")
+        raise SubscriptionError(t("llm.subscription.invalidCredentials"))
     return {
         "access_token": access,
         "refresh_token": refresh,
@@ -207,7 +208,7 @@ class SubscriptionAccounts:
             login = self.logins.get(provider.id)
             if login is None or login.created + LOGIN_SECONDS < time.monotonic():
                 self.logins.pop(provider.id, None)
-                raise SubscriptionError("授权已过期，请重新发起。")
+                raise SubscriptionError(t("llm.subscription.expired"))
             try:
                 uri = urlsplit(callback.strip())
                 query = parse_qs(uri.query, keep_blank_values=True, max_num_fields=24)
@@ -223,11 +224,11 @@ class SubscriptionAccounts:
                 valid = False
             if not valid:
                 raise SubscriptionError(
-                    "回调地址或授权状态不匹配，请粘贴本次授权助手显示的完整地址。"
+                    t("llm.subscription.stateMismatch")
                 )
             self.logins.pop(provider.id, None)
             if "error" in query:
-                raise SubscriptionError("ChatGPT 授权未完成，请重新发起。")
+                raise SubscriptionError(t("llm.subscription.incomplete"))
             code = query.get("code", [""])[0]
             returned = query.get("client_id", [""])[0]
             client_id = returned if login.client_id == DYNAMIC_CLIENT else login.client_id
@@ -237,7 +238,7 @@ class SubscriptionAccounts:
                 or client_id == DYNAMIC_CLIENT
                 or (returned and returned != client_id)
             ):
-                raise SubscriptionError("ChatGPT 回调缺少有效的授权码或客户端标识。")
+                raise SubscriptionError(t("llm.subscription.callbackInvalid"))
             async with self.client(provider) as client:
                 result = await self.auth_request(
                     client,
@@ -253,15 +254,15 @@ class SubscriptionAccounts:
                     },
                 )
                 if not result.is_success:
-                    raise SubscriptionError("ChatGPT 授权码换取失败，请重新发起授权。")
+                    raise SubscriptionError(t("llm.subscription.exchangeFailed"))
                 data = self.response_json(result)
                 token = data.get("id_token")
                 if not isinstance(token, str):
-                    raise SubscriptionError("ChatGPT 未返回身份令牌，请重新授权。")
+                    raise SubscriptionError(t("llm.subscription.noIdToken"))
                 fields = token_fields(data)
                 jwks = await self.auth_request(client, "GET", JWKS)
                 if not jwks.is_success:
-                    raise SubscriptionError("暂时无法取得 ChatGPT 的身份验证公钥，请稍后重试。")
+                    raise SubscriptionError(t("llm.subscription.noKeys"))
                 claims = verify_identity(token, self.response_json(jwks), login, client_id)
             account = claims.get("email") or claims.get("name")
             await self.save(
@@ -290,7 +291,7 @@ class SubscriptionAccounts:
         try:
             return await client.request(method, url, **kwargs)
         except httpx.HTTPError:
-            raise SubscriptionError("无法连接 ChatGPT 授权服务，请检查服务器网络或代理。") from None
+            raise SubscriptionError(t("llm.subscription.offline")) from None
 
     @staticmethod
     def response_json(response) -> dict[str, Any]:
@@ -300,7 +301,7 @@ class SubscriptionAccounts:
                 return data
         except ValueError:
             pass
-        raise SubscriptionError("ChatGPT 授权服务返回了无效响应。")
+        raise SubscriptionError(t("llm.subscription.invalidResponse"))
 
     async def status(self, provider_id: str) -> dict:
         record = await self.load(provider_id)
@@ -327,14 +328,14 @@ class SubscriptionAccounts:
                 and limited_at is not None
                 and time.monotonic() - limited_at < LIMIT_COOLDOWN
             ):
-                raise SubscriptionError("ChatGPT 套餐用量已达上限，请在 ChatGPT 用量设置中查看。")
+                raise SubscriptionError(t("llm.subscriptionLimit"))
             record = await self.load(provider.id)
             if not record.get("refresh_token"):
-                raise SubscriptionError("请先在提供商设置中授权使用 ChatGPT 套餐。")
+                raise SubscriptionError(t("llm.subscription.notAuthorized"))
             if time.time() < max(record["expires_at"] - 60, record.get("earliest_refresh_at", 0)):
                 if time.time() < record["expires_at"]:
                     return record["access_token"]
-                raise SubscriptionError("ChatGPT 凭据暂不能续期，请稍后重试。")
+                raise SubscriptionError(t("llm.subscription.refreshUnavailable"))
             async with self.client(provider) as client:
                 result = await self.auth_request(
                     client,
@@ -352,8 +353,8 @@ class SubscriptionAccounts:
                     self.response_json(result).get("error") in TERMINAL_REFRESH_ERRORS
                 ):
                     await self.save(provider.id, self.without_tokens(record, reauthorize=True))
-                    raise SubscriptionError("ChatGPT 授权已失效，请重新连接。")
-                raise SubscriptionError("ChatGPT 凭据暂时无法续期，请稍后重试。")
+                    raise SubscriptionError(t("llm.subscription.revoked"))
+                raise SubscriptionError(t("llm.subscription.refreshFailed"))
             fields = token_fields(self.response_json(result), record["scope"])
             await self.save(provider.id, {**record, **fields})
             return fields["access_token"]

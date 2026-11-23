@@ -15,9 +15,10 @@ from collections import OrderedDict
 from shiritaibot.adapters.onebot11 import qq_download_url
 from shiritaibot.core import PublicError
 from shiritaibot.core.logs import brief, describe_session, get_logger
+from shiritaibot.i18n import Text, t
 from shiritaibot.meme.core import MemeCore, MemeRejected, download, meme_id
 
-log = get_logger("表情")
+log = get_logger("memes.log.hookerSource")
 REJECTED_KEPT = 2000
 
 
@@ -29,7 +30,7 @@ def sticker_url(part: dict, stickers_only: bool) -> str | None:
         accepted = True
     elif kind == "image":
         sub_type = str(data.get("sub_type", data.get("subType", 0)) or 0)
-        accepted = not stickers_only or sub_type != "0" or "表情" in str(data.get("summary", ""))
+        accepted = not stickers_only or sub_type != "0" or t("memes.hooker.label") in str(data.get("summary", ""))
     else:
         return None
     url = str(data.get("url") or "")
@@ -79,15 +80,15 @@ class MemeHooker:
             self.rejected[key] = None
             while len(self.rejected) > REJECTED_KEPT:
                 self.rejected.popitem(last=False)
-            log.debug(f"未收录表情 {key}：{exc}", where)
+            log.debug(Text("memes.log.notCollected", key=key, exc=exc), where)
             return None
         except PublicError as exc:
-            log.warning(f"表情收录失败：{exc}", where)
+            log.warning(Text("memes.log.collectFailed", exc=exc), where)
             return None
         except Exception as exc:
-            log.error(f"表情收录出错（{type(exc).__name__}）", where, exc=exc)
+            log.error(Text("memes.log.collectError", name=type(exc).__name__), where, exc=exc)
             return None
         log.log(
-            f"收录表情 {row['id']}（{row['category']}）：{brief(row['description'], 60)}", where
+            Text("memes.log.collected", id=row['id'], category=row['category'], brief=brief(row['description'], 60)), where
         )
         return row

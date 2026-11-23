@@ -17,6 +17,7 @@ from datetime import date, datetime, time
 from pathlib import Path
 
 from shiritaibot.core import PublicError
+from shiritaibot.i18n import t
 
 TEXT_FORMATS = frozenset({"txt", "md", "markdown", "rst", "log", "json", "yaml", "yml", "xml"})
 TABLE_TEXT_FORMATS = frozenset({"csv", "tsv"})
@@ -53,13 +54,13 @@ def decode_text(data: bytes) -> str:
         if data.startswith(mark):
             return data.decode(encoding, errors="replace")
     if b"\0" in data:
-        raise PublicError("文件内容不是文本")
+        raise PublicError("knowledge.extract.notText")
     for encoding in ("utf-8", "gb18030"):
         try:
             return data.decode(encoding)
         except UnicodeDecodeError:
             continue
-    raise PublicError("无法识别文本编码，请转存为 UTF-8")
+    raise PublicError("knowledge.extract.encoding")
 
 
 def clean(text: str) -> str:
@@ -138,7 +139,7 @@ def guard_zip(data: bytes) -> None:
     """Refuse decompression bombs before an OOXML parser expands the archive."""
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         if sum(item.file_size for item in archive.infolist()) > MAX_UNZIPPED:
-            raise PublicError("压缩后的文档内容过大")
+            raise PublicError("knowledge.extract.tooLarge")
 
 
 def pdf_sections(data: bytes) -> list[Section]:
@@ -146,12 +147,12 @@ def pdf_sections(data: bytes) -> list[Section]:
 
     reader = PdfReader(io.BytesIO(data))
     if reader.is_encrypted and not reader.decrypt(""):
-        raise PublicError("PDF 已加密，请解除密码后再上传")
+        raise PublicError("knowledge.extract.pdfEncrypted")
     sections = []
     for number, page in enumerate(reader.pages, 1):
         text = clean(page.extract_text() or "")
         if text:
-            sections.append(Section(f"第 {number} 页", text))
+            sections.append(Section(t("knowledge.extract.page", number=number), text))
     return sections
 
 
@@ -231,13 +232,13 @@ def doc_sections(data: bytes) -> list[Section]:
 
     with olefile.OleFileIO(io.BytesIO(data)) as ole:
         if ole.exists("EncryptedPackage"):
-            raise PublicError("文档已加密，请解除密码后再上传")
+            raise PublicError("knowledge.extract.encrypted")
         if not ole.exists("WordDocument"):
-            raise PublicError("不是有效的 Word 文档")
+            raise PublicError("knowledge.extract.notDocx")
         stream = ole.openstream("WordDocument").read()
         flags = struct.unpack_from("<H", stream, 0x0A)[0]
         if flags & 0x0100:
-            raise PublicError("文档已加密，请解除密码后再上传")
+            raise PublicError("knowledge.extract.encrypted")
         name = "1Table" if flags & 0x0200 else "0Table"
         text = word_binary_clean(word_binary_text(stream, ole.openstream(name).read()))
     return [Section("", text)] if text else []
@@ -338,7 +339,7 @@ def ppt_live_sections(stream: bytes, current_user: bytes) -> list[Section]:
         # Slide-number and date placeholders are single characters.
         lines = dict.fromkeys(text for text in [*listed, *own, *notes] if len(text) > 1)
         if lines:
-            sections.append(Section(f"第 {number} 张幻灯片", "\n".join(lines)))
+            sections.append(Section(t("knowledge.extract.slide", number=number), "\n".join(lines)))
     return sections
 
 
@@ -347,9 +348,9 @@ def ppt_sections(data: bytes) -> list[Section]:
 
     with olefile.OleFileIO(io.BytesIO(data)) as ole:
         if ole.exists("EncryptedSummary") or ole.exists("EncryptedPackage"):
-            raise PublicError("演示文稿已加密，请解除密码后再上传")
+            raise PublicError("knowledge.extract.pptEncrypted")
         if not ole.exists("PowerPoint Document"):
-            raise PublicError("不是有效的 PowerPoint 文件")
+            raise PublicError("knowledge.extract.notPptx")
         stream = ole.openstream("PowerPoint Document").read()
         current = ole.openstream("Current User").read() if ole.exists("Current User") else b""
     try:
@@ -388,7 +389,7 @@ def pptx_sections(data: bytes) -> list[Section]:
             lines.append(slide.notes_slide.notes_text_frame.text)
         text = clean("\n".join(lines))
         if text:
-            sections.append(Section(f"第 {number} 张幻灯片", text))
+            sections.append(Section(t("knowledge.extract.slide", number=number), text))
     return sections
 
 
@@ -398,7 +399,7 @@ def xlsx_sections(data: bytes) -> list[Section]:
     book = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     try:
         sections = [
-            table_section(f"工作表 {sheet.title}", sheet.iter_rows(values_only=True))
+            table_section(t("knowledge.extract.sheet", title=sheet.title), sheet.iter_rows(values_only=True))
             for sheet in book.worksheets
         ]
     finally:
@@ -413,7 +414,7 @@ def xls_sections(data: bytes) -> list[Section]:
         book = xlrd.open_workbook(file_contents=data)
     except xlrd.biffh.XLRDError as exc:
         if "encrypted" in str(exc).lower():
-            raise PublicError("表格已加密，请解除密码后再上传") from None
+            raise PublicError("knowledge.extract.sheetEncrypted") from None
         raise
 
     def value(item):
@@ -430,7 +431,7 @@ def xls_sections(data: bytes) -> list[Section]:
 
     sections = [
         table_section(
-            f"工作表 {sheet.name}",
+            t("knowledge.extract.sheetNamed", name=sheet.name),
             ([value(item) for item in sheet.row(index)] for index in range(sheet.nrows)),
         )
         for sheet in book.sheets()
@@ -461,11 +462,11 @@ def office_sections(data: bytes, name: str) -> list[Section]:
 
             with olefile.OleFileIO(io.BytesIO(data)) as ole:
                 if ole.exists("EncryptedPackage"):
-                    raise PublicError("文档已加密，请解除密码后再上传")
+                    raise PublicError("knowledge.extract.encrypted")
         return legacy(data)
     if data.lstrip().startswith(b"{\\rtf"):
-        raise PublicError("这是 RTF 文件，请在 Word 中另存为 .docx 后再上传")
-    raise PublicError(f"文件内容不是 {family} 格式")
+        raise PublicError("knowledge.extract.rtf")
+    raise PublicError("knowledge.extract.wrongFamily", family=family)
 
 
 def sections_of(data: bytes, name: str) -> list[Section]:
@@ -486,18 +487,18 @@ def extract(data: bytes, filename: str) -> tuple[str, list[Section]]:
     """(format, sections) of a file; raises PublicError when nothing usable comes out."""
     name = extension(filename)
     if name not in FORMATS:
-        raise PublicError("不支持的文件格式，支持：" + "、".join(sorted(FORMATS)))
+        raise PublicError(t("knowledge.extract.unsupported") + "、".join(sorted(FORMATS)))
     try:
         sections = sections_of(data, name)
     except PublicError:
         raise
     except Exception as exc:
-        raise PublicError(f"无法解析 {name} 文件（{type(exc).__name__}）") from exc
+        raise PublicError("knowledge.extract.parseFailed", name=name, name2=type(exc).__name__) from exc
     if not sections:
-        hint = "（扫描版 PDF 需要先做 OCR）" if name == "pdf" else ""
-        raise PublicError("文件里没有可提取的文本" + hint)
+        hint = t("knowledge.extract.ocrHint") if name == "pdf" else ""
+        raise PublicError(t("knowledge.extract.noText") + hint)
     if sum(len(section.text) for section in sections) > MAX_CHARS:
-        raise PublicError("文档文本过长，请拆分后再上传")
+        raise PublicError("knowledge.extract.tooLong")
     return name, sections
 
 
