@@ -1,0 +1,9 @@
+{
+  "started": "Hello World plugin started",
+  "hello": "{greeting} {name} (greeting #{count})",
+  "reset": "Count reset.",
+  "greetingLog": "Greeting {session}",
+  "hint": "<hello_world>When the user wants to say hello, you can call the hello_world tool.</hello_world>",
+  "dropped": "Hello World is set to drop events from {source}",
+  "belowMinimum": " (below the minimum importance {minimum} set in Hello World)"
+}

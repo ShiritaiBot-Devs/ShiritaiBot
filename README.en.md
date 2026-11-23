@@ -22,7 +22,7 @@
 
 </div>
 
-> **Language note:** ShiritaiBot uses Simplified Chinese by default. To switch the bot to English, set **Settings → General → Language** [设置 → 通用设定 → 语言] in the WebUI, or send `/lang en` in a chat. The WebUI is fully translated and has its own language switch in the top bar and on the sign-in page. Messages the bot sends, built-in tool descriptions, and most documents under [`docs/`](docs/) are still in Chinese while translation continues. Menu names in this README match the English WebUI, with the Chinese label in brackets.
+> **Language note:** ShiritaiBot uses Simplified Chinese by default. To switch the bot to English, set **Settings → General → Language** [设置 → 通用设定 → 语言] in the WebUI, or send `/lang en` in a chat. The WebUI has its own language switch in the top bar and on the sign-in page. The WebUI, the bot's replies, built-in tools and Skills, and the user guides are all available in English: [plugins](docs/PLUGINS.en.md), [Skills](docs/SKILLS.en.md), [MCP](docs/MCP.en.md), [knowledge base](docs/KNOWLEDGE.en.md), [stickers](docs/MEMES.en.md), [official QQ bot](docs/QQ-OFFICIAL.en.md), and [Feishu / Lark](docs/FEISHU.en.md). The internal design documents (`DESIGN.md`, `MEMORY.md`, `IMPLEMENTATION.md`) are still in Chinese. Menu names in this README match the English WebUI, with the Chinese label in brackets.
 
 ## Why ShiritaiBot?
 
@@ -60,8 +60,8 @@ The goal is simple: by the time you think to ask, ShiritaiBot has already done t
 | Term | Meaning |
 |---|---|
 | **OneBot V11** | An open protocol for chat bots, widely used with QQ. You run a protocol client such as [NapCatQQ](https://github.com/NapNeko/NapCatQQ) that signs in to QQ, and ShiritaiBot connects to it. |
-| **QQ** | Tencent's messaging app, popular in China. ShiritaiBot can connect through OneBot or through the [official QQ Bot platform](docs/QQ-OFFICIAL.md). |
-| **Feishu / Lark** | ByteDance's workplace messaging suite (Lark is the international edition). See [Feishu setup](docs/FEISHU.md). |
+| **QQ** | Tencent's messaging app, popular in China. ShiritaiBot can connect through OneBot or through the [official QQ Bot platform](docs/QQ-OFFICIAL.en.md). |
+| **Feishu / Lark** | ByteDance's workplace messaging suite (Lark is the international edition). See [Feishu setup](docs/FEISHU.en.md). |
 | **Owner** | Each instance serves one person, the owner. Proactive features, scheduling, subagents, and local machine access are for the owner only. |
 | **Chat mode / Agent mode** | *Chat* mode is conversation only, with no tools. *Agent* (Work) mode has full tool access. The owner's private chat uses Agent mode; group chats default to Chat mode. |
 
@@ -96,7 +96,7 @@ The goal is simple: by the time you think to ask, ShiritaiBot has already done t
 
 ### Option 1: One-click install
 
-Use the [one-click install script](scripts/README.md). On Linux with Docker, run this from the source directory instead:
+Use the [one-click install script](scripts/README.en.md). On Linux with Docker, run this from the source directory instead:
 
 ```bash
 bash scripts/deploy-docker.sh
@@ -115,11 +115,11 @@ npm --prefix web run build
 uv run shiritaibot run
 ```
 
-On first launch, ShiritaiBot builds an isolated runtime environment under `<home>/runtime/`, based on the Core lock file and the dependencies declared by your installed plugins. The repository's `.venv` is only for starting and developing the app, so running `uv sync` in the repo later won't remove plugin dependencies from the runtime environment. If the set of dependencies changes, restart when prompted. For the declaration format, conflict handling, and optional dependencies, see [Plugin dependency management](docs/PLUGINS.md#插件依赖管理).
+On first launch, ShiritaiBot builds an isolated runtime environment under `<home>/runtime/`, based on the Core lock file and the dependencies declared by your installed plugins. The repository's `.venv` is only for starting and developing the app, so running `uv sync` in the repo later won't remove plugin dependencies from the runtime environment. If the set of dependencies changes, restart when prompted. For the declaration format, conflict handling, and optional dependencies, see [Plugin dependency management](docs/PLUGINS.en.md#managing-plugin-dependencies).
 
 ### Connect a chat platform
 
-Once it's running, connect ShiritaiBot to OneBot (QQ), the [official QQ Bot platform](docs/QQ-OFFICIAL.md), or a [Feishu / Lark app bot](docs/FEISHU.md).
+Once it's running, connect ShiritaiBot to OneBot (QQ), the [official QQ Bot platform](docs/QQ-OFFICIAL.en.md), or a [Feishu / Lark app bot](docs/FEISHU.en.md).
 
 ### Sign in to the WebUI
 

@@ -1,5 +1,7 @@
 # 技能（Skill Manager）
 
+[English](SKILLS.en.md) · **简体中文**
+
 技能是可安装的「操作手册」：一个包含 `SKILL.md` 的目录，开头用 YAML frontmatter 写明名称和
 用途，正文写执行步骤，可附带 `references/`、`scripts/`、`assets/` 等文件。格式与 Agent Skills
 约定兼容，`.skill` 文件就是这个目录的 ZIP 包。
@@ -16,6 +18,10 @@
 3. SKILL.md 引用的其他文件按需用 `skill_read(path=...)` 读取。
 
 只有工具列表中包含 `skill_read` 时才注入技能列表；Chat 模式不提供技能工具，也不注入。
+
+## 多语言
+
+技能可以在原文件旁附带英文版：`SKILL.md` 旁的 `SKILL.en.md`，或 `references/x.md` 旁的 `references/x.en.md`。对话语言为英文时，`skill_read` 优先返回英文文件，不存在时回退到原文件。详见 [I18N.md](I18N.md)。
 
 ## 存放位置
 

@@ -1,30 +1,42 @@
 {
   "greeting": {
     "type": "string",
-    "description": "欢迎消息",
-    "hint": "/hello 和 hello_world 工具都会使用这句话。",
+    "description": { "zh-CN": "欢迎消息", "en": "Greeting" },
+    "hint": {
+      "zh-CN": "/hello 和 hello_world 工具都会使用这句话。",
+      "en": "Used by both /hello and the hello_world tool."
+    },
     "default": "你好，ShiritaiBot！"
   },
   "signature": {
     "type": "text",
-    "description": "回复签名",
-    "hint": "非空时追加在每条发往 WebUI 的回复末尾（演示 on_decorating_result）。",
+    "description": { "zh-CN": "回复签名", "en": "Reply signature" },
+    "hint": {
+      "zh-CN": "非空时追加在每条发往 WebUI 的回复末尾（演示 on_decorating_result）。",
+      "en": "When set, added to the end of every reply sent to the WebUI (shows on_decorating_result)."
+    },
     "default": ""
   },
   "drop_sources": {
     "type": "list",
-    "description": "丢弃这些来源的主动事件",
-    "hint": "演示 on_proactive_event：例如填写 email 后，邮件事件在分诊前被丢弃。主人设定的提醒不受影响。",
+    "description": { "zh-CN": "丢弃这些来源的主动事件", "en": "Drop proactive events from these sources" },
+    "hint": {
+      "zh-CN": "演示 on_proactive_event：例如填写 email 后，邮件事件在分诊前被丢弃。主人设定的提醒不受影响。",
+      "en": "Shows on_proactive_event: for example, with email listed, email events are dropped before triage. Reminders set by the owner aren't affected."
+    },
     "default": []
   },
   "advanced": {
     "type": "object",
-    "description": "高级设置",
+    "description": { "zh-CN": "高级设置", "en": "Advanced settings" },
     "items": {
       "min_importance": {
         "type": "int",
-        "description": "最低重要性",
-        "hint": "演示 on_proactive_judged：分诊重要性低于此值的事件直接丢弃（0 为不处理）。",
+        "description": { "zh-CN": "最低重要性", "en": "Minimum importance" },
+        "hint": {
+          "zh-CN": "演示 on_proactive_judged：分诊重要性低于此值的事件直接丢弃（0 为不处理）。",
+          "en": "Shows on_proactive_judged: events with a triage importance below this are dropped (0 turns it off)."
+        },
         "slider": { "min": 0, "max": 4, "step": 1 },
         "default": 0
       }

@@ -1,5 +1,7 @@
 # QQ 官方机器人
 
+[English](QQ-OFFICIAL.en.md) · **简体中文**
+
 在 QQ 开放平台创建机器人。在 WebUI **适配器 → 添加机器人 → QQ 官方机器人**填写 App ID 和 App Secret，然后启用并保存。
 
 在开放平台的**事件订阅与回调**中填入适配器页面显示的回调路径，前面加上你的公网 HTTPS 域名。例如实例标识为 `qq-official` 时，地址为：
