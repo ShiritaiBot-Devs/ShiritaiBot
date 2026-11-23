@@ -129,6 +129,16 @@ def join_list(items: Any) -> str:
     return t("common.separator").join(str(item) for item in items)
 
 
+class TranslatedDict(dict):
+    """A dict whose values are catalog keys, translated when read (``d[k]``, ``d.get(k)``)."""
+
+    def __getitem__(self, key: Any) -> str:
+        return t(super().__getitem__(key))
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        return t(super().__getitem__(key)) if key in self else default
+
+
 class ListParam(list):
     """A list param that joins itself with the separator of the language it renders in."""
 

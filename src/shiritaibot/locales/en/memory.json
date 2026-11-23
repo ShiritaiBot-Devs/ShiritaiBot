@@ -41,5 +41,145 @@
       "meme": "sticker",
       "kb": "knowledge base"
     }
+  },
+  "extract": {
+    "log": {
+      "extractSource": "Memory",
+      "gaveUp": "gave up",
+      "invalidEntry": "Memory extraction dropped an invalid {key} entry",
+      "retryLater": "attempt {attempts}; retrying later",
+      "eventTag": "Event {value}",
+      "loopError": "Memory extraction loop failed ({name})",
+      "eventFailed": "Event memory extraction failed ({name}), ",
+      "gateSkip": "The decision model found nothing worth remembering ({hint:.2f}); skipping extraction",
+      "dropped": ", dropped {dropped} entries that failed checks",
+      "droppedItem": "Memory extraction dropped “{brief}”: {reason}",
+      "sessionFailed": "Session memory extraction failed ({name}); retrying in {delay:.0f} s",
+      "done": "Memory extraction done: {facts} facts, {events} events"
+    },
+    "conflict": {
+      "thing": "thing",
+      "maybeSame": "may be {target} {name}; need to confirm whether they're the same"
+    },
+    "drop": {
+      "noTime": "The event has no time",
+      "noLine": "The evidence line doesn't exist",
+      "notAbsolute": "The time isn't absolute",
+      "assistant": "The evidence is the assistant's own words",
+      "notMember": "The evidence isn't something a session member said",
+      "relativeTime": "The content is empty or contains relative time words",
+      "forgotten": "The owner asked to forget this before",
+      "quoteMissing": "The evidence quote isn't in the cited line",
+      "future": "A past event is dated after it was mentioned",
+      "unknownId": "Refers to an ID that doesn't exist: {value}",
+      "unsupported": "The decision model found the source doesn't support it, or it's an instruction to the assistant"
+    },
+    "eventLabel": "Event {value}"
+  },
+  "longterm": {
+    "log": {
+      "source": "Memory",
+      "vectors": "Computed vectors for {done} memories",
+      "migrated": "Migrated {count} old memories into facts",
+      "entitySaved": "Memory entity saved: {head}",
+      "merged": "Memory entity e{source} merged into e{target}",
+      "vectorsError": "Memory vector loop failed ({name})",
+      "fact": "Memory fact {result}: {brief}",
+      "event": "Memory event {result}: {brief}",
+      "vectorsPaused": "Memory vector computing paused: {exc}; retrying in {backoff:.0f} s",
+      "learned": "Memory learned a new {kind}: {name}",
+      "resolved": "Memory conflict c{key} resolved by the owner's answer: {brief}",
+      "forgotten": "Memory {ref} forgotten: {brief}"
+    },
+    "labels": {
+      "person": "person",
+      "thing": "thing",
+      "personCap": "person"
+    },
+    "sources": {
+      "msg": "private chat",
+      "email": "email",
+      "routine": "schedule",
+      "legacy": "old memory",
+      "owner": "told by the owner",
+      "tool": "tool result",
+      "event": "external event"
+    },
+    "owner": "owner",
+    "result": {
+      "recorded": "Recorded",
+      "resolved": "Resolved",
+      "evidenceAdded": "Already exists; evidence added",
+      "refreshed": "Already exists; confirmation time refreshed",
+      "forgotten": "Forgotten (archived; viewable in the WebUI)",
+      "replaced": "Recorded, replacing f{id}",
+      "corrected": "Recorded, correcting v{id}",
+      "olderState": "Recorded as the older state before f{id}",
+      "conflict": "Recorded, but it conflicts with f{id} ({conflict}); the owner needs to confirm"
+    },
+    "render": {
+      "aliases": " (aliases: ",
+      "planned": "planned for ",
+      "new": " (newly learned)",
+      "invalid": " (no longer valid)",
+      "cancelled": " (cancelled)",
+      "unconfirmed": " (not confirmed to have happened)",
+      "conflicted": " (conflicting; waiting for the owner to confirm)",
+      "asOf": " (as of {current})",
+      "superseded": " (superseded by f{superseded_by})",
+      "corrected": " (corrected by v{superseded_by})",
+      "pending": "[To confirm] #{ref} {note}",
+      "mentioned": " (mentioned {month})",
+      "event": "[Event] {event_text}  #{ref}",
+      "fact": "[Fact] {facts_text}  #{ref}"
+    },
+    "contentEmpty": "Memory content can't be empty",
+    "pickId": "; name one with e<ID>",
+    "ownerMerge": "The owner can't be merged into another entity",
+    "relativeWords": "Memory content can't contain relative time words (",
+    "useAbsolute": "); convert them to absolute dates before saving",
+    "entityForgotten": "Entity e{key} was forgotten",
+    "conflictHandled": "Conflict c{key} was already handled",
+    "nameAmbiguous": "“{name}” already matches several entities (",
+    "ownerForget": "The owner can't be forgotten; forget specific facts instead",
+    "summaryRelative": "The summary can't contain relative time words; write absolute dates",
+    "useEntity": "); use the entity argument to say which one to update",
+    "evidenceAmbiguous": "evidence matches several places in the source; quote a longer piece",
+    "ownerQuote": "owner_quote must be quoted exactly from the owner's message this turn",
+    "refMissing": "Memory {ref} doesn't exist",
+    "evidenceShort": "evidence is too short; quote the original text that supports this memory exactly",
+    "sharedNames": "These names also belong to other entities, so lookups by name will ask for an ID: ",
+    "entityAmbiguous": "“{brief}” matches several entities: ",
+    "forgottenBefore": "This was asked to be forgotten; it can only be recorded again if the owner explicitly asks this turn",
+    "evidenceSources": "Source texts available this turn: {sources}.",
+    "eventFuture": "A past event can't be dated after now; use phase=planned for future plans",
+    "eventAuthority": "v{id} comes from a more reliable source; only the owner's explicit correction this turn can replace it",
+    "entityKind": "Creating an entity needs entity_kind: person or thing",
+    "eventTime": "Events need time (an absolute time); if the time is truly unclear, keep the original description in time_text",
+    "partialNote": "Memory may be incomplete; no record doesn't mean it didn't happen. Use memory_get to see the evidence when you need the original text.",
+    "keptInvalid": "{kept} isn't among the entries of conflict c{key}: {entries}",
+    "refInvalid": "Invalid memory ID: {brief} (like e7, f12, v31, c4)",
+    "conflictText": "“{brief}” contradicts “{brief2}”",
+    "evidenceRule": "evidence must be quoted exactly from the owner's message or a tool result this turn (not reworded, not from other turns); your own words and inferences can't be evidence.",
+    "decisionInvalid": "decision must be keep:<ID>, both_valid, neither, same_entity, or different_entity",
+    "entityUnknown": "Memory has no person or thing called “{brief}”; create it first with memory_save(kind=entity), or name it with e<ID>"
+  },
+  "recall": {
+    "log": {
+      "source": "Memory",
+      "injected": "Injected {count} memories"
+    }
+  },
+  "times": {
+    "unknown": "time unknown",
+    "unknownText": "time unknown: {text}",
+    "year": "{year}",
+    "absolute": "Times must be absolute: YYYY, YYYY-MM, YYYY-MM-DD, or YYYY-MM-DDTHH:MM (a time zone is allowed)"
+  },
+  "judge": {
+    "log": {
+      "source": "Memory",
+      "noResult": "The decision model gave no {point} result; using the text model or rules instead"
+    }
   }
 }

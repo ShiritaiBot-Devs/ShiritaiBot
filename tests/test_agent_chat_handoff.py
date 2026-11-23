@@ -11,7 +11,9 @@ from shiritaibot.auth import Permissions
 from shiritaibot.config import Settings
 from shiritaibot.core import Context, EventBus, Tool
 from shiritaibot.llm import ProviderManager
-from shiritaibot.memory.recall import HEADER
+from shiritaibot.prompts import prompt
+
+HEADER = prompt("MEMORY_HEADER_IDS", "zh-CN")
 from shiritaibot.store import Store, memory_context_key
 from shiritaibot.tools import ToolRegistry
 

@@ -144,5 +144,14 @@
     "configFailed": "The app setup didn't finish. Check the instance's status on the Connections page.",
     "saveExpired": "The local save window expired. If the app was created in Feishu, configure it by hand.",
     "noCredentials": "Couldn't get the Feishu app credentials. If you already created it on your phone, look up the App ID and App Secret on the Feishu Open Platform and configure it by hand."
+  },
+  "heartflow": {
+    "log": {
+      "source": "Group heartflow",
+      "expired": "The candidate reply expired",
+      "skipped": "Skipped this observation round ({name})",
+      "moodFailed": "Couldn't read the group mood ({name})",
+      "score": "{phase} score {score:.2f}, threshold {threshold:.2f}"
+    }
   }
 }

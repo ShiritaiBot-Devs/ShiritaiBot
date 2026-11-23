@@ -14,27 +14,28 @@ import jieba
 
 from shiritaibot.core import Context, PublicError, fingerprint, now
 from shiritaibot.core.logs import brief, get_logger
+from shiritaibot.i18n import Text, TranslatedDict, join_list, t
 from shiritaibot.memory.judge import MemoryJudge
 from shiritaibot.memory.times import month, parse_bound, parse_time, relative_words, render_time
 from shiritaibot.memory.vectors import VectorIndex
 from shiritaibot.store import MEMORY_PROFILE_FILTER
 
-log = get_logger("记忆")
+log = get_logger("memory.longterm.log.source")
 
 REF = re.compile(r"^([efvc])(\d+)$")
 TABLES = {"e": "mem_entity", "f": "mem_fact", "v": "mem_event", "c": "mem_conflict"}
 TYPES = {"e": "entity", "f": "fact", "v": "event", "c": "conflict"}
-LABELS = {"person": "人物", "thing": "事物"}
+LABELS = TranslatedDict({"person": "memory.longterm.labels.person", "thing": "memory.longterm.labels.thing"})
 AUTHORITY = {"agent": 0, "derived": 1, "direct": 2, "owner": 3}
 CONFIDENCE = {"agent": 0.5, "derived": 0.7, "direct": 0.85, "owner": 0.95}
-SOURCES = {
-    "owner": "主人告知",
-    "msg": "私聊",
-    "tool": "工具结果",
-    "event": "外部事件",
-    "legacy": "旧记忆",
-}
-EVENT_SOURCES = {"email": "邮件", "routine": "日程"}
+SOURCES = TranslatedDict({
+    "owner": "memory.longterm.sources.owner",
+    "msg": "memory.longterm.sources.msg",
+    "tool": "memory.longterm.sources.tool",
+    "event": "memory.longterm.sources.event",
+    "legacy": "memory.longterm.sources.legacy",
+})
+EVENT_SOURCES = TranslatedDict({"email": "memory.longterm.sources.email", "routine": "memory.longterm.sources.routine"})
 LIVE = ("active", "conflicted")
 CARD_FACTS = 6
 # Function words that never identify a memory on their own.
@@ -52,7 +53,7 @@ def ref(prefix: str, key: int) -> str:
 def parse_ref(value: str, prefixes: str = "efvc") -> tuple[str, int]:
     match = REF.match(value.strip())
     if not match or match.group(1) not in prefixes:
-        raise PublicError(f"无效的记忆编号：{brief(value, 20)}（形如 e7、f12、v31、c4）")
+        raise PublicError("memory.longterm.refInvalid", brief=brief(value, 20))
     return match.group(1), int(match.group(2))
 
 
@@ -163,7 +164,7 @@ class MemoryManager:
     async def row(self, prefix: str, key: int) -> dict:
         found = await self.rows(f"SELECT * FROM {TABLES[prefix]} WHERE id=?", (key,))
         if not found:
-            raise PublicError(f"记忆 {ref(prefix, key)} 不存在")
+            raise PublicError("memory.longterm.refMissing", ref=ref(prefix, key))
         return found[0]
 
     async def open(self) -> None:
@@ -210,7 +211,7 @@ class MemoryManager:
             await self.index([key])
         await self.store.put("memory_migration", "legacy", {"facts": len(rows)})
         if rows:
-            log.log(f"已将 {len(rows)} 条旧记忆迁移为事实")
+            log.log(Text("memory.longterm.log.migrated", count=len(rows)))
 
     async def owner_id(self) -> int:
         return (await self.rows("SELECT id FROM mem_entity WHERE role='owner'"))[0]["id"]
@@ -259,23 +260,22 @@ class MemoryManager:
             if row["status"] == "archived":
                 if row["merged_into"]:
                     return row["merged_into"]
-                raise PublicError(f"实体 e{key} 已被遗忘")
+                raise PublicError("memory.longterm.entityForgotten", key=key)
             return key
-        if value.casefold() in {self.config.value.owner_name.casefold(), "主人", "owner"}:
+        if value.casefold() in {self.config.value.owner_name.casefold(), t("memory.longterm.owner"), "owner"}:
             return await self.owner_id()
         found = sorted(self.aliases.get(value.casefold(), set()))
         if len(found) == 1:
             return found[0]
         if not found:
             raise PublicError(
-                f"记忆里没有叫「{brief(value, 30)}」的人或事物；"
-                "先用 memory_save(kind=entity) 建立，或用 e<编号> 指定"
+                "memory.longterm.entityUnknown", brief=brief(value, 30)
             )
         names = await self.entity_names(found)
         raise PublicError(
-            f"「{brief(value, 30)}」对应多个实体："
-            + "、".join(f"e{key} {names[key]}" for key in found)
-            + "；请用 e<编号> 指定"
+            t("memory.longterm.entityAmbiguous", brief=brief(value, 30))
+            + join_list(f"e{key} {names[key]}" for key in found)
+            + t("memory.longterm.pickId")
         )
 
     async def entity_names(self, keys) -> dict[int, str]:
@@ -294,7 +294,7 @@ class MemoryManager:
         """Return authority, source and an actual span of this turn's archived text."""
         target = normalize(quote)
         if len(target) < min_len:
-            raise PublicError("evidence 太短，请原样摘录支持这条记忆的原文")
+            raise PublicError("memory.longterm.evidenceShort")
         rows = await self.history_store.query(
             f"SELECT data FROM messages WHERE session=? AND turn=? AND {MEMORY_PROFILE_FILTER} ORDER BY seq",
             (ctx.session, ctx.turn, ctx.memory_profile),
@@ -333,20 +333,19 @@ class MemoryManager:
                 match = quote_span(content, compact, loose=True)
                 if match:
                     if found or match[1]:
-                        raise PublicError("evidence 对应多处原文，请摘录更完整的片段")
+                        raise PublicError("memory.longterm.evidenceAmbiguous")
                     found = authority, source, match[0]
             if found:
                 return found
-        hint = f"本轮可用的原文片段：{' / '.join(samples)}。" if samples else ""
+        hint = t("memory.longterm.evidenceSources", sources=' / '.join(samples)) if samples else ""
         raise PublicError(
-            "evidence 必须原样摘自本轮主人的消息或工具结果（不能改写、不能跨轮次），"
-            "你自己说的话和推断不能作为证据。" + hint
+            t("memory.longterm.evidenceRule") + hint
         )
 
     async def owner_words(self, ctx: Context, quote: str) -> str:
         authority, source, _ = await self.evidence(ctx, quote, strict=True, min_len=1)
         if authority != "owner":
-            raise PublicError("owner_quote 必须原样摘自主人本轮的消息")
+            raise PublicError("memory.longterm.ownerQuote")
         return source
 
     # ---- indexing ----------------------------------------------------------
@@ -485,18 +484,18 @@ class MemoryManager:
     def head(self, entity: dict) -> str:
         text = entity["name"]
         if entity["aliases"]:
-            text += "（别名：" + "、".join(entity["aliases"]) + "）"
+            text += t("memory.longterm.render.aliases") + join_list(entity["aliases"]) + "）"
         if entity["status"] == "candidate":
-            text += "（新认识）"
+            text += t("memory.longterm.render.new")
         return text
 
     def fact_text(self, fact: dict) -> str:
         text = brief(fact["content"], 240)
         if fact["status"] == "conflicted":
-            text += "（有冲突，待主人确认）"
+            text += t("memory.longterm.render.conflicted")
         elif fact["status"] == "superseded":
             text += (
-                f"（已被 f{fact['superseded_by']} 取代）" if fact["superseded_by"] else "（已失效）"
+                t("memory.longterm.render.superseded", superseded_by=fact['superseded_by']) if fact["superseded_by"] else t("memory.longterm.render.invalid")
             )
         return text + f" #{fact['ref']}"
 
@@ -506,12 +505,12 @@ class MemoryManager:
         for fact in facts:
             stamp = month(fact["as_of"], self.zone)
             if run and stamp != current:
-                parts.append("；".join(run) + f"（截至 {current}）")
+                parts.append("；".join(run) + t("memory.longterm.render.asOf", current=current))
                 run = []
             run.append(self.fact_text(fact))
             current = stamp
         if run:
-            parts.append("；".join(run) + f"（截至 {current}）")
+            parts.append("；".join(run) + t("memory.longterm.render.asOf", current=current))
         return "；".join(parts)
 
     def source_label(self, source: str) -> str:
@@ -526,16 +525,16 @@ class MemoryManager:
             event["occurred_at"], event["granularity"], self.zone, event["time_text"]
         )
         if event["granularity"] == "fuzzy" and event["time_text"]:
-            when += f"（{month(event['created'], self.zone)} 提及）"
+            when += t("memory.longterm.render.mentioned", month=month(event['created'], self.zone))
         text = f"{when} {brief(event['content'], 240)}"
         if event["phase"] == "planned":
-            text = "计划于 " + text
+            text = t("memory.longterm.render.planned") + text
             if event["occurred_at"] and event["occurred_at"] < now().timestamp():
-                text += "（未确认是否发生）"
+                text += t("memory.longterm.render.unconfirmed")
         elif event["phase"] == "cancelled":
-            text += "（已取消）"
+            text += t("memory.longterm.render.cancelled")
         if event["status"] == "superseded":
-            text += f"（已被 v{event['superseded_by']} 更正）"
+            text += t("memory.longterm.render.corrected", superseded_by=event['superseded_by'])
         label = self.source_label(event["source"])
         return text + (f"〔{label}〕" if label else "")
 
@@ -554,7 +553,7 @@ class MemoryManager:
     def line(self, item: dict, facts: list[dict] | None = None) -> str:
         """One injected or listed line; entity cards carry the given facts."""
         if item["type"] == "entity":
-            label = "人物" if item["role"] == "owner" else LABELS.get(item["kind"], "事物")
+            label = t("memory.longterm.labels.personCap") if item["role"] == "owner" else LABELS.get(item["kind"], t("memory.longterm.labels.thing"))
             body = "；".join(x for x in [item["summary"], self.facts_text(facts or [])] if x)
             return (
                 f"[{label}] {self.head(item)}" + (f"：{body}" if body else "") + f"  #{item['ref']}"
@@ -562,10 +561,10 @@ class MemoryManager:
         if item["type"] == "fact":
             if item["entity"]:
                 return self.line(item["entity"], [item])
-            return f"[知识] {self.facts_text([item])}  #{item['ref']}"
+            return t("memory.longterm.render.fact", facts_text=self.facts_text([item]), ref=item['ref'])
         if item["type"] == "event":
-            return f"[事件] {self.event_text(item)}  #{item['ref']}"
-        return f"[待确认] #{item['ref']} {item['note']}"
+            return t("memory.longterm.render.event", event_text=self.event_text(item), ref=item['ref'])
+        return t("memory.longterm.render.pending", ref=item['ref'], note=item['note'])
 
     async def card_facts(self, entity: int, limit: int = CARD_FACTS) -> list[str]:
         rows = await self.rows(
@@ -603,7 +602,7 @@ class MemoryManager:
         name = name.strip()
         aliases = [a.strip() for a in aliases or [] if a.strip()]
         if relative_words(summary or ""):
-            raise PublicError("简介不能含相对时间词，请写成绝对日期")
+            raise PublicError("memory.longterm.summaryRelative")
         trusted = ctx.owner and not ctx.background
         stamp = now().timestamp()
         if target:
@@ -613,13 +612,13 @@ class MemoryManager:
             if len(matches) > 1:
                 names = await self.entity_names(matches)
                 raise PublicError(
-                    f"「{name}」已对应多个实体（"
-                    + "、".join(f"e{m} {names[m]}" for m in matches)
-                    + "），请用 entity 参数指定要更新哪一个"
+                    t("memory.longterm.nameAmbiguous", name=name)
+                    + join_list(f"e{m} {names[m]}" for m in matches)
+                    + t("memory.longterm.useEntity")
                 )
             key = matches[0] if matches else 0
         if not key and kind not in LABELS:
-            raise PublicError("新建实体需要 entity_kind：person（人物）或 thing（事物）")
+            raise PublicError("memory.longterm.entityKind")
         async with self.tx() as db:
             if key:
                 row = (
@@ -678,12 +677,12 @@ class MemoryManager:
             alias for alias in [name, *aliases] if len(self.aliases.get(alias.casefold(), ())) > 1
         ]
         item = (await self.load([ref("e", key)]))[ref("e", key)]
-        log.log(f"记忆实体已保存：{self.head(item)}")
+        log.log(Text("memory.longterm.log.entitySaved", head=self.head(item)))
         result: dict = {"id": ref("e", key), "text": self.line(item)}
         if merged:
             result["merged"] = merged
         if shared:
-            result["note"] = "这些称呼同时属于其他实体，按名字查找时会要求指定编号：" + "、".join(
+            result["note"] = t("memory.longterm.sharedNames") + join_list(
                 shared
             )
         return result
@@ -699,7 +698,7 @@ class MemoryManager:
             )
             key = cursor.lastrowid or 0
         await self.add_aliases(key, aliases, source)
-        log.log(f"记忆中新认识了{LABELS.get(kind, '事物')}：{name}")
+        log.log(Text("memory.longterm.log.learned", kind=LABELS.get(kind, t("memory.longterm.labels.thing")), name=name))
         return key
 
     async def add_aliases(self, entity: int, aliases: list[str], source: str) -> None:
@@ -769,7 +768,7 @@ class MemoryManager:
 
     async def merge_entities(self, target: int, source: int) -> None:
         if source == await self.owner_id():
-            raise PublicError("不能把主人合并到其他实体")
+            raise PublicError("memory.longterm.ownerMerge")
         stamp = now().timestamp()
         affected = await self.card_facts(source, 10000)
         async with self.tx() as db:
@@ -804,16 +803,16 @@ class MemoryManager:
                 (stamp, target),
             )
         await self.index([ref("e", source), ref("e", target), *affected])
-        log.log(f"记忆实体 e{source} 已合并到 e{target}")
+        log.log(Text("memory.longterm.log.merged", source=source, target=target))
 
     def check_content(self, content: str) -> str:
         content = content.strip()
         if not content:
-            raise PublicError("记忆内容不能为空")
+            raise PublicError("memory.longterm.contentEmpty")
         words = relative_words(content)
         if words:
             raise PublicError(
-                "记忆内容不能含相对时间词（" + "、".join(words) + "），请换算成绝对日期后再写入"
+                t("memory.longterm.relativeWords") + join_list(words) + t("memory.longterm.useAbsolute")
             )
         return content
 
@@ -822,7 +821,7 @@ class MemoryManager:
             "SELECT target FROM mem_tombstone WHERE hash=?", (fingerprint(normalize(content)),)
         )
         if rows and authority != "owner":
-            raise PublicError("这条内容曾被要求忘掉；只有主人本轮明确要求时才能重新记录")
+            raise PublicError("memory.longterm.forgottenBefore")
 
     # Low-level writes shared by the tools and automatic extraction; callers hold tx().
 
@@ -873,7 +872,7 @@ class MemoryManager:
                     (proof.observed, stronger, proof.weight, stamp, key),
                 )
                 await self.add_evidence(db, ref("f", key), proof)
-                result = "已存在，已刷新确认时间"
+                result = t("memory.longterm.result.refreshed")
             else:
                 status = "superseded" if history else "active"
                 cursor = await db.execute(
@@ -896,7 +895,7 @@ class MemoryManager:
                 )
                 key = cursor.lastrowid or 0
                 await self.add_evidence(db, ref("f", key), proof)
-                result = f"已作为 f{old['id']} 之前的旧状态记录" if history and old else "已记录"
+                result = t("memory.longterm.result.olderState", id=old['id']) if history and old else t("memory.longterm.result.recorded")
                 if old and not history:
                     strength = AUTHORITY[proof.authority] - AUTHORITY[old["authority"]]
                     if strength > 0 or (strength == 0 and equal_wins):
@@ -905,7 +904,7 @@ class MemoryManager:
                             "updated=? WHERE id=?",
                             (key, proof.observed, stamp, old["id"]),
                         )
-                        result = f"已记录，并取代 f{old['id']}"
+                        result = t("memory.longterm.result.replaced", id=old['id'])
                     else:
                         # The owner decides between sources that cannot overrule each other.
                         await db.execute(
@@ -916,12 +915,12 @@ class MemoryManager:
                             db,
                             "fact",
                             [ref("f", old["id"]), ref("f", key)],
-                            f"「{brief(old['content'], 80)}」与「{brief(content, 80)}」互相矛盾",
+                            t("memory.longterm.conflictText", brief=brief(old['content'], 80), brief2=brief(content, 80)),
                         )
-                        result = f"已记录，但与 f{old['id']} 冲突（{conflict}），需要主人确认"
+                        result = t("memory.longterm.result.conflict", id=old['id'], conflict=conflict)
                     refs.append(ref("f", old["id"]))
         await self.index([ref("f", key), *refs])
-        log.log(f"记忆事实{result}：{brief(content, 80)}")
+        log.log(Text("memory.longterm.log.fact", result=result, brief=brief(content, 80)))
         return key, result
 
     async def write_event(
@@ -948,7 +947,7 @@ class MemoryManager:
         async with self.tx() as db:
             if same_as is not None:
                 key = same_as
-                result = "已存在，已补充证据"
+                result = t("memory.longterm.result.evidenceAdded")
             else:
                 cursor = await db.execute(
                     "INSERT INTO mem_event(content,occurred_at,tz,granularity,time_text,phase,"
@@ -966,7 +965,7 @@ class MemoryManager:
                     ),
                 )
                 key = cursor.lastrowid or 0
-                result = "已记录"
+                result = t("memory.longterm.result.recorded")
             await db.executemany(
                 "INSERT OR IGNORE INTO mem_participant VALUES(?,?)",
                 [(key, p) for p in dict.fromkeys(people or [])],
@@ -975,15 +974,15 @@ class MemoryManager:
             if old and old["id"] != key:
                 if AUTHORITY[proof.authority] < AUTHORITY[old["authority"]]:
                     raise PublicError(
-                        f"v{old['id']} 来自更可靠的来源，只有主人本轮明确更正时才能取代"
+                        "memory.longterm.eventAuthority", id=old['id']
                     )
                 await db.execute(
                     "UPDATE mem_event SET status='superseded',superseded_by=?,updated=? WHERE id=?",
                     (key, stamp, old["id"]),
                 )
-                result = f"已记录，并更正 v{old['id']}"
+                result = t("memory.longterm.result.corrected", id=old['id'])
         await self.index([ref("v", key), *([ref("v", old["id"])] if old else [])])
-        log.log(f"记忆事件{result}：{brief(content, 80)}")
+        log.log(Text("memory.longterm.log.event", result=result, brief=brief(content, 80)))
         return key, result
 
     async def save_fact(
@@ -1031,11 +1030,11 @@ class MemoryManager:
             occurred, granularity = None, "fuzzy"
         else:
             raise PublicError(
-                "事件需要 time（绝对时间）；时间确实不明确时用 time_text 保留原文描述"
+                "memory.longterm.eventTime"
             )
         stamp = now().timestamp()
         if phase == "happened" and occurred is not None and occurred > stamp + 3600:
-            raise PublicError("已发生的事件时间不能晚于现在；将来的安排请用 phase=planned")
+            raise PublicError("memory.longterm.eventFuture")
         people = [await self.resolve_entity(p) for p in participants or []]
         old = await self.row(*parse_ref(replaces, "v")) if replaces else None
         key, result = await self.write_event(
@@ -1060,7 +1059,7 @@ class MemoryManager:
         prefix, key = parse_ref(value, "efv")
         row = await self.row(prefix, key)
         if prefix == "e" and row["role"] == "owner":
-            raise PublicError("不能遗忘主人本身；请遗忘具体的事实")
+            raise PublicError("memory.longterm.ownerForget")
         stamp = now().timestamp()
         content = row.get("content") or row.get("name", "")
         async with self.tx() as db:
@@ -1074,8 +1073,8 @@ class MemoryManager:
         if prefix == "e":
             await self.load_aliases()
         await self.index([ref(prefix, key)])
-        log.log(f"记忆 {ref(prefix, key)} 已遗忘：{brief(reason, 80)}")
-        return {"id": ref(prefix, key), "result": "已遗忘（归档，可在 WebUI 查看）"}
+        log.log(Text("memory.longterm.log.forgotten", ref=ref(prefix, key), brief=brief(reason, 80)))
+        return {"id": ref(prefix, key), "result": t("memory.longterm.result.forgotten")}
 
     async def resolve_conflict(
         self, ctx: Context, conflict: str, decision: str, owner_quote: str, note: str = ""
@@ -1083,7 +1082,7 @@ class MemoryManager:
         _, key = parse_ref(conflict, "c")
         row = await self.row("c", key)
         if row["status"] != "open":
-            raise PublicError(f"冲突 c{key} 已经处理过")
+            raise PublicError("memory.longterm.conflictHandled", key=key)
         source = await self.owner_words(ctx, owner_quote)
         items = json.loads(row["items"])
         stamp = now().timestamp()
@@ -1091,7 +1090,7 @@ class MemoryManager:
         if decision.startswith("keep:"):
             kept = decision.removeprefix("keep:").strip()
             if kept not in items:
-                raise PublicError(f"{kept} 不在冲突 c{key} 涉及的条目中：{'、'.join(items)}")
+                raise PublicError("memory.longterm.keptInvalid", kept=kept, key=key, entries='、'.join(items))
             prefix, kept_id = parse_ref(kept, "fv")
             table = TABLES[prefix]
             async with self.tx() as db:
@@ -1129,7 +1128,7 @@ class MemoryManager:
                 await self.merge_entities(first, other)
         elif decision != "different_entity":
             raise PublicError(
-                "decision 只能是 keep:<编号>、both_valid、neither、same_entity 或 different_entity"
+                "memory.longterm.decisionInvalid"
             )
         resolution = decision + (f"：{note.strip()}" if note.strip() else "")
         await self.store.execute(
@@ -1138,8 +1137,8 @@ class MemoryManager:
         )
         if touched:
             await self.index(touched)
-        log.log(f"记忆冲突 c{key} 已按主人答复处理：{brief(resolution, 80)}")
-        return {"id": ref("c", key), "result": "已处理", "resolution": resolution}
+        log.log(Text("memory.longterm.log.resolved", key=key, brief=brief(resolution, 80)))
+        return {"id": ref("c", key), "result": t("memory.longterm.result.resolved"), "resolution": resolution}
 
     # ---- reads ---------------------------------------------------------------
 
@@ -1148,7 +1147,7 @@ class MemoryManager:
         items = await self.load([ref(prefix, key)])
         item = items.get(ref(prefix, key))
         if item is None:
-            raise PublicError(f"记忆 {ref(prefix, key)} 不存在")
+            raise PublicError("memory.longterm.refMissing", ref=ref(prefix, key))
         result: dict = {"id": item["ref"], "type": item["type"], "status": item["status"]}
         if prefix == "e":
             facts = await self.load(await self.card_facts(key, 50))
@@ -1315,7 +1314,7 @@ class MemoryManager:
                 break
         return {
             "results": results,
-            "note": "记忆可能不完整；没有记录不代表没有发生。需要原文时用 memory_get 查看证据。",
+            "note": t("memory.longterm.partialNote"),
         }
 
     async def browse(self, kind: str = "", query: str = "", limit: int = 200) -> list[dict]:
@@ -1402,13 +1401,13 @@ class MemoryManager:
                 if self.vectors.key() is not None:
                     done = await self.vectors.sync(await self.documents())
                     if done:
-                        log.debug(f"已为 {done} 条记忆计算向量")
+                        log.debug(Text("memory.longterm.log.vectors", done=done))
                 backoff = 30.0
             except Exception as exc:
                 if isinstance(exc, PublicError):
-                    log.warning(f"记忆向量计算暂停：{exc}，{backoff:.0f} 秒后重试")
+                    log.warning(Text("memory.longterm.log.vectorsPaused", exc=exc, backoff=backoff))
                 else:
-                    log.error(f"记忆向量循环出错（{type(exc).__name__}）", exc=exc)
+                    log.error(Text("memory.longterm.log.vectorsError", name=type(exc).__name__), exc=exc)
                 # Failing providers are retried on a timer, not on every new memory.
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 900)

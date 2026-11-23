@@ -40,5 +40,145 @@
       "meme": "表情",
       "kb": "知识库"
     }
+  },
+  "extract": {
+    "log": {
+      "extractSource": "记忆",
+      "gaveUp": "已放弃",
+      "invalidEntry": "记忆抽取丢弃格式无效的{key}条目",
+      "retryLater": "第 {attempts} 次，稍后重试",
+      "eventTag": "事件 {value}",
+      "loopError": "记忆抽取循环出错（{name}）",
+      "eventFailed": "事件记忆抽取失败（{name}），",
+      "gateSkip": "判断模型认为没有值得记住的内容（{hint:.2f}），跳过抽取",
+      "dropped": "，丢弃 {dropped} 条未通过校验的内容",
+      "droppedItem": "记忆抽取丢弃「{brief}」：{reason}",
+      "sessionFailed": "会话记忆抽取失败（{name}），{delay:.0f} 秒后重试",
+      "done": "记忆抽取完成：{facts} 条事实，{events} 个事件"
+    },
+    "conflict": {
+      "thing": "事物",
+      "maybeSame": "可能就是 {target} {name}，需要确认是不是同一个"
+    },
+    "drop": {
+      "noTime": "事件没有时间",
+      "noLine": "证据行号不存在",
+      "notAbsolute": "时间不是绝对时间",
+      "assistant": "证据是助手自己说的话",
+      "notMember": "证据不是会话成员的发言",
+      "relativeTime": "内容为空或含相对时间词",
+      "forgotten": "主人曾要求忘掉这条内容",
+      "quoteMissing": "证据摘录不在所引的原文中",
+      "future": "已发生的事件晚于说出它的时间",
+      "unknownId": "引用了不存在的编号 {value}",
+      "unsupported": "判断模型认为原文不支持，或这是对助手的指令"
+    },
+    "eventLabel": "事件 {value}"
+  },
+  "longterm": {
+    "log": {
+      "source": "记忆",
+      "vectors": "已为 {done} 条记忆计算向量",
+      "migrated": "已将 {count} 条旧记忆迁移为事实",
+      "entitySaved": "记忆实体已保存：{head}",
+      "merged": "记忆实体 e{source} 已合并到 e{target}",
+      "vectorsError": "记忆向量循环出错（{name}）",
+      "fact": "记忆事实{result}：{brief}",
+      "event": "记忆事件{result}：{brief}",
+      "vectorsPaused": "记忆向量计算暂停：{exc}，{backoff:.0f} 秒后重试",
+      "learned": "记忆中新认识了{kind}：{name}",
+      "resolved": "记忆冲突 c{key} 已按主人答复处理：{brief}",
+      "forgotten": "记忆 {ref} 已遗忘：{brief}"
+    },
+    "labels": {
+      "person": "人物",
+      "thing": "事物",
+      "personCap": "人物"
+    },
+    "sources": {
+      "msg": "私聊",
+      "email": "邮件",
+      "routine": "日程",
+      "legacy": "旧记忆",
+      "owner": "主人告知",
+      "tool": "工具结果",
+      "event": "外部事件"
+    },
+    "owner": "主人",
+    "result": {
+      "recorded": "已记录",
+      "resolved": "已处理",
+      "evidenceAdded": "已存在，已补充证据",
+      "refreshed": "已存在，已刷新确认时间",
+      "forgotten": "已遗忘（归档，可在 WebUI 查看）",
+      "replaced": "已记录，并取代 f{id}",
+      "corrected": "已记录，并更正 v{id}",
+      "olderState": "已作为 f{id} 之前的旧状态记录",
+      "conflict": "已记录，但与 f{id} 冲突（{conflict}），需要主人确认"
+    },
+    "render": {
+      "aliases": "（别名：",
+      "planned": "计划于 ",
+      "new": "（新认识）",
+      "invalid": "（已失效）",
+      "cancelled": "（已取消）",
+      "unconfirmed": "（未确认是否发生）",
+      "conflicted": "（有冲突，待主人确认）",
+      "asOf": "（截至 {current}）",
+      "superseded": "（已被 f{superseded_by} 取代）",
+      "corrected": "（已被 v{superseded_by} 更正）",
+      "pending": "[待确认] #{ref} {note}",
+      "mentioned": "（{month} 提及）",
+      "event": "[事件] {event_text}  #{ref}",
+      "fact": "[知识] {facts_text}  #{ref}"
+    },
+    "contentEmpty": "记忆内容不能为空",
+    "pickId": "；请用 e<编号> 指定",
+    "ownerMerge": "不能把主人合并到其他实体",
+    "relativeWords": "记忆内容不能含相对时间词（",
+    "useAbsolute": "），请换算成绝对日期后再写入",
+    "entityForgotten": "实体 e{key} 已被遗忘",
+    "conflictHandled": "冲突 c{key} 已经处理过",
+    "nameAmbiguous": "「{name}」已对应多个实体（",
+    "ownerForget": "不能遗忘主人本身；请遗忘具体的事实",
+    "summaryRelative": "简介不能含相对时间词，请写成绝对日期",
+    "useEntity": "），请用 entity 参数指定要更新哪一个",
+    "evidenceAmbiguous": "evidence 对应多处原文，请摘录更完整的片段",
+    "ownerQuote": "owner_quote 必须原样摘自主人本轮的消息",
+    "refMissing": "记忆 {ref} 不存在",
+    "evidenceShort": "evidence 太短，请原样摘录支持这条记忆的原文",
+    "sharedNames": "这些称呼同时属于其他实体，按名字查找时会要求指定编号：",
+    "entityAmbiguous": "「{brief}」对应多个实体：",
+    "forgottenBefore": "这条内容曾被要求忘掉；只有主人本轮明确要求时才能重新记录",
+    "evidenceSources": "本轮可用的原文片段：{sources}。",
+    "eventFuture": "已发生的事件时间不能晚于现在；将来的安排请用 phase=planned",
+    "eventAuthority": "v{id} 来自更可靠的来源，只有主人本轮明确更正时才能取代",
+    "entityKind": "新建实体需要 entity_kind：person（人物）或 thing（事物）",
+    "eventTime": "事件需要 time（绝对时间）；时间确实不明确时用 time_text 保留原文描述",
+    "partialNote": "记忆可能不完整；没有记录不代表没有发生。需要原文时用 memory_get 查看证据。",
+    "keptInvalid": "{kept} 不在冲突 c{key} 涉及的条目中：{entries}",
+    "refInvalid": "无效的记忆编号：{brief}（形如 e7、f12、v31、c4）",
+    "conflictText": "「{brief}」与「{brief2}」互相矛盾",
+    "evidenceRule": "evidence 必须原样摘自本轮主人的消息或工具结果（不能改写、不能跨轮次），你自己说的话和推断不能作为证据。",
+    "decisionInvalid": "decision 只能是 keep:<编号>、both_valid、neither、same_entity 或 different_entity",
+    "entityUnknown": "记忆里没有叫「{brief}」的人或事物；先用 memory_save(kind=entity) 建立，或用 e<编号> 指定"
+  },
+  "recall": {
+    "log": {
+      "source": "记忆",
+      "injected": "注入 {count} 条记忆"
+    }
+  },
+  "times": {
+    "unknown": "时间不详",
+    "unknownText": "时间不详：{text}",
+    "year": "{year} 年",
+    "absolute": "时间必须是绝对时间：YYYY、YYYY-MM、YYYY-MM-DD 或 YYYY-MM-DDTHH:MM（可带时区）"
+  },
+  "judge": {
+    "log": {
+      "source": "记忆",
+      "noResult": "判断模型未给出 {point} 结果，改用文本模型或规则"
+    }
   }
 }

@@ -42,5 +42,14 @@
   "chatToolCall": "Agent Chat returned a tool call. Check the model settings and try again.",
   "turnFailed": "This turn failed ({name})",
   "stepLimit": "Reached this turn's step limit ({steps} steps): the earlier steps are done, but the task needs more. You can ask me to continue, narrow it down and retry, or raise max_steps in Settings → Policy.",
-  "timeLimit": "This turn reached its time limit ({max_turn_seconds} seconds, {steps} steps): the earlier steps are done, but the task needs more time. You can ask me to continue, split the task and retry, or raise max_turn_seconds in Settings → Policy."
+  "timeLimit": "This turn reached its time limit ({max_turn_seconds} seconds, {steps} steps): the earlier steps are done, but the task needs more time. You can ask me to continue, split the task and retry, or raise max_turn_seconds in Settings → Policy.",
+  "context": {
+    "log": {
+      "source": "Context",
+      "compressFailed": "Context compression failed; dropping old turns according to the policy",
+      "compressed": "Context compressed: {split} old turns merged into a {count}-character summary"
+    },
+    "compressFailed": "Context compression failed: no candidate model returned a valid summary.",
+    "limit": "This turn's input hit the context character limit. Shorten the input or raise the limit."
+  }
 }

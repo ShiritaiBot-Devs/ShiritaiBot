@@ -144,5 +144,14 @@
     "configFailed": "应用配置未能完成，请在协议连接页检查实例状态。",
     "saveExpired": "本地保存窗口已过期。若应用已在飞书创建，请用手动配置。",
     "noCredentials": "未能获取飞书应用凭据。若已在手机上创建，请在飞书开放平台查看 App ID 和 App Secret，再手动配置。"
+  },
+  "heartflow": {
+    "log": {
+      "source": "群聊心流",
+      "expired": "候选回复已过期",
+      "skipped": "跳过本轮观察（{name}）",
+      "moodFailed": "群情绪读取失败（{name}）",
+      "score": "{phase} 评分 {score:.2f}，门槛 {threshold:.2f}"
+    }
   }
 }

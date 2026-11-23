@@ -42,5 +42,14 @@
   "chatToolCall": "Agent Chat 返回了工具调用，请检查模型配置后重试",
   "turnFailed": "本轮执行失败 ({name})",
   "stepLimit": "已达到本轮步数限制（{steps} 步）：已完成前面的步骤，但任务还需要更多操作。可以让我接着做、把范围缩小后重试，或在设置 → 策略里提高 max_steps。",
-  "timeLimit": "本轮执行时间已达上限（{max_turn_seconds} 秒，{steps} 步）：已完成前面的步骤，但任务还需要更多时间。可以让我接着做、把任务拆小后重试，或在设置 → 策略里提高 max_turn_seconds。"
+  "timeLimit": "本轮执行时间已达上限（{max_turn_seconds} 秒，{steps} 步）：已完成前面的步骤，但任务还需要更多时间。可以让我接着做、把任务拆小后重试，或在设置 → 策略里提高 max_turn_seconds。",
+  "context": {
+    "log": {
+      "source": "上下文",
+      "compressFailed": "上下文压缩失败，按丢弃策略推进旧轮次",
+      "compressed": "上下文已压缩：{split} 轮旧对话合并为 {count} 字摘要"
+    },
+    "compressFailed": "上下文压缩失败：所有候选模型均未返回有效摘要。",
+    "limit": "本轮输入达到上下文字符上限，请减少输入或调高上限。"
+  }
 }

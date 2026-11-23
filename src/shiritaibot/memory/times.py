@@ -7,8 +7,9 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from shiritaibot.core import PublicError
+from shiritaibot.i18n import t
+from shiritaibot.prompts import prompt as prompt_text
 
-WEEKDAYS = "一二三四五六日"
 # Stored memory must never depend on when it is read.
 RELATIVE = re.compile(
     r"大?[前昨今明后]天|[今昨明]早|[今昨明]晚|今晨|"
@@ -22,7 +23,7 @@ FORMATS = (
     (re.compile(r"^\d{4}-\d{2}$"), "month"),
     (re.compile(r"^\d{4}-\d{2}-\d{2}$"), "day"),
 )
-ABSOLUTE_HINT = "时间必须是绝对时间：YYYY、YYYY-MM、YYYY-MM-DD 或 YYYY-MM-DDTHH:MM（可带时区）"
+ABSOLUTE_HINT = "memory.times.absolute"
 
 
 def relative_words(text: str) -> list[str]:
@@ -68,11 +69,11 @@ def parse_bound(value: str, zone: ZoneInfo, *, end: bool) -> float:
 
 def render_time(stamp: float | None, granularity: str, zone: ZoneInfo, text: str = "") -> str:
     if stamp is None or granularity == "fuzzy":
-        return f"时间不详：{text}" if text else "时间不详"
+        return t("memory.times.unknownText", text=text) if text else t("memory.times.unknown")
     local = datetime.fromtimestamp(stamp, zone)
-    weekday = f"（周{WEEKDAYS[local.weekday()]}）"
+    weekday = prompt_text("TIME_WEEKDAY", weekday=t(f"tools.weekdays.{local.weekday()}"))
     if granularity == "year":
-        return f"{local.year} 年"
+        return t("memory.times.year", year=local.year)
     if granularity == "month":
         return local.strftime("%Y-%m")
     if granularity == "day":
