@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal, Protocol
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
-from shiritaibot.i18n import t
+from shiritaibot.i18n import localize, t
 
 if TYPE_CHECKING:
     from shiritaibot.auth.menu import ApprovalMenu
@@ -152,12 +152,13 @@ class Tool:
         return self.risk == "safe"
 
     def spec(self) -> dict[str, Any]:
+        """The model-facing definition, in the active locale (descriptions may be keys)."""
         return {
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": self.description,
-                "parameters": self.schema,
+                "description": t(self.description),
+                "parameters": localize(self.schema),
             },
         }
 

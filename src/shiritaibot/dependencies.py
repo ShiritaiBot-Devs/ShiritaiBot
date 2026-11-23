@@ -30,6 +30,7 @@ from packaging.utils import parse_sdist_filename, parse_wheel_filename
 
 from shiritaibot.core import PublicError
 from shiritaibot.core.process import run_process
+from shiritaibot.i18n import t
 
 FORMAT = 1
 MANIFESTS = ("metadata.yaml", "plugin.toml")
@@ -56,7 +57,7 @@ def plugin_paths(core: Path, home: Path) -> dict[str, Path]:
 def source_root() -> Path:
     root = Path(__file__).resolve().parents[2]
     if not (root / "uv.lock").is_file() or not (root / "pyproject.toml").is_file():
-        raise PublicError("找不到 Core 的 pyproject.toml / uv.lock，请从完整源码目录启动")
+        raise PublicError("dependencies.noCore")
     return root
 
 
@@ -100,13 +101,13 @@ class DeclarationReader:
         try:
             value = path.read_text(encoding="utf-8-sig")
         except (OSError, UnicodeError):
-            raise PublicError(f"无法读取依赖声明 {path.name}") from None
+            raise PublicError("dependencies.unreadable", name=path.name) from None
         self.inputs[str(path)] = value
         return value
 
     def requirement(self, value: str, base: Path) -> str:
         if "${" in value:
-            raise PublicError("依赖声明不支持环境变量展开，请使用无凭据的依赖地址")
+            raise PublicError("dependencies.noEnvVars")
         # Bare local directories and archives need a distribution name for PEP 508.
         if value.startswith(("./", "../", "/", ".\\", "..\\")) or re.match(
             r"^[A-Za-z]:[\\/]", value
@@ -116,7 +117,7 @@ class DeclarationReader:
                 metadata = tomllib.loads(self.read(path / "pyproject.toml"))
                 name = metadata.get("project", {}).get("name")
                 if not name:
-                    raise PublicError("本地依赖目录需要在 pyproject.toml 中声明 project.name")
+                    raise PublicError("dependencies.localName")
             else:
                 try:
                     name = (
@@ -125,17 +126,17 @@ class DeclarationReader:
                         else parse_sdist_filename(path.name)[0]
                     )
                 except ValueError:
-                    raise PublicError("无法识别本地依赖，请使用 name @ file:///绝对路径") from None
+                    raise PublicError("dependencies.localUnknown") from None
                 # Changes to an archive must invalidate the combined environment.
                 try:
                     self.inputs[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
                 except OSError:
-                    raise PublicError("本地依赖文件不存在") from None
+                    raise PublicError("dependencies.localMissing") from None
             value = f"{name} @ {path.as_uri()}"
         try:
             requirement = Requirement(value)
         except InvalidRequirement:
-            raise PublicError("依赖格式无效，请使用 PEP 508 包名、版本范围或 name @ URL") from None
+            raise PublicError("dependencies.invalid") from None
         if requirement.url:
             url = requirement.url
             parsed = urlsplit(url)
@@ -144,7 +145,7 @@ class DeclarationReader:
                 or parsed.query
                 or (parsed.username and parsed.scheme not in {"ssh", "git+ssh"})
             ):
-                raise PublicError("依赖地址不能包含凭据或查询参数，请通过 uv 的认证配置提供凭据")
+                raise PublicError("dependencies.credentials")
             if not parsed.scheme or parsed.scheme == "file":
                 raw_path = url2pathname(parsed.path) if parsed.scheme == "file" else parsed.path
                 if parsed.netloc and parsed.netloc != "localhost":
@@ -157,7 +158,7 @@ class DeclarationReader:
                     try:
                         self.inputs[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
                     except OSError:
-                        raise PublicError("本地依赖文件不存在") from None
+                        raise PublicError("dependencies.localMissing") from None
         return str(requirement)
 
     def requirements(
@@ -165,7 +166,7 @@ class DeclarationReader:
     ) -> Declaration:
         path = path.resolve()
         if path in stack or len(stack) >= 20:
-            raise PublicError("requirements 文件递归引用或嵌套超过 20 层")
+            raise PublicError("dependencies.recursive")
         text = re.sub(r"\\\r?\n", " ", self.read(path))
         result = Declaration([], [])
         for line in text.splitlines():
@@ -185,8 +186,7 @@ class DeclarationReader:
                 continue
             if line.startswith("-") or re.search(r"\s--[a-z]", line):
                 raise PublicError(
-                    "requirements 仅支持依赖声明及 -r/-c 引用；安装源请配置 uv，"
-                    "editable、hash 等 pip 安装选项暂不支持"
+                    "dependencies.requirementsOptions"
                 )
             value = self.requirement(line, path.parent)
             (result.constraints if constraint else result.dependencies).append(value)
@@ -198,7 +198,7 @@ class DeclarationReader:
             try:
                 data = tomllib.loads(self.read(project))
             except tomllib.TOMLDecodeError:
-                raise PublicError("插件 pyproject.toml 格式无效") from None
+                raise PublicError("dependencies.pyprojectInvalid") from None
             metadata = data.get("project", {})
             if "project" not in data:
                 requirements = directory / "requirements.txt"
@@ -208,28 +208,28 @@ class DeclarationReader:
                     else Declaration([], [])
                 )
             if "dependencies" in metadata.get("dynamic", []):
-                raise PublicError("插件依赖必须静态声明在 project.dependencies")
+                raise PublicError("dependencies.static")
             if data.get("tool", {}).get("uv", {}).get("sources"):
                 raise PublicError(
-                    "插件暂不支持 tool.uv.sources，请使用 project.dependencies 的 name @ URL"
+                    "dependencies.noUvSources"
                 )
             dependencies = metadata.get("dependencies", [])
             if not isinstance(dependencies, list) or not all(
                 isinstance(v, str) for v in dependencies
             ):
-                raise PublicError("project.dependencies 必须是字符串数组")
+                raise PublicError("dependencies.stringArray")
             requires_python = metadata.get("requires-python", "")
             try:
                 if not isinstance(requires_python, str):
                     raise InvalidSpecifier()
                 SpecifierSet(requires_python)
             except InvalidSpecifier:
-                raise PublicError("project.requires-python 版本范围无效") from None
+                raise PublicError("dependencies.requiresPython") from None
             if requires_python and not SpecifierSet(requires_python).contains(
                 platform.python_version(), prereleases=True
             ):
                 raise PublicError(
-                    f"插件要求 Python {requires_python}，当前版本 {platform.python_version()}"
+                    "dependencies.pythonVersion", requires_python=requires_python, python_version=platform.python_version()
                 )
             return Declaration(
                 [self.requirement(value, directory) for value in dependencies],
@@ -320,7 +320,7 @@ class RuntimeEnvironment:
                     break
                 except OSError:
                     if time.monotonic() - start > 1200:
-                        raise PublicError("等待运行环境更新超时，请稍后重试") from None
+                        raise PublicError("dependencies.waitTimeout") from None
                     await asyncio.sleep(0.2)
             try:
                 yield
@@ -334,7 +334,7 @@ class RuntimeEnvironment:
     async def command(self, *args: str) -> str:
         executable = os.environ.get("UV") or shutil.which("uv")
         if not executable:
-            raise PublicError("找不到 uv，请安装 uv 并将其加入 PATH")
+            raise PublicError("dependencies.noUv")
         # Inherited environment overrides must not redirect sync into the running venv.
         env = {
             key: value
@@ -347,9 +347,9 @@ class RuntimeEnvironment:
                 [executable, *args], self.core, timeout=1200, limit=128 * 1024, env=env
             )
         except (OSError, TimeoutError):
-            raise PublicError("uv 执行失败或超时，请检查网络和 Python 环境") from None
+            raise PublicError("dependencies.uvFailed") from None
         if result["exit_code"] or result["truncated"]:
-            raise PublicError("依赖解析或安装失败：\n" + safe_output(result["stderr"]))
+            raise PublicError(t("dependencies.resolveFailed") + safe_output(result["stderr"]))
         return result["stdout"]
 
     async def prepare(
@@ -381,9 +381,9 @@ class RuntimeEnvironment:
         try:
             metadata = tomllib.loads(core_text)["project"]
         except (ValueError, KeyError):
-            raise PublicError("Core 的 pyproject.toml 格式无效") from None
+            raise PublicError("dependencies.corePyproject") from None
         if not set(extras) <= set(metadata.get("optional-dependencies", {})):
-            raise PublicError("指定的 Core extra 不存在，请检查 --extra 参数")
+            raise PublicError("dependencies.extraUnknown")
         declarations, errors = {}, {}
         for key, directory in (
             paths if paths is not None else plugin_paths(self.core, self.home)
@@ -398,7 +398,7 @@ class RuntimeEnvironment:
                     declarations[key] = declaration
             except (PublicError, ValueError, TypeError, AttributeError) as exc:
                 errors[key] = (
-                    f"插件 {key} 的依赖声明无效：{exc if isinstance(exc, PublicError) else type(exc).__name__}"
+                    t("dependencies.pluginInvalid", key=key, value=exc if isinstance(exc, PublicError) else type(exc).__name__)
                 )
         signature = hashlib.sha256(
             json.dumps(
@@ -511,7 +511,7 @@ class RuntimeEnvironment:
                     await resolve()
                     accepted[key] = vars(declaration)
                 except PublicError as exc:
-                    errors[key] = f"插件 {key} 与 Core 或其他插件的依赖不兼容：{exc}"
+                    errors[key] = t("dependencies.pluginConflict", key=key, exc=exc)
                     project = before_project
                     private_write(directory / "pyproject.toml", tomli_w.dumps(project))
                     private_write(directory / "uv.lock", before_lock)

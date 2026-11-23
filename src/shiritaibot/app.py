@@ -20,6 +20,7 @@ from shiritaibot.core import EventBus, PublicError
 from shiritaibot.core.logs import describe_session, get_logger
 from shiritaibot.emotion import EmotionManager
 from shiritaibot.heartflow import Heartflow
+from shiritaibot.i18n import Text, t
 from shiritaibot.knowledge import KnowledgeBase
 from shiritaibot.llm import ProviderManager
 from shiritaibot.llm.subscription import PROTOCOL as SUBSCRIPTION_PROTOCOL
@@ -41,16 +42,16 @@ from shiritaibot.tools.builtin import register_builtin
 log = get_logger("ShiritaiBot")
 
 ROUTE_LABELS = {
-    "chat": "聊天（chat）路由",
-    "agent": "Agent（agent）路由",
-    "agent_chat": "Agent 聊天（agent_chat）路由",
-    "router": "判定（router）路由",
-    "light": "轻量（light）路由",
-    "memory": "记忆（memory）路由",
-    "approval": "审批（approval）路由",
-    "embedding": "向量（embedding）路由",
-    "vision": "视觉（vision）路由",
-    "meme": "表情（meme）路由",
+    "chat": "app.routes.chat",
+    "agent": "app.routes.agent",
+    "agent_chat": "app.routes.agent_chat",
+    "router": "app.routes.router",
+    "light": "app.routes.light",
+    "memory": "app.routes.memory",
+    "approval": "app.routes.approval",
+    "embedding": "app.routes.embedding",
+    "vision": "app.routes.vision",
+    "meme": "app.routes.meme",
 }
 
 
@@ -70,7 +71,7 @@ class Application:
         self.knowledge_bases: dict[str, KnowledgeBase] = {}
 
     async def start(self) -> None:
-        log.log(f"正在启动，数据目录 {self.home}")
+        log.log(Text("app.log.starting", home=self.home))
         await self.config.load()
         await self.store.open()
         self.vault = Vault(self.home, self.store)
@@ -170,20 +171,24 @@ class Application:
         await self.plugins.mark_ready()
         cfg = self.config.value
         log.log(
-            f"启动完成：{len(self.registry.tools)} 个工具，{len(self.plugins.loaded)} 个插件，"
-            f"{len(self.adapters.instances)} 个协议端，{len(self.mcp.servers)} 个 MCP 服务；主动性引擎"
-            + ("已启用" if cfg.proactive.enabled else "未启用")
+            Text(
+                "app.log.startedOn" if cfg.proactive.enabled else "app.log.startedOff",
+                tools=len(self.registry.tools),
+                plugins=len(self.plugins.loaded),
+                adapters=len(self.adapters.instances),
+                mcp=len(self.mcp.servers),
+            )
         )
 
     def memory_for(self, profile: str) -> MemoryManager:
         memory = self.memories.get(profile)
         if memory is None:
-            raise PublicError("记忆库不存在或未配置")
+            raise PublicError("app.memoryProfileMissing")
         return memory
 
     def knowledge_for(self, library: str) -> KnowledgeBase:
         if library != "default" and library not in self.config.value.knowledge.libraries:
-            raise PublicError("知识库不存在或未配置")
+            raise PublicError("app.libraryMissing")
         return self.knowledge_bases[library]
 
     async def open_knowledge_libraries(self, settings: Settings) -> None:
@@ -222,7 +227,7 @@ class Application:
                     await store.open()
                 saved = await store.get("memory_profile", "settings")
                 if saved and saved["audience"] != profile.audience:
-                    raise PublicError(f"记忆库「{profile_id}」已创建，不能改变访问范围。")
+                    raise PublicError("app.memoryAudienceFixed", profile_id=profile_id)
                 if memory is not None:
                     continue
                 if not saved:
@@ -262,9 +267,9 @@ class Application:
 
     async def notify_session(self, session: str, text: str) -> None:
         if is_qq_official_session(session):
-            raise PublicError("QQ 官方机器人当前仅支持回复入站消息")
+            raise PublicError("app.qqReplyOnly")
         if is_feishu_session(session) and not self.config.value.active_feishu_session(session):
-            raise PublicError("日程原飞书会话已解绑")
+            raise PublicError("app.routineUnbound")
         await self.runtime.handoff(session, text, self.adapters.enqueue)
 
     async def notify_approval(
@@ -295,11 +300,11 @@ class Application:
                 if provider.enabled and not connected and any(
                     model.enabled and model.provider == provider.id for model in settings.models
                 ):
-                    warnings.append(f"提供商「{provider.id}」需要连接 ChatGPT 账号")
+                    warnings.append(t("app.needsChatgpt", id=provider.id))
                 continue
             provider_ok[provider.id] = provider.enabled and await resolves(provider.api_key)
             if provider.enabled and not provider_ok[provider.id]:
-                warnings.append(f"提供商「{provider.id}」没有可用的 API Key")
+                warnings.append(t("app.noApiKey", id=provider.id))
         models = {model.id: model for model in settings.models}
         routes = [(route, refs, "") for route, refs in settings.routes.items()]
         routes.extend(
@@ -314,7 +319,7 @@ class Application:
             if route == "embedding" and not any(m.kind == "embedding" for m in models.values()):
                 continue
             if not refs:
-                warnings.append(f"{label}没有配置模型，相关功能会直接报错")
+                warnings.append(t("app.routeEmpty", label=t(label)))
                 continue
             usable = [
                 model
@@ -324,17 +329,17 @@ class Application:
                 and provider_ok.get(cfg_model.provider, False)
             ]
             if not usable:
-                warnings.append(f"{label}的模型都不可用：检查模型是否启用、提供商认证是否可用")
+                warnings.append(t("app.routeUnavailable", label=t(label)))
         for provider_id, count in self.llm.failing().items():
             warnings.append(
-                f"提供商「{provider_id}」最近 15 分钟调用失败 {count} 次，请检查认证和网络/代理"
+                t("app.providerFailing", provider_id=provider_id, count=count)
             )
         search = settings.web_search
         if search.enabled:
             provider = getattr(search, search.provider, None)
             if provider is None or not await resolves(provider.api_key):
                 warnings.append(
-                    f"搜索服务「{search.provider}」没有可用密钥，web_search 工具不会注册"
+                    t("app.searchNoKey", provider=search.provider)
                 )
         return warnings
 
@@ -361,12 +366,12 @@ class Application:
             current = self.config.value
             for existing in current.adapters:
                 if existing.id == adapter.id:
-                    raise FeishuAdapterConflict("已有同名适配器，请修改实例标识。")
+                    raise FeishuAdapterConflict(t("app.feishuNameTaken"))
                 if existing.type == "feishu":
                     if existing.feishu_binding == adapter.feishu_binding:
-                        raise FeishuAdapterConflict("此飞书应用已添加。")
+                        raise FeishuAdapterConflict(t("app.feishuAppTaken"))
                     if existing.enabled and adapter.enabled:
-                        raise FeishuAdapterConflict("已有启用的飞书连接，请将新实例保存为未启用。")
+                        raise FeishuAdapterConflict(t("app.feishuEnabled"))
             data = current.model_dump()
             data["adapters"].append(adapter.model_dump())
             await self._reconfigure_locked(
@@ -381,7 +386,7 @@ class Application:
         restart_adapters: bool = True,
         expected_version: int | None = None,
     ) -> None:
-        log.log("配置已更新，正在重载协议端、内置工具与插件")
+        log.log("app.log.reloading")
         previous = self.config.value
         settings = settings.model_copy(deep=True)
         saved_secrets = {
@@ -406,7 +411,7 @@ class Application:
         for provider in previous.providers:
             if provider.protocol == SUBSCRIPTION_PROTOCOL and provider.id not in subscription_ids:
                 if not await self.llm.subscriptions.disconnect(provider, remove=True):
-                    log.warning("已移除 ChatGPT 订阅凭据，请到 ChatGPT 设置确认远端授权已撤销")
+                    log.warning("app.log.chatgptRemoved")
         flow = self.adapters.heartflow
         if flow:
             await flow.reset(
@@ -426,13 +431,13 @@ class Application:
             await self.adapters.close()
             await self.adapters.start()
         else:
-            log.log("保持现有协议端连接")
+            log.log("app.log.keepAdapters")
         await register_builtin(self)
         await self.plugins.reload_all()
         await self.mcp.reload()
 
     async def close(self) -> None:
-        log.log("正在关闭…")
+        log.log("app.log.stopping")
         for task in self.tasks:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
@@ -450,4 +455,4 @@ class Application:
             if library != "default":
                 await knowledge.store.close()
         await self.store.close()
-        log.log("已关闭")
+        log.log("app.log.stopped")

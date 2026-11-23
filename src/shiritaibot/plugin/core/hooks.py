@@ -29,6 +29,7 @@ from shiritaibot.api.hook import FILTERS, HANDLERS, MessageType, Names, Permissi
 from shiritaibot.config import is_feishu_session, is_qq_official_session
 from shiritaibot.core import Context, PublicError, uid
 from shiritaibot.core.logs import brief, get_logger
+from shiritaibot.i18n import t
 
 log = get_logger("插件")
 
@@ -241,7 +242,7 @@ class HookBus:
                 commands.append(
                     {
                         "command": usage(handler),
-                        "description": handler.description,
+                        "description": t(handler.description),
                         "owner_only": handler.permission is Permission.OWNER,
                     }
                 )
@@ -327,7 +328,7 @@ class HookBus:
     def group_help(self, text: str, event: MessageEvent) -> str:
         tokens = text[1:].split()
         lines = [
-            f"{usage(h)} — {h.description}" if h.description else usage(h)
+            f"{usage(h)} — {t(h.description)}" if h.description else usage(h)
             for h in self.available_commands(event.platform, group=event.is_group, owner=event.is_owner)
             if tokens
             and len(h.path) > 1

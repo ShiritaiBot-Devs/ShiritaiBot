@@ -26,7 +26,24 @@ DEFAULT_LOCALE: Locale = "zh-CN"
 LOCALE_NAMES: dict[Locale, str] = {"zh-CN": "简体中文", "en": "English"}
 FOLDER = Path(__file__).resolve().parent.parent / "locales"
 
-current_locale: ContextVar[Locale] = ContextVar("shiritaibot_locale", default=DEFAULT_LOCALE)
+# The locale of the current request or turn. Unset elsewhere (scheduled work, startup, logs),
+# where the instance's global language applies.
+current_locale: ContextVar[Locale | None] = ContextVar("shiritaibot_locale", default=None)
+_instance: list[Locale] = [DEFAULT_LOCALE]
+
+
+def set_instance_locale(locale: Locale) -> None:
+    """The global bot language (``Settings.locale``); set whenever config loads or saves."""
+    _instance[0] = locale
+
+
+def instance_locale() -> Locale:
+    return _instance[0]
+
+
+def active_locale() -> Locale:
+    """The request or turn locale if one is set, else the instance's global language."""
+    return current_locale.get() or _instance[0]
 
 _ALIASES: dict[str, Locale] = {
     "zh": "zh-CN",
@@ -94,7 +111,7 @@ def t(key: str, /, *, locale: Locale | None = None, **params: Any) -> str:
     With a ``count`` param, ``key_one`` / ``key_other`` are preferred, as in i18next.
     Text that is not a catalog key is returned unchanged and is never formatted.
     """
-    lang = locale or current_locale.get()
+    lang = locale or active_locale()
     text = None
     if "count" in params:
         text = lookup(f"{key}_{_plural(lang, params['count'])}", lang)
@@ -102,7 +119,20 @@ def t(key: str, /, *, locale: Locale | None = None, **params: Any) -> str:
         text = lookup(key, lang)
     if text is None:
         return key
-    return text.format_map(params) if params else text
+    return fill(text, **params)
+
+
+def fill(template: str, /, **params: Any) -> str:
+    """Formats a catalog or prompt template. Templates always go through this, so literal
+    braces are written ``{{ }}``; an unknown ``{name}`` is left as it is."""
+    return template.format_map(_Params(params))
+
+
+class _Params(dict):
+    """Leaves unknown ``{name}`` placeholders as they are instead of raising."""
+
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
 
 
 @contextmanager
@@ -125,5 +155,23 @@ class Text:
     def __str__(self) -> str:
         return t(self.key, **self.params)
 
+    def render(self, locale: Locale | None = None) -> str:
+        return t(self.key, locale=locale, **self.params)
+
     def __repr__(self) -> str:
         return f"Text({self.key!r})"
+
+
+def localize(value: Any) -> Any:
+    """Copy of a tool schema (or any JSON-like value) with ``description`` and ``title``
+    strings translated. Keys become text in the active locale; plain text is unchanged."""
+    if isinstance(value, Mapping):
+        return {
+            key: t(item) if key in ("description", "title") and isinstance(item, str) else localize(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [localize(item) for item in value]
+    if isinstance(value, Text):
+        return str(value)
+    return value

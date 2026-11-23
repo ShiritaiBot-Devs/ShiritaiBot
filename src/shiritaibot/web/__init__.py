@@ -24,6 +24,7 @@ from shiritaibot.agent.commands import help_section_titles, visible_builtin_comm
 from shiritaibot.api.event import MessageEvent
 from shiritaibot.app import Application
 from shiritaibot.config import (
+    BUILTIN_MEMORY_PROFILES,
     MAIN_SESSION,
     ConfigRevisionConflict,
     ModelConfig,
@@ -34,7 +35,7 @@ from shiritaibot.config import (
 )
 from shiritaibot.core import Context, ExternalEvent, Model, PublicError, canonical, logs
 from shiritaibot.core.process import run_process
-from shiritaibot.i18n import normalize, t, use_locale
+from shiritaibot.i18n import Text, normalize, t, use_locale
 from shiritaibot.llm.subscription import LOGIN_SECONDS
 from shiritaibot.llm.subscription import PROTOCOL as SUBSCRIPTION_PROTOCOL
 from shiritaibot.meme.core import MAX_MEME_BYTES
@@ -82,7 +83,7 @@ class RoutineInput(RoutineItem):
     @classmethod
     def validate_session(cls, value: str) -> str:
         if not MAIN_SESSION.fullmatch(value):
-            raise ValueError("会话标识无效")
+            raise ValueError(t("web.invalidSession"))
         return value
 
 
@@ -260,7 +261,7 @@ def create_app(
     def saved_subscription(provider_id: str) -> ProviderConfig:
         provider = subscription_provider(provider_id)
         if provider is None:
-            raise PublicError("请先保存 OpenAI Subscription 提供商。")
+            raise PublicError("web.subscriptionUnsaved")
         return provider
 
     @api.get("/api/providers/subscriptions/{provider_id}", dependencies=protected)
@@ -326,7 +327,7 @@ def create_app(
             {"name": name, "description": description}
             for name, description in visible_builtin_commands(ctx, runtime.registry).items()
         ] + [
-            {"name": handler.command[1:], "description": handler.description or handler.plugin}
+            {"name": handler.command[1:], "description": t(handler.description) or handler.plugin}
             for handler in runtime.plugins.hooks.commands_for_context(ctx)
         ]
 
@@ -357,10 +358,10 @@ def create_app(
     @api.post("/api/restart", dependencies=protected, status_code=202)
     async def restart():
         if request_restart is None:
-            raise HTTPException(503, "当前启动方式不支持重启，请使用 shiritaibot run 启动")
+            raise HTTPException(503, t("web.restartUnsupported"))
         background = None
         if not restarting:
-            web_log.log("收到管理后台重启请求，正在关闭服务")
+            web_log.log("web.log.restart")
             background = BackgroundTask(restart_once)
         return JSONResponse(
             {"status": "restarting", "instance_id": instance_id},
@@ -391,7 +392,7 @@ def create_app(
 
     @api.post("/api/update/apply", dependencies=protected, status_code=202)
     async def update_apply(body: UpdateInput):
-        web_log.log(f"收到管理后台更新请求：{body.kind} {body.ref}")
+        web_log.log(Text("web.log.update", kind=body.kind, ref=body.ref))
         return await updater.apply(body.kind, body.ref)
 
     def config_etag() -> str:
@@ -417,12 +418,12 @@ def create_app(
         revision = request.headers.get("x-config-revision", request.headers.get("if-match"))
         if revision is not None:
             if revision != config_etag():
-                raise HTTPException(412, "配置已更新，请核对最新配置后再保存。")
+                raise HTTPException(412, t("web.configChanged"))
             expected_version = runtime.config.version
         try:
             await runtime.reconfigure(body, expected_version=expected_version)
         except ConfigRevisionConflict:
-            raise HTTPException(412, "配置已更新，请核对最新配置后再保存。") from None
+            raise HTTPException(412, t("web.configChanged")) from None
         return {
             "ok": True,
             "version": runtime.config.version,
@@ -441,16 +442,16 @@ def create_app(
     async def qq_official_callback(adapter_id: str, request: Request):
         bot = runtime.adapters.instances.get(adapter_id)
         if not isinstance(bot, QQOfficial):
-            raise HTTPException(404, "QQ 官方适配器不存在或未启用")
+            raise HTTPException(404, t("web.qqOfficialMissing"))
         body = bytearray()
         async for chunk in request.stream():
             body.extend(chunk)
             if len(body) > MAX_CALLBACK_BYTES:
-                raise HTTPException(413, "回调内容过大")
+                raise HTTPException(413, t("web.callbackTooLarge"))
         try:
             return await bot.callback(bytes(body), request.headers)
         except CallbackError as exc:
-            raise HTTPException(exc.status, "QQ 官方机器人回调未通过") from None
+            raise HTTPException(exc.status, t("web.qqCallbackRejected")) from None
 
     @api.post("/api/adapters/feishu/qr", dependencies=protected)
     async def feishu_qr_start(body: FeishuQrStart):
@@ -471,7 +472,7 @@ def create_app(
     @api.get("/api/tools", dependencies=protected)
     async def tools(response: Response, session: str = "web:owner"):
         if not session.startswith(("web:", "private:", "group:")):
-            raise HTTPException(422, "仅支持 Main 会话，Proactive Loop 请修改默认权限")
+            raise HTTPException(422, t("web.mainOnly"))
         row = await runtime.store.get("session", session) or {}
         settings = runtime.config.value
         group = session.startswith("group:")
@@ -519,7 +520,7 @@ def create_app(
             "tools": [
                 {
                     "name": tool.name,
-                    "description": tool.description,
+                    "description": t(tool.description),
                     "plugin": tool.plugin,
                     "risk": tool.risk,
                     "safe": tool.safe,
@@ -591,10 +592,10 @@ def create_app(
         before = manager.level_name
         # Announce at whichever of the two levels still lets a LOG line through.
         if body.level in {"warning", "error"}:
-            web_log.log(f"日志级别 {before.upper()} → {body.level.upper()}")
+            web_log.log(Text("web.log.level", old=before.upper(), new=body.level.upper()))
         level = await asyncio.to_thread(manager.set_level, body.level)
         if body.level not in {"warning", "error"}:
-            web_log.log(f"日志级别 {before.upper()} → {level.upper()}")
+            web_log.log(Text("web.log.level", old=before.upper(), new=level.upper()))
         return {"level": level}
 
     @api.get("/api/history", dependencies=protected)
@@ -622,7 +623,7 @@ def create_app(
     async def update_web_chat(session: WebChatId, body: WebChatUpdate):
         title = body.title.strip() if body.title is not None else None
         if title == "":
-            raise HTTPException(422, "对话名称不能为空")
+            raise HTTPException(422, t("web.chatNameEmpty"))
         await runtime.store.update_web_chat(session, title, body.pinned)
         return {"ok": True}
 
@@ -630,14 +631,14 @@ def create_app(
     async def delete_web_chat(session: WebChatId):
         async with runtime.runtime.submit_locks.setdefault(session, asyncio.Lock()):
             if runtime.runtime.busy(session):
-                raise HTTPException(409, "请先停止当前任务，再删除对话。")
+                raise HTTPException(409, t("web.chatBusy"))
             await runtime.store.delete_web_chat(session)
         return {"ok": True}
 
     @api.post("/api/messages", dependencies=protected)
     async def message(body: MessageInput):
         where = "" if body.session == "web:owner" else body.session
-        web_log.log(logs.brief(body.text, 200), where, "主人")
+        web_log.log(logs.brief(body.text, 200), where, "web.log.owner")
         event = MessageEvent(
             session=body.session,
             text=body.text.strip(),
@@ -671,14 +672,23 @@ def create_app(
     @api.get("/api/memory/profiles", dependencies=protected)
     async def memory_profiles():
         return [
-            {"id": profile_id, **profile.model_dump()}
+            {
+                "id": profile_id,
+                **profile.model_dump(),
+                # Built-in stores are not saved in config, so their names follow the language.
+                **(
+                    {"name": t(f"config.memoryProfiles.{profile_id}")}
+                    if profile is BUILTIN_MEMORY_PROFILES.get(profile_id)
+                    else {}
+                ),
+            }
             for profile_id in runtime.memories
             if (profile := runtime.config.value.memory.profile(profile_id)) is not None
         ]
 
     def configured_memory(profile: str):
         if runtime.config.value.memory.profile(profile) is None or profile not in runtime.memories:
-            raise HTTPException(404, "记忆库不存在或未配置")
+            raise HTTPException(404, t("web.memoryProfileMissing"))
         return runtime.memory_for(profile)
 
     @api.get("/api/memory", dependencies=protected)
@@ -690,7 +700,7 @@ def create_app(
         profile: str = "default",
     ):
         if kind not in {"", "entity", "fact", "event", "conflict"}:
-            raise HTTPException(422, "无效的记忆类型")
+            raise HTTPException(422, t("web.memoryKindInvalid"))
         memory = configured_memory(profile)
         if page is not None:
             return await memory.browse_page(kind, q[:200], page, page_size)
@@ -731,7 +741,7 @@ def create_app(
         async for chunk in request.stream():
             data.extend(chunk)
             if len(data) > MAX_MEME_BYTES:
-                raise HTTPException(413, "表情图片不能超过 2 MB")
+                raise HTTPException(413, t("web.memeTooLarge"))
         # Uploads skip the persona check and capacity: the owner chose them.
         return await runtime.memes.core.ingest(
             bytes(data), source="manual", category=category, description=description
@@ -743,7 +753,7 @@ def create_app(
         row = core.get(key) or core.resolve(key)
         data = await core.image(row["id"]) if row else None
         if row is None or data is None:
-            raise HTTPException(404, "表情不存在")
+            raise HTTPException(404, t("web.memeMissing"))
         return Response(data, media_type=row.get("mime") or "image/png")
 
     @api.put("/api/memes/{key}", dependencies=protected)
@@ -755,7 +765,7 @@ def create_app(
         core = runtime.memes.core
         data = await core.image(key)
         if data is None:
-            raise HTTPException(404, "表情不存在")
+            raise HTTPException(404, t("web.memeMissing"))
         description = await core.describe(data, runtime.config.value)
         return await core.update(key, None, description)
 
@@ -777,7 +787,7 @@ def create_app(
     @api.get("/api/knowledge/libraries", dependencies=protected)
     async def knowledge_libraries():
         return [
-            {"id": "default", "name": "默认知识库"},
+            {"id": "default", "name": t("web.defaultLibrary")},
             *(
                 {"id": library, "name": config.name}
                 for library, config in runtime.config.value.knowledge.libraries.items()
@@ -796,7 +806,7 @@ def create_app(
         async for chunk in request.stream():
             data.extend(chunk)
             if len(data) > limit * 1024 * 1024:
-                raise HTTPException(413, f"文件不能超过 {limit} MiB")
+                raise HTTPException(413, t("web.fileTooLarge", limit=limit))
         return await runtime.knowledge_for(library).add(
             bytes(data), filename, title=title, source="web"
         )
@@ -819,17 +829,17 @@ def create_app(
         kb = runtime.knowledge_for(library)
         document = await kb.get(key)
         if document is None:
-            raise HTTPException(404, "文档不存在")
+            raise HTTPException(404, t("web.documentMissing"))
         return {**document, "items": await kb.chunks(key, start, count)}
 
     @api.get("/api/knowledge/{key}/file", dependencies=protected)
     async def knowledge_file(key: str, library: str = "default"):
         found = await runtime.knowledge_for(library).file(key)
         if found is None:
-            raise HTTPException(404, "文档不存在")
+            raise HTTPException(404, t("web.documentMissing"))
         document, path = found
         if not await asyncio.to_thread(path.is_file):
-            raise HTTPException(404, "原始文件缺失")
+            raise HTTPException(404, t("web.originalMissing"))
         # Attachment and a neutral type: uploaded content never renders on this origin.
         return FileResponse(
             path, media_type="application/octet-stream", filename=document["filename"]
@@ -865,7 +875,7 @@ def create_app(
     async def event_status(key: str):
         row = await runtime.proactive.get_event(key)
         if row is None:
-            raise HTTPException(404, "事件不存在")
+            raise HTTPException(404, t("web.eventMissing"))
         return row
 
     @api.get("/api/plugins", dependencies=protected)
@@ -891,7 +901,7 @@ def create_app(
         async for chunk in request.stream():
             archive.extend(chunk)
             if len(archive) > MAX_ARCHIVE:
-                raise HTTPException(413, "插件 ZIP 不能超过 20 MiB")
+                raise HTTPException(413, t("web.pluginZipTooLarge"))
         async with runtime.configure_lock:
             return await runtime.plugins.install(key, bytes(archive))
 
@@ -908,7 +918,7 @@ def create_app(
             try:
                 await runtime.plugins.reload(key)
             except Exception:
-                raise PublicError(runtime.plugins.errors.get(key, "插件加载失败")) from None
+                raise PublicError(runtime.plugins.errors.get(key, t("web.pluginLoadFailed"))) from None
             return await runtime.plugins.listing()
 
     @api.get("/api/skills", dependencies=protected)
@@ -925,7 +935,7 @@ def create_app(
         async for chunk in request.stream():
             data.extend(chunk)
             if len(data) > MAX_SKILL_ARCHIVE:
-                raise HTTPException(413, "技能包不能超过 10 MiB")
+                raise HTTPException(413, t("web.skillTooLarge"))
         await runtime.skills.install_bytes(bytes(data), replace=replace)
         return await runtime.skills.listing()
 
@@ -954,14 +964,14 @@ def create_app(
         if not cfg:
             raise HTTPException(404)
         if cfg.kind == "shiritaibot":
-            raise HTTPException(400, "内置子代理无需检测 CLI")
+            raise HTTPException(400, t("web.noCliCheck"))
         return await run_process(
             [*cfg.command, "--version"], home, timeout=10, env=runtime.subagents.child_env(cfg)
         )
 
     async def run_model_test(provider: ProviderConfig, model: ModelConfig):
         if model.provider != provider.id:
-            raise PublicError("模型所属的提供商与当前配置不一致，请检查提供商名称")
+            raise PublicError("web.providerMismatch")
         try:
             cfg = Settings(
                 providers=[provider.model_copy(update={"enabled": True})],
@@ -970,11 +980,11 @@ def create_app(
             )
         except ValueError:
             raise PublicError(
-                "请检查提供商地址和模型配置；地址须为不含账号和查询参数的 HTTP(S) 地址"
+                "web.providerUrl"
             ) from None
         if model.kind == "embedding":
             _, vectors = await runtime.llm.embed(["Connection test"], settings=cfg, route="test")
-            return {"text": f"向量维度 {len(vectors[0])}", "usage": {}}
+            return {"text": t("web.dimensions", count=len(vectors[0])), "usage": {}}
         if provider.protocol == "systemone":
             answers = await runtime.llm.decide(
                 "test",
@@ -983,7 +993,7 @@ def create_app(
                 settings=cfg,
             )
             if answers is None:
-                raise PublicError("决策模型调用失败，请检查 Provider 地址、凭据与模型名称")
+                raise PublicError("web.decisionFailed")
             return {"text": canonical(answers)[:1000], "usage": {}}
         reply = await runtime.llm.complete(
             "test",
@@ -1004,11 +1014,11 @@ def create_app(
         model = next((m for m in cfg.models if m.id == key), None)
         if model is None:
             raise HTTPException(
-                404, "找不到已保存的模型，可能尚未保存或已改名。请刷新页面，使用测试当前配置。"
+                404, t("web.modelNotSaved")
             )
         provider = next((p for p in cfg.providers if p.id == model.provider), None)
         if provider is None:
-            raise PublicError("模型对应的提供商不存在，请检查配置")
+            raise PublicError("web.providerMissing")
         return await run_model_test(provider, model)
 
     @api.websocket("/api/ws")

@@ -20,7 +20,7 @@ from shiritaibot.adapters.onebot11 import qq_download_url
 from shiritaibot.core import PublicError, canonical
 from shiritaibot.core.logs import get_logger
 from shiritaibot.core.text import IMAGE_REF
-from shiritaibot.i18n import DEFAULT_LOCALE, current_locale
+from shiritaibot.i18n import DEFAULT_LOCALE, active_locale
 from shiritaibot.prompts import prompt
 
 log = get_logger("模型")
@@ -198,7 +198,7 @@ class ImageResolver:
 
     async def _caption(self, ref: str) -> str | None:
         # Captions are written in the conversation's language (docs/I18N.md).
-        locale = current_locale.get()
+        locale = active_locale()
         cached = await self.llm.store.get("image_caption", ref)
         if (
             cached

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from shiritaibot.config import is_feishu_session
 from shiritaibot.core import Context, PublicError, Tool, canonical, uid
 from shiritaibot.core.logs import brief
+from shiritaibot.i18n import t
 
 if TYPE_CHECKING:
     from shiritaibot.auth import Permissions
@@ -440,7 +441,7 @@ class _ChatMenu:
             request = canonical(
                 {
                     "tool": req.tool.name,
-                    "description": req.tool.description,
+                    "description": t(req.tool.description),
                     "risk": req.tool.risk,
                     "arguments": req.args,
                     "conversation": [

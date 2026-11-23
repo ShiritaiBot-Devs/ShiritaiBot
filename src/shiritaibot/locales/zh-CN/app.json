@@ -1,0 +1,38 @@
+{
+  "log": {
+    "stopped": "已关闭",
+    "stopping": "正在关闭…",
+    "keepAdapters": "保持现有协议端连接",
+    "chatgptRemoved": "已移除 ChatGPT 订阅凭据，请到 ChatGPT 设置确认远端授权已撤销",
+    "reloading": "配置已更新，正在重载协议端、内置工具与插件",
+    "starting": "正在启动，数据目录 {home}",
+    "startedOn": "启动完成：{tools} 个工具，{plugins} 个插件，{adapters} 个协议端，{mcp} 个 MCP 服务；主动性引擎已启用",
+    "startedOff": "启动完成：{tools} 个工具，{plugins} 个插件，{adapters} 个协议端，{mcp} 个 MCP 服务；主动性引擎未启用"
+  },
+  "feishuEnabled": "已有启用的飞书连接，请将新实例保存为未启用。",
+  "feishuAppTaken": "此飞书应用已添加。",
+  "feishuNameTaken": "已有同名适配器，请修改实例标识。",
+  "searchNoKey": "搜索服务「{provider}」没有可用密钥，web_search 工具不会注册",
+  "providerFailing": "提供商「{provider_id}」最近 15 分钟调用失败 {count} 次，请检查认证和网络/代理",
+  "routeUnavailable": "{label}的模型都不可用：检查模型是否启用、提供商认证是否可用",
+  "routeEmpty": "{label}没有配置模型，相关功能会直接报错",
+  "noApiKey": "提供商「{id}」没有可用的 API Key",
+  "needsChatgpt": "提供商「{id}」需要连接 ChatGPT 账号",
+  "routineUnbound": "日程原飞书会话已解绑",
+  "qqReplyOnly": "QQ 官方机器人当前仅支持回复入站消息",
+  "memoryAudienceFixed": "记忆库「{profile_id}」已创建，不能改变访问范围。",
+  "libraryMissing": "知识库不存在或未配置",
+  "memoryProfileMissing": "记忆库不存在或未配置",
+  "routes": {
+    "meme": "表情（meme）路由",
+    "vision": "视觉（vision）路由",
+    "embedding": "向量（embedding）路由",
+    "approval": "审批（approval）路由",
+    "memory": "记忆（memory）路由",
+    "light": "轻量（light）路由",
+    "router": "判定（router）路由",
+    "agent_chat": "Agent 聊天（agent_chat）路由",
+    "agent": "Agent（agent）路由",
+    "chat": "聊天（chat）路由"
+  }
+}

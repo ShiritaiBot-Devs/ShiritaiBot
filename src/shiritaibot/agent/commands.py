@@ -93,7 +93,7 @@ def help_sections(runtime, ctx) -> list[HelpSection]:
     hooks = getattr(runtime, "hooks", None)
     handlers = hooks.commands_for_context(ctx) if hooks is not None else []
     for handler in handlers:
-        entries.setdefault(f"plugin:{handler.plugin}", []).append((usage(handler), handler.description))
+        entries.setdefault(f"plugin:{handler.plugin}", []).append((usage(handler), t(handler.description)))
     titles = help_section_titles(handlers)
     configured = {section.id: section.visible for section in runtime.config.value.help_menu_sections}
     return [

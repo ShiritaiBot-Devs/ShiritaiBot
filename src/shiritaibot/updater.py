@@ -33,6 +33,7 @@ from shiritaibot.core import PublicError
 from shiritaibot.core.logs import get_logger
 from shiritaibot.core.process import run_process
 from shiritaibot.dependencies import RuntimeEnvironment
+from shiritaibot.i18n import Text, t
 
 REPOSITORY = "ShiritaiBot-Devs/ShiritaiBot"
 BRANCH = "main"
@@ -52,7 +53,7 @@ PLUGIN_DIR = Path("src/shiritaibot/plugin")
 TAG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,99}$")
 SHA = re.compile(r"^[0-9a-f]{40}$")
 
-log = get_logger("更新")
+log = get_logger("update.log.source")
 
 
 def package_version() -> str:
@@ -100,12 +101,12 @@ class Updater:
 
     def unavailable(self) -> str | None:
         if self.restart is None:
-            return "当前启动方式不支持自动更新，请使用 shiritaibot run 启动"
+            return t("update.unsupportedLaunch")
         if self.mode == "git":
             if not (self.app_dir / ".git").exists():
-                return "当前目录不是 Git 仓库，请使用 git clone 或一键部署脚本安装"
+                return t("update.notGit")
             if not shutil.which("git"):
-                return "找不到 git，无法更新源码部署"
+                return t("update.noGit")
         return None
 
     def current(self) -> dict:
@@ -170,20 +171,20 @@ class Updater:
         try:
             response = await client.get(API + path, params=params or None)
         except httpx.HTTPError:
-            raise PublicError("无法连接 GitHub，请检查网络或代理设置") from None
+            raise PublicError("update.githubOffline") from None
         if (
             response.status_code in {403, 429}
             and response.headers.get("x-ratelimit-remaining") == "0"
         ):
             reset = response.headers.get("x-ratelimit-reset", "")
             when = (
-                datetime.fromtimestamp(int(reset)).strftime("%H:%M") if reset.isdigit() else "稍后"
+                datetime.fromtimestamp(int(reset)).strftime("%H:%M") if reset.isdigit() else t("update.later")
             )
-            raise PublicError(f"GitHub API 访问次数已用完，请在 {when} 后重试")
+            raise PublicError("update.rateLimited", when=when)
         if response.status_code == 404:
             return None
         if response.status_code >= 400:
-            raise PublicError(f"GitHub 返回错误（HTTP {response.status_code}）")
+            raise PublicError("update.githubError", status_code=response.status_code)
         return response.json()
 
     async def cached(self, key: str, load: Callable[[], Awaitable[Any]], refresh: bool) -> Any:
@@ -272,25 +273,25 @@ class Updater:
     async def archive(self, kind: str, ref: str) -> str:
         if kind == "release":
             if not TAG.match(ref) or ref not in {r["tag"] for r in await self.all_releases()}:
-                raise PublicError("找不到该版本，请刷新版本列表")
+                raise PublicError("update.releaseMissing")
             return ARCHIVE + "refs/tags/" + ref
         if kind == "commit":
             if not SHA.match(ref):
-                raise PublicError("提交编号无效")
+                raise PublicError("update.commitInvalid")
             return ARCHIVE + ref
-        raise PublicError("未知的更新类型")
+        raise PublicError("update.kindUnknown")
 
     async def apply(self, kind: str, ref: str) -> dict:
         if reason := self.unavailable():
             raise PublicError(reason)
         if self.inspecting or (self.task and not self.task.done()):
-            raise PublicError("已有更新正在进行")
+            raise PublicError("update.busy")
         if self.mode == "git":
             self.check_git_target(kind, ref)
             self.output.clear()
             self.state = {
                 "phase": "downloading",
-                "message": "正在检查 Git 更新",
+                "message": t("update.checkingGit"),
                 "target": {"kind": kind, "ref": ref},
             }
             self.task = asyncio.create_task(self.run_git(ref))
@@ -303,7 +304,7 @@ class Updater:
         self.output.clear()
         self.state = {
             "phase": "downloading",
-            "message": "正在下载源码",
+            "message": t("update.downloadingSource"),
             "target": {"kind": kind, "ref": ref},
         }
         self.task = asyncio.create_task(self.run(kind, ref, archive, staged))
@@ -314,14 +315,14 @@ class Updater:
         if reason := self.unavailable():
             raise PublicError(reason)
         if self.inspecting or (self.task and not self.task.done()):
-            raise PublicError("已有更新正在进行")
+            raise PublicError("update.busy")
         if self.mode == "git":
             self.check_git_target(kind, ref)
             self.inspecting = True
             try:
                 info = await self.git_ready()
                 if info["sha"] != ref:
-                    raise PublicError("远程最新提交已变化，请重新检查更新")
+                    raise PublicError("update.remoteChanged")
                 return {"files": [], "patch": None, "sha": ref}
             finally:
                 self.inspecting = False
@@ -358,7 +359,7 @@ class Updater:
     @staticmethod
     def check_git_target(kind: str, ref: str) -> None:
         if kind != "commit" or not SHA.fullmatch(ref):
-            raise PublicError("Git 部署仅支持更新到跟踪分支的最新提交，请重新检查更新")
+            raise PublicError("update.gitLatestOnly")
 
     async def git(self, *args: str) -> str:
         result = await run_process(
@@ -369,17 +370,17 @@ class Updater:
         )
         if result["exit_code"] != 0 or result["truncated"]:
             if args[0] == "merge":
-                raise PublicError("Git 无法快进更新，可能有本地文件会被覆盖，请手动检查仓库")
-            raise PublicError(f"git {args[0]} 执行失败，请检查仓库、跟踪分支和网络连接")
+                raise PublicError("update.noFastForward")
+            raise PublicError("update.gitFailed", value=args[0])
         return result["stdout"].strip()
 
     async def git_info(self) -> dict:
         root = await self.git("rev-parse", "--show-toplevel")
         if await asyncio.to_thread(Path(root).resolve) != self.app_dir.resolve():
-            raise PublicError("程序目录不是 Git 仓库根目录，无法自动更新")
+            raise PublicError("update.notRepoRoot")
         branch = await self.git("branch", "--show-current")
         if not branch:
-            raise PublicError("当前处于 detached HEAD，请先切换到有远程跟踪分支的本地分支")
+            raise PublicError("update.detachedHead")
         upstream = await self.git(
             "for-each-ref",
             "--format=%(upstream:remotename)%09%(upstream:remoteref)",
@@ -387,7 +388,7 @@ class Updater:
         )
         parts = upstream.split("\t")
         if len(parts) != 2 or not parts[0] or parts[0] == "." or not parts[1]:
-            raise PublicError("当前分支没有远程跟踪分支，请先设置 upstream 后重试")
+            raise PublicError("update.noUpstream")
         head = await self.git("rev-parse", "HEAD")
         await self.git("fetch", "--no-tags", "--", *parts)
         sha = await self.git("rev-parse", "FETCH_HEAD")
@@ -397,7 +398,7 @@ class Updater:
         if await self.git(
             "status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none"
         ):
-            raise PublicError("工作区存在未提交的修改或未跟踪文件，请先提交或移走后再更新")
+            raise PublicError("update.dirtyTree")
 
     async def git_ready(self) -> dict:
         await self.git_clean()
@@ -406,11 +407,11 @@ class Updater:
             await self.git("rev-list", "--left-right", "--count", f"{info['head']}...{info['sha']}")
         ).split()
         if int(ahead):
-            raise PublicError("当前分支有本地独有提交或已与远程分叉，请手动处理后再更新")
+            raise PublicError("update.diverged")
         if info["head"] == info["sha"]:
-            raise PublicError("已是跟踪分支的最新提交")
+            raise PublicError("update.upToDate")
         if await self.git("ls-files", "--", "web/dist"):
-            raise PublicError("web/dist 包含 Git 跟踪文件，请手动更新此部署")
+            raise PublicError("update.distTracked")
         return info
 
     async def git_preview(self) -> dict:
@@ -450,27 +451,27 @@ class Updater:
         worktree = False
         cleanup_stage = True
         try:
-            self.step("downloading", "正在核实当前提交和远程跟踪分支")
+            self.step("downloading", t("update.step.verify"))
             info = await self.git_ready()
             if info["sha"] != ref:
-                raise PublicError("远程最新提交已变化，请重新检查更新")
+                raise PublicError("update.remoteChanged")
             await asyncio.to_thread(stage.mkdir, parents=True)
             await self.git("worktree", "add", "--detach", str(source), ref)
             worktree = True
-            self.step("building", "正在安装 WebUI 依赖")
+            self.step("building", t("update.step.webDeps"))
             await self.command(self.npm("--prefix", "web", "ci", "--no-audit", "--no-fund"), source)
-            self.step("building", "正在构建 WebUI")
+            self.step("building", t("update.step.webBuild"))
             await self.command(self.npm("--prefix", "web", "run", "build"), source)
             if not (source / "web/dist/index.html").is_file():
-                raise PublicError("WebUI 构建没有生成页面")
+                raise PublicError("update.noPages")
             # Recheck after the build; a user may have edited or switched branches meanwhile.
             await self.git_clean()
             if (
                 await self.git("rev-parse", "HEAD") != info["head"]
                 or await self.git("branch", "--show-current") != info["branch"]
             ):
-                raise PublicError("构建期间当前分支或提交发生变化，已取消更新")
-            self.step("deploying", "正在快进更新 Git 提交")
+                raise PublicError("update.branchMoved")
+            self.step("deploying", t("update.step.fastForward"))
             # Split pull into fetch + merge to deploy exactly the inspected commit.
             await self.git("merge", "--ff-only", "--no-autostash", "--no-overwrite-ignore", ref)
             merged = True
@@ -478,11 +479,11 @@ class Updater:
                 await asyncio.to_thread(dist.rename, old_dist)
             dist_replaced = True
             await asyncio.to_thread(shutil.copytree, source / "web/dist", dist)
-            self.step("deploying", "正在同步 Python 依赖")
+            self.step("deploying", t("update.step.pythonDeps"))
             await self.sync()
-            self.step("deploying", "正在检查新版配置兼容性")
+            self.step("deploying", t("update.step.configCheck"))
             await self.validate_config(self.app_dir)
-            self.step("restarting", "更新完成，正在重启")
+            self.step("restarting", t("update.step.restarting"))
             assert self.restart is not None
             self.restart()
         except BaseException as error:
@@ -494,7 +495,7 @@ class Updater:
                         await self.git("rev-parse", "HEAD") != ref
                         or await self.git("branch", "--show-current") != info["branch"]
                     ):
-                        raise PublicError("分支已被其他操作改变")
+                        raise PublicError("update.branchChanged")
                     await self.git("reset", "--keep", info["head"])
                     if dist_replaced:
                         await asyncio.to_thread(shutil.rmtree, dist, True)
@@ -504,9 +505,9 @@ class Updater:
                 except Exception:
                     cleanup_stage = False
                     error = PublicError(
-                        f"{error}；自动恢复失败，请手动检查 Git 和依赖状态；备份保留于 {stage}"
+                        "update.recoveryFailed", error=error, stage=stage
                     )
-            message = str(error) if isinstance(error, PublicError) else f"更新失败：{error!r}"
+            message = str(error) if isinstance(error, PublicError) else t("update.failed", error=error)
             self.state = {**self.state, "phase": "failed", "message": message}
             self.output.append("✗ " + message)
             log.log(message)
@@ -518,7 +519,7 @@ class Updater:
                     await self.git("worktree", "remove", "--force", str(source))
                 except Exception:
                     cleanup_stage = False
-                    log.log(f"临时 Git worktree 清理失败：{source}")
+                    log.log(Text("update.log.worktreeCleanup", source=source))
             if cleanup_stage:
                 await asyncio.to_thread(shutil.rmtree, stage, True)
 
@@ -560,7 +561,7 @@ class Updater:
             )
         except PublicError:
             raise PublicError(
-                f"新版本无法加载配置文件 {self.home / 'config.toml'}，已取消重启，请查看更新日志"
+                "update.configIncompatible", value=self.home / 'config.toml'
             ) from None
 
     async def run(self, kind: str, ref: str, archive: str, staged: dict | None = None) -> None:
@@ -571,14 +572,14 @@ class Updater:
                 source, sha = staged["source"], staged["sha"]
             else:
                 await asyncio.to_thread(self.cleanup_stages)
-                self.step("downloading", f"正在下载 {ref[:12] if kind == 'commit' else ref}")
+                self.step("downloading", t("update.step.downloading", value=ref[:12] if kind == 'commit' else ref))
                 source, sha = await self.download(archive, stage)
-            self.step("building", "正在安装 WebUI 依赖")
+            self.step("building", t("update.step.webDeps"))
             await self.command(self.npm("--prefix", "web", "ci", "--no-audit", "--no-fund"), source)
-            self.step("building", "正在构建 WebUI")
+            self.step("building", t("update.step.webBuild"))
             await self.command(self.npm("--prefix", "web", "run", "build"), source)
             if not (source / "web" / "dist" / "index.html").is_file():
-                raise PublicError("WebUI 构建没有生成页面")
+                raise PublicError("update.noPages")
             marker = {
                 "kind": kind,
                 "ref": ref,
@@ -586,25 +587,25 @@ class Updater:
                 "deployed_at": datetime.now(UTC).isoformat(timespec="seconds"),
             }
             (source / MARKER).write_text(json.dumps(marker, ensure_ascii=False), encoding="utf-8")
-            self.step("deploying", "正在替换程序文件")
+            self.step("deploying", t("update.step.replacing"))
             backup = stage / "previous"
             await asyncio.to_thread(self.swap, source, backup)
             try:
-                self.step("deploying", "正在同步 Python 依赖")
+                self.step("deploying", t("update.step.pythonDeps"))
                 await self.sync()
-                self.step("deploying", "正在检查新版配置兼容性")
+                self.step("deploying", t("update.step.configCheck"))
                 await self.validate_config(self.app_dir)
             except BaseException:
-                self.step("deploying", "部署失败，正在恢复原版本")
+                self.step("deploying", t("update.step.rollback"))
                 await asyncio.to_thread(self.restore, backup, stage / "failed")
                 await asyncio.shield(self.sync(quiet=True))
                 raise
             await asyncio.to_thread(self.keep_previous, backup)
-            self.step("restarting", "部署完成，正在重启")
+            self.step("restarting", t("update.step.deployed"))
             assert self.restart is not None
             self.restart()
         except Exception as error:
-            message = str(error) if isinstance(error, PublicError) else f"更新失败：{error!r}"
+            message = str(error) if isinstance(error, PublicError) else t("update.failed", error=error)
             self.state = {**self.state, "phase": "failed", "message": message}
             self.output.append("✗ " + message)
             log.log(message)
@@ -623,15 +624,15 @@ class Updater:
             async with self.client(timeout=120) as client:
                 async with client.stream("GET", url) as response:
                     if response.status_code >= 400:
-                        raise PublicError(f"源码下载失败（HTTP {response.status_code}）")
+                        raise PublicError("update.downloadFailedHttp", status_code=response.status_code)
                     with path.open("wb") as stream:
                         async for chunk in response.aiter_bytes():
                             size += len(chunk)
                             if size > MAX_ARCHIVE:
-                                raise PublicError("源码包过大，已取消下载")
+                                raise PublicError("update.archiveTooLarge")
                             stream.write(chunk)
         except httpx.HTTPError:
-            raise PublicError("源码下载失败，请检查网络连接") from None
+            raise PublicError("update.downloadFailed") from None
         return await asyncio.to_thread(self.extract, path, stage / "source")
 
     @staticmethod
@@ -642,13 +643,13 @@ class Updater:
                 # git archive records the commit in the global pax header.
                 sha = archive.pax_headers.get("comment", "")
         except (tarfile.TarError, OSError) as error:
-            raise PublicError(f"源码包无法解压：{error}") from None
+            raise PublicError("update.archiveBroken", error=error) from None
         entries = list(target.iterdir())
         if len(entries) != 1 or not entries[0].is_dir():
-            raise PublicError("源码包结构异常")
+            raise PublicError("update.archiveLayout")
         source = entries[0]
         if not all((source / name).is_file() for name in REQUIRED):
-            raise PublicError("下载的源码不完整")
+            raise PublicError("update.archiveIncomplete")
         return source, sha if SHA.match(sha) else ""
 
     def snapshot(self, root: Path) -> dict[str, Path]:
@@ -723,7 +724,7 @@ class Updater:
             if chunks and not chunks[-1].endswith("\n"):
                 chunks.append("\n")
         target.write_text("".join(chunks), encoding="utf-8")
-        log.log(f"已保存本地修改补丁：{target}")
+        log.log(Text("update.log.patchSaved", target=target))
         return target.relative_to(self.root).as_posix()
 
     def swap(self, source: Path, backup: Path) -> None:
@@ -769,10 +770,10 @@ class Updater:
                 Path(node).parent / "node_modules" / "npm" / "bin" / "npm-cli.js" if node else None
             )
             if not node or not cli or not cli.is_file():
-                raise PublicError("找不到 Node.js/npm，无法构建 WebUI")
+                raise PublicError("update.noNode")
             return [node, str(cli), *args]
         if not shutil.which("npm"):
-            raise PublicError("找不到 npm，无法构建 WebUI")
+            raise PublicError("update.noNpm")
         return ["npm", *args]
 
     async def sync(self, quiet: bool = False) -> None:
@@ -797,4 +798,4 @@ class Updater:
             if text.strip():
                 self.output.append(text[:300])
         if result["exit_code"] != 0:
-            raise PublicError(f"{Path(argv[0]).name} 执行失败（退出码 {result['exit_code']}）")
+            raise PublicError("update.commandFailed", name=Path(argv[0]).name, exit_code=result['exit_code'])

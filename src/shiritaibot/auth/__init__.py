@@ -23,6 +23,7 @@ from shiritaibot.config import (
 )
 from shiritaibot.core import Context, Model, PublicError, Tool, canonical, fingerprint, now, uid
 from shiritaibot.core.logs import brief, describe_session, get_logger
+from shiritaibot.i18n import t
 
 if TYPE_CHECKING:
     from shiritaibot.llm import ProviderManager
@@ -275,7 +276,7 @@ class Permissions:
                     **({"subagent_run": ctx.subagent_run} if ctx.subagent_run else {}),
                     "background": ctx.background,
                     "tool": tool.name,
-                    "description": tool.description,
+                    "description": t(tool.description),
                     "risk": tool.risk,
                     "arguments": args,
                     "conversation": [

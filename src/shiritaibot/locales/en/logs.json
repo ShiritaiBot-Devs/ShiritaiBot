@@ -1,0 +1,11 @@
+{
+  "levelInvalid": "The log level must be debug, info, warning, or error",
+  "background": "Background · ",
+  "event": "Event ",
+  "groupChat": "{adapter} · group {target}",
+  "privateChat": "{adapter} · private {target}",
+  "items_one": "{count} item",
+  "items_other": "{count} items",
+  "more": " and {count} more",
+  "separator": ", "
+}
