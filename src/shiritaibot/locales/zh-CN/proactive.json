@@ -1,0 +1,74 @@
+{
+  "importance": {
+    "1": "低",
+    "3": "高",
+    "2": "普通",
+    "4": "最高",
+    "0": "可丢弃"
+  },
+  "recipient": {
+    "owner": "主人",
+    "session": "原会话"
+  },
+  "notStated": "未说明",
+  "log": {
+    "retrying": "重试中",
+    "fallback": "改用默认判断",
+    "dropped": "重要性为 0，事件已丢弃",
+    "eventTag": "事件 {value}",
+    "disabled": "主动性引擎未启用，事件仅记录",
+    "pluginInvalid": "插件修改的事件内容无效，已忽略",
+    "verdictInvalid": "插件修改的处理结论无效，已忽略",
+    "jevIncomplete": "决策模型返回的分诊结果不完整，改用文本模型",
+    "toAgent": "交给 Proactive Agent 核查处理",
+    "noConclusion": "Proactive Agent 未给出有效结论，按分诊建议处理",
+    "memoryFailed": "未能提交记忆抽取（{name}）",
+    "triageInvalid": "分诊模型输出无效（{name}），",
+    "loopError": "主动性引擎循环出错（{name}）",
+    "duplicate": "重复事件已忽略：{brief}",
+    "triageText": "分诊由文本模型完成：{brief}",
+    "promptFailed": "交互提醒发送失败，下轮重试（{name}）",
+    "timeout": "Proactive Agent 超过 {limit} 秒未完成，按超时处理",
+    "pluginDropped": "事件被插件丢弃：{brief}",
+    "triageJev": "分诊由决策模型（Jev）完成：{brief}",
+    "noNotify": "处理结束：不发送通知，理由：{brief}",
+    "agentFailed": "无法启动 Proactive Agent（{name}）",
+    "channelFailed": "插件 {plugin} 的通知渠道转发失败（{name}）",
+    "sending": "向{recipient}发送 {count} 条通知（来源 {source}）：{brief}",
+    "willNotify": "处理结束：将通知{recipient}{value}——{brief}",
+    "received": "收到事件「{brief}」（来源 {source}，类型 {kind}，紧急度 {urgency}）"
+  },
+  "decision": {
+    "ignore": "可以忽略",
+    "notify": "立即通知主人",
+    "log": "记录即可，不必打扰",
+    "digest": "可以汇总后再告诉主人"
+  },
+  "reason": {
+    "highest": "重要性最高",
+    "reminder": "会话设定的提醒"
+  },
+  "report": {
+    "notify": "是否发送通知",
+    "reason": "一句话说明为什么通知或不通知",
+    "message": "发给通知对象的完整消息，用人设口吻撰写；不通知时写处理摘要",
+    "description": "提交本次主动事件的处理结论。处理完毕后必须调用一次，调用后本任务结束。"
+  },
+  "taskSessionGone": "任务会话已失效",
+  "disabled": "主动性引擎未启用",
+  "routineSessionGone": "日程原会话不可用",
+  "routineNote": "（会话设定的日程）",
+  "ownerTimeout": "等待主人处理已超期",
+  "routineDeliveryMissing": "日程会话投递未配置",
+  "ownerHandled": "主人已处理，重新运行",
+  "routineOnlyScheduler": "日程事件由日程调度器创建",
+  "unfinished": "\n（主动处理未完成或结果无效）",
+  "handedToAdapter": "已交给协议端通知{recipient}",
+  "loopFailed": "Loop 失败、超时或未返回有效结构化结果",
+  "triageFailed": "分类失败，交给 Proactive Loop 核查",
+  "needsOwner": "后台任务需要你在私聊中处理：{reason}",
+  "sentSummary": "{source}: {count} 条通知已发送给{recipient}",
+  "jevVerdict": "Jev 判定重要性 {importance}，建议 {choice}（置信度 {float:.2f}）",
+  "quietHours": "免打扰时段（{quiet_start}–{quiet_end} {timezone}），通知延后到 {quiet_end2} 发送",
+  "triageResult": "分诊结果：重要性 {importance}/4（{value}），建议{value2}；理由：{brief}"
+}
