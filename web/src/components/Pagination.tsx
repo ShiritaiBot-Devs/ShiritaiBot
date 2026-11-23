@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { LoadingBar } from "./LoadingBar";
 
 export const PAGE_SIZE = 20;
@@ -18,30 +19,31 @@ export function Pagination({
   onChange: (page: number) => void;
   loading?: boolean;
 }) {
+  const { t } = useTranslation();
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const current = Math.min(page, pages);
   return (
-    <nav className="pagination" aria-label={label + "分页"}>
-      {loading && <LoadingBar label={`读取${label}`} />}
+    <nav className="pagination" aria-label={t("pagination.region", { label })}>
+      {loading && <LoadingBar label={t("pagination.loading", { label })} />}
       <small className="muted" aria-live="polite">
-        共 {total} 条 · 第 {current} / {pages} 页
+        {t("pagination.summary", { count: total, current, pages })}
       </small>
       <div className="actions">
         <button
           type="button"
           disabled={loading || current <= 1}
           onClick={() => onChange(current - 1)}
-          aria-label={label + "上一页"}
+          aria-label={t("pagination.previousLabel", { label })}
         >
-          <ChevronLeft size={14} /> 上一页
+          <ChevronLeft size={14} /> {t("pagination.previous")}
         </button>
         <button
           type="button"
           disabled={loading || current >= pages}
           onClick={() => onChange(current + 1)}
-          aria-label={label + "下一页"}
+          aria-label={t("pagination.nextLabel", { label })}
         >
-          下一页 <ChevronRight size={14} />
+          {t("pagination.next")} <ChevronRight size={14} />
         </button>
       </div>
     </nav>

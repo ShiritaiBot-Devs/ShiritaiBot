@@ -1,0 +1,51 @@
+{
+  "recentEntries_other": "Latest {count} entries",
+  "recentEntries_one": "Latest {count} entry",
+  "recentLines_other": "Latest {count} lines",
+  "recentLines_one": "Latest {count} line",
+  "raw": {
+    "title": "Raw logs",
+    "rollingTitle": "Raw rolling log",
+    "hint": "Log file: data/logs/shiritaibot.log (rotates at 5 MB per file, keeping 3)",
+    "empty": "No log output yet.",
+    "failed": "Couldn't load raw logs: {error}",
+    "refresh": "Refresh",
+    "autoScroll": "Auto-scroll",
+    "lines": "Lines shown",
+    "filter": "Filter raw logs"
+  },
+  "activity": {
+    "title": "Activity",
+    "failed": "Couldn't load logs: {error}"
+  },
+  "runtime": {
+    "title": "Runtime logs",
+    "hint": "\"Recording level\" decides which logs the terminal, log file, and this page record. Changes take effect right away and survive restarts. \"Display level\" only affects this page. File: data/logs/shiritaibot.log.",
+    "empty": "No runtime logs yet.",
+    "failed": "Couldn't load runtime logs: {error}",
+    "filter": "Filter runtime logs"
+  },
+  "tabs": "Log type",
+  "loading": "Loading logs",
+  "filterPlaceholder": "Filter by keyword…",
+  "follow": "Follow live",
+  "count": "Entries shown",
+  "source": {
+    "all": "All sources",
+    "label": "Log source"
+  },
+  "filter": {
+    "label": "Display level",
+    "error": "ERROR only",
+    "warning": "WARNING and above",
+    "log": "LOG and above",
+    "all": "Show all"
+  },
+  "record": {
+    "updated": "Log level updated. It takes effect right away.",
+    "label": "Recording level",
+    "hint": "Takes effect at once: the terminal, log file, and this page all record at this level",
+    "info": "LOG (default)",
+    "debug": "DEBUG (every detail)"
+  }
+}

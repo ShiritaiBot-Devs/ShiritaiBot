@@ -1,0 +1,65 @@
+{
+  "intro": "表情管理器由三部分组成：表情库按分类存储表情和文字描述；收录器从白名单群聊收集其他人发的表情包；注入器告诉模型如何用 <meme>分类</meme> 发表情，并在发送前把标记换成表情消息。转述与分类所用的模型在“模型与服务 → 路由 → 表情转述与分类模型”中配置，语义检索使用 Embedding 路由。",
+  "categories": {
+    "hint": "名称用于 <meme>名称</meme> 标记，只能使用小写字母、数字和下划线，以字母开头；说明告诉模型和分类判断这个分类表达什么。改名或删除分类后，原分类下的表情需要重新归类才能被随机发送。",
+    "duplicate": "分类名称重复",
+    "invalidName": "名称格式无效",
+    "delete": "删除分类 {name}",
+    "descriptionPlaceholder": "这个分类表达的情绪或用途",
+    "descriptionLabel": "分类 {n} 说明",
+    "nameLabel": "分类 {n} 名称",
+    "add": "添加分类",
+    "title": "分类标签"
+  },
+  "item": {
+    "delete": "删除表情 {id}",
+    "confirmDelete": "确认删除",
+    "deleted": "表情已删除",
+    "redescribe": "重新转述",
+    "redescribed": "已重新转述",
+    "redescribeLabel": "用表情转述模型重新描述",
+    "saveDescription": "保存描述",
+    "descriptionSaved": "描述已保存",
+    "descriptionLabel": "表情 {id} 描述",
+    "categoryUpdated": "分类已更新",
+    "categoryLabel": "表情 {id} 分类",
+    "unconfigured": "{category}（未配置）"
+  },
+  "cancel": "取消",
+  "upload": {
+    "submit": "上传",
+    "descriptionPlaceholder": "留空由表情转述模型描述",
+    "descriptionLabel": "上传描述",
+    "description": "描述",
+    "auto": "自动判断",
+    "categoryLabel": "上传分类",
+    "category": "分类",
+    "image": "表情图片",
+    "title": "上传表情（2 MB 以内）"
+  },
+  "uploaded": "表情已加入表情库",
+  "pages": "表情分页",
+  "empty": "表情库还是空的。开启群聊自动收录，或在上方上传表情。",
+  "noMatch": "没有符合条件的表情",
+  "loadFailed": "读取表情失败：{error}",
+  "search": {
+    "submit": "搜索",
+    "placeholder": "描述中的关键词或表情 ID",
+    "label": "搜索表情"
+  },
+  "library": {
+    "all": "全部",
+    "category": "表情分类",
+    "noEmbedding": "未配置 Embedding，检索只用关键词",
+    "indexed": "{indexed} 已索引，{pending} 待计算",
+    "title": "表情库",
+    "usage": "{count} / {capacity} 个 · 向量"
+  },
+  "title": "表情管理器",
+  "sources": {
+    "manual": "手动上传",
+    "agent": "模型收藏",
+    "group": "群聊收录"
+  },
+  "count_other": "{count} 个"
+}

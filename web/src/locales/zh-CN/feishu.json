@@ -1,0 +1,37 @@
+{
+  "created": "{platform}应用已创建",
+  "generate": "生成二维码",
+  "regenerate": "重新生成二维码",
+  "generating": "正在生成…",
+  "saveDisabled": "保存为未启用",
+  "saveConnect": "保存并连接",
+  "saving": "正在保存…",
+  "cancel": "取消",
+  "statusRetry": "暂时无法读取扫码状态，正在重试。",
+  "bindOwner": "连接后，按实例提示发送私聊并绑定主人。",
+  "alreadyEnabled": "已有启用的飞书连接，新实例将保存为未启用。",
+  "enableAfterSave": "保存后启用连接",
+  "memory": {
+    "default": "默认记忆库",
+    "feishu": "独立飞书记忆库"
+  },
+  "memoryProfile": "记忆库",
+  "instanceId": "实例标识",
+  "openAuth": "打开授权页面",
+  "waiting": "等待手机确认",
+  "qrLabel": "飞书创建应用二维码",
+  "platform": {
+    "feishu": "飞书"
+  },
+  "platformLabel": "平台",
+  "hint": "用手机确认创建，再保存到 ShiritaiBot。",
+  "title": "扫码创建飞书机器人",
+  "saveFailed": "无法保存机器人",
+  "qrFailed": "无法生成二维码",
+  "terminal": {
+    "error": "创建未完成",
+    "expired": "二维码或授权已过期",
+    "denied": "已取消授权",
+    "applied": "飞书实例已保存"
+  }
+}

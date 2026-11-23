@@ -1,0 +1,83 @@
+{
+  "upload": {
+    "failed": "{file}: {error}",
+    "failedShort": "Upload failed",
+    "label": "Upload files (up to {limit} MiB each; you can choose several)",
+    "submit": "Upload",
+    "submitMany_one": "Upload {count} file",
+    "submitMany_other": "Upload {count} files",
+    "formats": "Supports text formats such as txt, md, pdf, doc(x), csv, xls(x), and ppt(x). Scanned PDFs need OCR first.",
+    "files": "Knowledge base files",
+    "done": "Document added to the knowledge base."
+  },
+  "chunks_one": "{count} chunk",
+  "chunks_other": "{count} chunks",
+  "chunkPages": "Chunk pages of document {id}",
+  "chunksFailed": "Couldn't load chunks: {error}",
+  "delete": "Delete {title}",
+  "cancel": "Cancel",
+  "confirmDelete": "Confirm delete",
+  "deleted": "Document deleted.",
+  "download": "Download {title}",
+  "showChunks": "Show chunks",
+  "collapse": "Collapse",
+  "search": {
+    "empty": "Nothing found",
+    "failed": "Search failed: {error}",
+    "label": "Search the knowledge base",
+    "submit": "Search",
+    "placeholder": "Enter a question or keywords",
+    "hint": "Results match what the assistant sees when it calls kb_search.",
+    "title": "Search test"
+  },
+  "documents": {
+    "pages": "Document pages",
+    "empty": "The knowledge base is empty. Upload files, or send them to the assistant in a QQ private chat.",
+    "noMatch": "No documents match",
+    "loadFailed": "Couldn't load the knowledge base: {error}",
+    "noEmbedding": "No embedding model, so search uses keywords only",
+    "indexed": "{indexed} indexed, {pending} pending",
+    "title": "Documents",
+    "summary": "{documents} documents · {chunks} chunks · {size} · vectors"
+  },
+  "filter": {
+    "submit": "Filter",
+    "placeholder": "Title or file name",
+    "label": "Filter documents"
+  },
+  "libraries": {
+    "loadFailed": "Couldn't load the knowledge bases: {error}",
+    "title": "Managed knowledge bases",
+    "disable": "Disable knowledge base",
+    "remove": "Remove from settings",
+    "removeHint": "Removing it from the settings keeps its documents on disk",
+    "displayNameOf": "Display name of {key}",
+    "idHint": "IDs start with a lowercase letter, use letters, numbers, underscores, or hyphens, and must not already be taken.",
+    "add": "Add knowledge base",
+    "namePlaceholder": "Display name",
+    "nameLabel": "Knowledge base name",
+    "idPlaceholder": "ID, for example project",
+    "idLabel": "Knowledge base ID",
+    "settings": "Knowledge base settings"
+  },
+  "settings": {
+    "title": "Search and import settings"
+  },
+  "defaultLibrary": "Default knowledge base",
+  "matches": {
+    "semantic": "Semantic",
+    "keyword": "Keyword",
+    "hybrid": "Keyword + semantic"
+  },
+  "sources": {
+    "agent": "Written by the assistant",
+    "qq": "QQ private chat",
+    "web": "WebUI upload"
+  },
+  "bindings": {
+    "default": "Use the default access rules",
+    "library": "Knowledge base",
+    "hint": "One knowledge base can be bound to several sessions. Once it's bound to a group chat, members can search it through the assistant. A new knowledge base can take uploads once it's saved.",
+    "title": "Session bindings"
+  }
+}

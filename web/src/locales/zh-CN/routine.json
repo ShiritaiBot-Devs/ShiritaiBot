@@ -1,0 +1,51 @@
+{
+  "cron": "Cron：{cron}",
+  "cronNext": "Cron：{cron} · 下次 {next}",
+  "empty": "此会话暂无日程。",
+  "loadFailed": "读取日程失败：{error}",
+  "create": "创建",
+  "courseHint": "课程仅供查询，不提醒，也不触发 Proactive Loop。",
+  "new": {
+    "timeLabel": "时间",
+    "time": "时间（浏览器本地时区）",
+    "content": "内容",
+    "kind": "类型",
+    "session": "所属会话",
+    "title": "安排下一件事"
+  },
+  "allSessions": "全部会话",
+  "viewSession": "查看会话",
+  "created": "已创建",
+  "legacy": "历史未归属",
+  "dayEmpty": "这一天没有安排。",
+  "closeDay": "关闭当日安排",
+  "unscheduled": "未排期待办与定时任务",
+  "calendarHint": "点击日期查看全部安排（含课程）",
+  "dayLabel_other": "{day}，{count} 项",
+  "calendar": "日程日历",
+  "nextMonth": "下个月",
+  "today": "今天",
+  "prevMonth": "上个月",
+  "cancel": "取消",
+  "cancelled": "已取消",
+  "done": "完成",
+  "markedDone": "已标记完成",
+  "noDue": "没有截止时间",
+  "status": {
+    "cancelled": "已取消",
+    "completed": "已完成",
+    "fired": "已触发",
+    "scheduled": "已排期",
+    "open": "进行中"
+  },
+  "kindShort": {
+    "job": "定时任务"
+  },
+  "kinds": {
+    "reminder": "提醒",
+    "course": "课程",
+    "event": "日程",
+    "todo": "待办",
+    "job": "定时 Agent 任务"
+  }
+}

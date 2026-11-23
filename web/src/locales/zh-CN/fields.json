@@ -1,0 +1,854 @@
+{
+  "provider": {
+    "id": {
+      "label": "提供商名称",
+      "help": "作为模型引用和路由里的标识，只能使用字母、数字、点、下划线或短横线。"
+    },
+    "enabled": {
+      "label": "启用提供商",
+      "help": "允许调用此提供商下已启用的模型。"
+    },
+    "protocol": {
+      "label": "接口协议",
+      "help": "systemone 用于 TypeSafe Jev 等判断模型：只做分类不生成文本，仅能用于工作/对话分流、主动事件分诊和记忆路由。填法：名称 typesafe，协议选 systemone，Base URL 填 https://api.typesafe.ai/v1，Key 填 TypeSafe 的 key；模型名填 jev-1.14.0，再把它放进 router / light / memory / approval 路由。若所在网络访问不了 TypeSafe，给这个提供商配代理（如 http://127.0.0.1:7890）。"
+    },
+    "base_url": {
+      "help": "填写接口前缀：OpenAI / Anthropic 通常以 /v1 结尾，Gemini 以 /v1beta 结尾，TypeSafe Jev 为 https://api.typesafe.ai/v1，经 OpenRouter 调用 Jev 为 https://openrouter.ai/api/v1。"
+    },
+    "timeout": {
+      "label": "超时（秒）"
+    },
+    "max_retries": {
+      "label": "最大重试轮数",
+      "help": "超时、限流或临时服务错误后的额外重试次数；0 表示不重试。默认 2 轮，最多发送 3 次。"
+    },
+    "proxy": {
+      "label": "网络请求代理",
+      "help": "支持 HTTP、HTTPS、SOCKS5；用于模型发现、测试及正式调用。留空使用服务进程的默认网络环境。"
+    }
+  },
+  "price": {
+    "currency": {
+      "label": "计价货币",
+      "options": {
+        "USD": "美元（USD）",
+        "CNY": "人民币（CNY）"
+      },
+      "help": "用于概览中的花费估算。可在下方从提供商获取单价，或按官网价格手动填写。"
+    },
+    "price_input": {
+      "label": "输入单价（每百万 tokens）",
+      "help": "三项单价都为 0 时表示未设置，概览不估算花费。"
+    },
+    "price_cached": {
+      "label": "缓存命中单价（每百万 tokens）",
+      "help": "0 表示按输入单价计算缓存命中的 tokens。"
+    },
+    "price_output": {
+      "label": "输出单价（每百万 tokens）"
+    }
+  },
+  "model": {
+    "id": {
+      "label": "模型标识"
+    },
+    "model": {
+      "label": "提供商模型名称"
+    },
+    "max_output": {
+      "label": "最大输出 tokens",
+      "help": "单次回复最多生成多少 token。聊天模型常见 4096～8192；填太大会截断长回复，太小会写不完，建议先用 4096。"
+    },
+    "enabled": {
+      "label": "启用",
+      "help": "允许路由使用此模型处理请求。"
+    },
+    "max_context": {
+      "label": "最大上下文 tokens",
+      "help": "包括输入与输出，须大于最大输出。0 表示未指定（推荐）；按字符估算 token，超出时尝试下一候选模型。DeepSeek 等长上下文模型可填 64000，普通模型填 128000 也行，填 0 最省心。"
+    },
+    "modalities": {
+      "label": "模态支持（输入）",
+      "options": {
+        "text": "文本",
+        "image": "图像",
+        "audio": "音频",
+        "video": "视频"
+      },
+      "help": "至少选择一项。勾选图像后，QQ 收到的图片会直接发给此模型；未勾选时按图像转述设置改为文字描述或 [图片] 占位。音频、视频暂未接入。"
+    },
+    "extra_body": {
+      "label": "自定义请求体参数（JSON）",
+      "help": "按接口原生格式填写 JSON 对象，嵌套对象递归合并。Gemini 示例 {\"generationConfig\":{\"temperature\":0.7}}。文本模型默认流式采集性能指标，设置 {\"stream\":false} 可关闭。模型、对话和工具定义由系统提供。"
+    }
+  },
+  "embeddingModel": {
+    "id": {
+      "label": "模型标识"
+    },
+    "model": {
+      "label": "提供商模型名称"
+    },
+    "enabled": {
+      "label": "启用",
+      "help": "允许使用此模型生成记忆向量。"
+    },
+    "dims": {
+      "label": "向量维度",
+      "help": "0 表示使用模型默认维度；支持降维的模型（如 OpenAI text-embedding-3、Gemini）可填较小值。修改后会重算全部记忆向量。"
+    },
+    "extra_body": {
+      "label": "自定义请求体参数（JSON）",
+      "help": "OpenAI 兼容接口按原生格式合并到 /embeddings 请求体；Gemini 接口不使用此项。"
+    }
+  },
+  "adapterCommon": {
+    "id": {
+      "label": "实例标识"
+    },
+    "type": {
+      "label": "适配器类型",
+      "options": {
+        "qq_official": "QQ 官方机器人",
+        "feishu": "飞书应用机器人"
+      }
+    },
+    "enabled": {
+      "label": "启用连接",
+      "help": "保存后连接此协议端，接收消息并发送回复。"
+    }
+  },
+  "onebot": {
+    "url": {
+      "label": "WebSocket 地址",
+      "help": "NapCat 的 Universal WebSocket 地址，只支持 ws:// 或 wss://。"
+    },
+    "token": {
+      "label": "访问令牌"
+    },
+    "self_id": {
+      "label": "Bot QQ 号"
+    },
+    "owner_id": {
+      "label": "主人 QQ 号",
+      "help": "主人的私聊拥有完整 Agent 权限；其他人和群聊只能使用 Chat 模式。"
+    },
+    "groups": {
+      "label": "启用的群号",
+      "help": "每行一个群号，只有白名单内的群会响应。"
+    },
+    "friends": {
+      "label": "启用的好友",
+      "help": "每行一个 QQ 号，非主人好友加入后才能使用 Chat 模式。"
+    },
+    "ignore_users": {
+      "label": "忽略的账号",
+      "help": "每行一个 QQ 号，优先级高于白名单。"
+    },
+    "auto_start": {
+      "label": "自动启动协议端",
+      "help": "协议端进程消失、连接持续失败时尝试拉起它。每行一个参数，例如 C:\\Apps\\NapCat\\Shell\\launcher.bat。留空则关闭；如果启动器需要管理员权限，可能弹出 UAC 或在无人值守时失败（日志会记录）。"
+    },
+    "auto_start_after": {
+      "label": "连续失败多少秒后启动",
+      "help": "避免协议端只是短暂重连时就误启动。两次自动启动至少间隔 5 分钟。"
+    }
+  },
+  "adapter": {
+    "app_id": {
+      "help": "填写 QQ 开放平台提供的数字 App ID。"
+    },
+    "app_secret": {
+      "placeholder": "已配置 · 留空保留",
+      "placeholder2": "输入机器人密钥",
+      "placeholder3": "输入应用密钥"
+    },
+    "qq_sandbox": {
+      "label": "使用沙盒 API"
+    },
+    "owner_id": {
+      "label": "主人 OpenID",
+      "help": "填写此 App 下的单聊 OpenID。",
+      "label2": "主人 Open ID",
+      "help2": "飞书私聊只响应主人，可使用 Agent 工具。"
+    },
+    "groups": {
+      "label": "允许的群 OpenID",
+      "label2": "允许的群聊",
+      "help": "每项填写一个 oc_ 开头的群聊 ID。"
+    },
+    "friends": {
+      "label": "允许的单聊 OpenID"
+    },
+    "ignore_users": {
+      "label": "忽略的成员 OpenID"
+    },
+    "domain": {
+      "label": "平台",
+      "options": {
+        "feishu": "飞书"
+      }
+    },
+    "memory_profile": {
+      "label": "记忆库",
+      "options": {
+        "feishu": "独立飞书记忆库",
+        "default": "现有默认记忆库"
+      },
+      "help": "用于主人的飞书私聊。"
+    },
+    "wake_keywords": {
+      "label": "群聊唤醒词",
+      "help": "消息以任一唤醒词开头时回复。"
+    },
+    "feishu_group_context": {
+      "label": "记录飞书群上下文",
+      "help": "开启后，回复时参考当前群的近期消息。"
+    }
+  },
+  "subagentCommon": {
+    "id": {
+      "label": "实例标识"
+    },
+    "enabled": {
+      "label": "启用实例",
+      "help": "允许助手将任务交给此子代理实例。"
+    },
+    "kind": {
+      "label": "类型",
+      "options": {
+        "shiritaibot": "ShiritaiBot 内置子代理",
+        "generic": "自定义 CLI"
+      }
+    },
+    "command": {
+      "label": "启动命令",
+      "help": "首行填写可执行程序（如 codex、claude、dsh 或 agy），其余启动参数每行一个。"
+    },
+    "timeout": {
+      "label": "超时（秒）"
+    },
+    "proxy": {
+      "label": "网络代理",
+      "help": "仅作用于此实例。留空继承运行环境。可填 HTTP、HTTPS 或 SOCKS5 地址，实际支持的协议取决于 CLI。"
+    },
+    "model": {
+      "label": "模型",
+      "help": "留空则使用 CLI 的默认模型。"
+    }
+  },
+  "addDirs": {
+    "add_dirs": {
+      "label": "额外目录",
+      "help": "每行一个绝对路径。子代理默认只在独立的任务工作目录内工作，这里列出它还可以访问的目录。"
+    }
+  },
+  "codex": {
+    "sandbox": {
+      "label": "沙箱模式",
+      "options": {
+        "read_only": "只读（read-only）",
+        "workspace_write": "可写工作目录（workspace-write）",
+        "danger_full_access": "完全访问，无沙箱（danger-full-access）"
+      },
+      "help": "对应 Codex 的 sandbox_mode。后台运行不会请求审批，沙箱外的操作直接失败。"
+    },
+    "network_access": {
+      "label": "允许联网",
+      "help": "对应 sandbox_workspace_write.network_access，仅在可写工作目录模式下生效；完全访问模式始终可联网。"
+    },
+    "add_dirs": {
+      "help": "每行一个绝对路径，作为 workspace-write 模式下额外可写的目录（writable_roots）。"
+    }
+  },
+  "claude": {
+    "permission_mode": {
+      "label": "权限模式",
+      "options": {
+        "acceptEdits": "自动接受文件编辑（acceptEdits）",
+        "default": "默认（default）",
+        "dontAsk": "仅允许列表内的工具（dontAsk）",
+        "auto": "自动判断（auto）",
+        "plan": "只规划不执行（plan）",
+        "bypassPermissions": "跳过所有权限检查（bypassPermissions）"
+      },
+      "help": "对应 permissions.defaultMode。后台无人应答权限请求，未被模式或允许列表放行的操作会被拒绝。"
+    },
+    "tools": {
+      "label": "可用工具集",
+      "help": "每行一个内置工具名（如 Read、Edit、Bash），留空使用 CLI 默认工具集。"
+    },
+    "allowed_tools": {
+      "label": "允许的工具",
+      "help": "对应 permissions.allow，无需确认即可使用。每行一条，如 Bash、WebFetch、Bash(git *)。"
+    },
+    "disallowed_tools": {
+      "label": "禁止的工具",
+      "help": "对应 permissions.deny，优先级高于允许列表。每行一条，如 Bash(rm *)。"
+    }
+  },
+  "dsh": {
+    "permission_preset": {
+      "label": "权限预设",
+      "help": "对应 --permission-mode，填 dsh 中已配置的权限预设名。内置 workspace-write（只可写工作目录）与 danger-full-access（无沙箱）；auto 需先在 dsh 启用 Auto review。"
+    },
+    "approval_policy": {
+      "label": "审批策略",
+      "options": {
+        "never": "直接拒绝需审批的操作（never）",
+        "ask": "请求审批（ask）"
+      },
+      "help": "对应 --approval-policy。headless 模式无人应答，ask 也会因无人回答而拒绝；never 会让模型事先知道不要请求提权。"
+    },
+    "add_dirs": {
+      "help": "每行一个绝对路径，对应 --add-dir，workspace-write 下额外可写的目录。"
+    }
+  },
+  "subagent": {
+    "model": {
+      "label": "模型",
+      "options": {
+        "none": "跟随 Agent Work 路由"
+      }
+    },
+    "instructions": {
+      "label": "任务说明",
+      "help": "主 Agent 选择实例时可看到这段说明，子代理也会按此执行。"
+    },
+    "native_tools": {
+      "label": "允许使用的工具",
+      "help": "按工具名授权。每次调用仍需通过来源会话的权限检查。"
+    },
+    "native_skills": {
+      "label": "允许使用的 Skill",
+      "help": "勾选后可通过 skill_list 和 skill_read 使用。执行技能所需的其他工具也要单独勾选。"
+    },
+    "native_manual_approval": {
+      "label": "工具调用需人工审批",
+      "help": "关闭时沿用来源会话的审批策略。"
+    },
+    "antigravity_mode": {
+      "label": "执行模式",
+      "options": {
+        "none": "使用 CLI 设置",
+        "plan": "规划（plan）",
+        "accept_edits": "接受文件编辑（accept-edits）",
+        "auto": "自动（auto）"
+      }
+    }
+  },
+  "subagentSummary": {
+    "text": " · 联网"
+  },
+  "policy": {
+    "shell_command": {
+      "label": "Shell 启动参数",
+      "help": "每行一个参数，默认 bash --noprofile --norc -c。"
+    },
+    "approval_timeout": {
+      "label": "审批有效期（秒）"
+    },
+    "approval_allow_threshold": {
+      "label": "Jev 批准阈值",
+      "help": "Jev 判定批准的概率达到此值才直接放行，否则按“把握不足时”处理。"
+    },
+    "approval_deny_threshold": {
+      "label": "Jev 拒绝阈值",
+      "help": "Jev 判定拒绝的概率达到此值才算明确拒绝，否则视为把握不足。"
+    },
+    "approval_on_deny": {
+      "label": "Jev 明确拒绝时",
+      "options": {
+        "fallback": "交给文本模型复核",
+        "deny": "直接拒绝"
+      }
+    },
+    "approval_on_unsure": {
+      "label": "Jev 把握不足时",
+      "options": {
+        "fallback": "交给文本模型复核",
+        "deny": "直接拒绝"
+      }
+    },
+    "max_steps": {
+      "label": "每轮步数上限"
+    },
+    "max_turn_seconds": {
+      "label": "单轮时限（秒）"
+    },
+    "max_context_chars": {
+      "label": "上下文字符上限"
+    },
+    "dynamic_subagent": {
+      "label": "允许动态内置子代理",
+      "help": "开启后，主 Agent 可通过 subagent_spawn 按需创建临时内置子代理，继承当前会话权限与审批策略。"
+    },
+    "dynamic_subagent_model_override": {
+      "label": "允许动态子代理自选模型",
+      "help": "允许主 Agent 在 subagent_spawn 时指定已启用的文本生成模型；关闭后固定使用 Agent 路由。"
+    }
+  },
+  "messageMerge": {
+    "debounce_enabled": {
+      "label": "合并连续消息",
+      "help": "开启后，同一发送者在 QQ 私聊或群聊中的连续消息会合并为一轮处理。"
+    },
+    "debounce_seconds": {
+      "label": "消息合并等待（秒）",
+      "help": "同一发送者的连续消息在此时间内合并为一轮；0 表示关闭。"
+    },
+    "debounce_max_seconds": {
+      "label": "消息合并最长等待（秒）",
+      "help": "持续有新消息时，本轮最多等待这么久。"
+    },
+    "debounce_suffixes": {
+      "label": "立即开始的结尾",
+      "help": "每行一个，消息以其中任意一项结尾时不再等待；留空则总是等满时间。"
+    }
+  },
+  "proactive": {
+    "enabled": {
+      "label": "启用主动性引擎",
+      "help": "处理外部事件，并按免打扰和通知策略主动联系主人。"
+    },
+    "timezone": {
+      "label": "时区"
+    },
+    "quiet_start": {
+      "label": "免打扰开始"
+    },
+    "quiet_end": {
+      "label": "免打扰结束"
+    },
+    "throttle_seconds": {
+      "label": "同来源通知间隔（秒）"
+    }
+  },
+  "basicSettings": {
+    "persona": {
+      "label": "基础人设",
+      "help": "未选择命名人格时使用。完整提示词仅在管理界面编辑，斜杠命令只显示人格标识和名称。"
+    },
+    "concurrency": {
+      "label": "LLM 并发数",
+      "help": "修改后需要重启进程生效。"
+    }
+  },
+  "identity": {
+    "assistant_name": {
+      "label": "助手称呼",
+      "help": "用于对话、记忆摘要和上下文管理。"
+    },
+    "owner_name": {
+      "label": "对主人的称呼"
+    },
+    "wake_keywords": {
+      "label": "唤起关键词",
+      "help": "每行一个，用于 QQ 消息和飞书私聊。飞书群的句首唤醒词在适配器中设置。"
+    },
+    "wake_keyword_mode": {
+      "label": "关键词匹配方式",
+      "options": {
+        "contains": "包含即唤起（contains）",
+        "prefix": "仅句首唤起（prefix）"
+      },
+      "help": "句首匹配时，关键词须出现在消息文本开头。消息原文（含关键词）会交给模型。"
+    },
+    "group_command_require_wake": {
+      "label": "群聊 / 指令需要唤醒",
+      "help": "默认可直接发送内置或插件 / 指令。开启后，两类指令都需要 @ 机器人或使用群聊唤醒词。"
+    },
+    "private_require_keyword": {
+      "label": "私聊需要唤醒词",
+      "help": "默认可直接私聊。开启后，QQ 和飞书的普通私聊消息需要命中上方唤醒词。斜杠指令、停止和审批回复始终可直接发送。"
+    }
+  },
+  "outboundMessage": {
+    "help_menu_style": {
+      "label": "/help 菜单样式",
+      "options": {
+        "text": "文字",
+        "light": "亮色图片",
+        "dark": "暗色图片"
+      },
+      "help": "图片按内置功能和插件分区，只显示当前会话可用的命令。"
+    },
+    "onebot_forward_long_messages": {
+      "label": "OneBot 长消息折叠",
+      "help": "在 OneBot 群聊及私聊中，将过长的回复发为一条合并转发。需要协议端支持合并转发。"
+    },
+    "onebot_forward_threshold": {
+      "label": "折叠触发长度（字符）",
+      "help": "开启长消息折叠后，回复正文超过这个长度时触发。"
+    }
+  },
+  "persona": {
+    "id": {
+      "label": "人格标识",
+      "help": "用于 /persona 标识 切换。只允许字母、数字、下划线和短横线，不能使用 default。"
+    },
+    "name": {
+      "label": "人格名称"
+    },
+    "enabled": {
+      "label": "启用人格",
+      "help": "允许将此人格设为默认，或在会话中切换使用。"
+    },
+    "prompt": {
+      "label": "人格提示词",
+      "help": "仅在管理界面编辑；命令列表和切换回复不会展示完整提示词。"
+    }
+  },
+  "context": {
+    "compression_tool_chars": {
+      "label": "摘要材料中单条工具结果的字符上限",
+      "help": "超长结果保留首尾。设为 0 可关闭截断。"
+    },
+    "compression_failure": {
+      "label": "所有压缩模型失败时",
+      "options": {
+        "discard": "丢弃旧轮次并继续",
+        "error": "报错并保留压缩进度"
+      }
+    },
+    "max_turns": {
+      "label": "最大保留上下文轮数",
+      "help": "包含即将开始的一轮；一轮中的工具调用和插话作为整体处理。"
+    },
+    "keep_recent_turns": {
+      "label": "压缩时保留最近轮数",
+      "help": "小于最大轮数。字符空间不足时可能压缩更多旧轮次。"
+    }
+  },
+  "memory": {
+    "inject": {
+      "label": "每轮自动注入相关记忆",
+      "help": "主人私聊和 Proactive Loop 中，消息提到已知的人或事物、或检索到足够相关的记忆时，把它们附在本轮消息末尾；否则不注入。"
+    },
+    "inject_chars": {
+      "label": "记忆注入字符预算",
+      "help": "每轮注入记忆的字符上限；已在上下文中的条目不会重复注入。"
+    },
+    "extract": {
+      "label": "自动整理记忆",
+      "help": "用记忆模型从主人私聊和已处理的外部事件中提取人物、事实和事件。每条都要有原文证据，助手自己说的话不会被记住；拿不准的冲突会在之后的对话里由 Agent 问你。"
+    },
+    "extract_messages": {
+      "label": "私聊累计多少条消息后整理"
+    },
+    "extract_idle_minutes": {
+      "label": "私聊空闲多少分钟后整理",
+      "help": "没有达到条数时，对话停下来这么久也会整理一次。"
+    }
+  },
+  "groupContext": {
+    "enabled": {
+      "label": "启用群聊上下文感知",
+      "help": "记录白名单群内的全部发言（含未 @ Bot 的消息），每群保留最近 2000 条。"
+    },
+    "inject_messages": {
+      "label": "每轮注入消息条数",
+      "help": "被唤起时附带的最近群聊条数，不含触发消息本身；0 表示不直接注入。"
+    },
+    "inject_chars": {
+      "label": "注入字符预算",
+      "help": "注入记录的总字符上限，超出时优先保留最新消息；计入上下文字符上限。"
+    },
+    "query_tool": {
+      "label": "提供 group_context_query 工具",
+      "help": "允许 Bot 按关键词查询或向前翻阅本群记录，并在提示词中提醒其按需查询。仍受工具权限控制。"
+    },
+    "interject_mode": {
+      "label": "群聊主动回复",
+      "options": {
+        "off": "关闭主动回复",
+        "simple": "简单主动回复",
+        "heartflow": "心流主动回复"
+      },
+      "help": "开启群聊上下文后生效。简单模式按概率抽取群消息，心流模式由轻量模型判断何时接话。适用于 OneBot 11 群聊。"
+    }
+  },
+  "simpleInterject": {
+    "interject_probability": {
+      "label": "每条群消息的插话概率",
+      "help": "0 表示不插话，1 表示每条都可能观察。建议保持很低，例如 0.02。"
+    },
+    "interject_cooldown": {
+      "label": "插话冷却（秒）",
+      "help": "同一群两次观察之间的最短间隔。"
+    }
+  },
+  "interjectLimit": {
+    "interject_max_per_hour": {
+      "label": "每群每小时上限",
+      "help": "简单模式按抽中次数计，心流模式按实际发言次数计。"
+    }
+  },
+  "heartflow": {
+    "activity": {
+      "label": "接话积极度"
+    },
+    "focus_seconds": {
+      "label": "专注跟聊窗口（秒）",
+      "help": "机器人发言后，在这段时间内优先留意群友的追问。设为 0 关闭跟聊。"
+    },
+    "max_streak": {
+      "label": "连续主动发言上限"
+    }
+  },
+  "heartflowAdvanced": {
+    "rest_seconds": {
+      "label": "休整时长（秒）"
+    },
+    "energy_curve": {
+      "label": "精力消耗曲线",
+      "options": {
+        "flat": "均匀",
+        "linear": "线性递增",
+        "exponential": "指数递增"
+      }
+    },
+    "energy_recovery_minutes": {
+      "label": "精力回满所需分钟"
+    },
+    "debounce_seconds": {
+      "label": "等待群友说完（秒）"
+    },
+    "min_judge_interval": {
+      "label": "潜水时最短观察间隔（秒）"
+    },
+    "developer": {
+      "label": "记录心流调试日志"
+    }
+  },
+  "vision": {
+    "caption": {
+      "label": "启用图像转述",
+      "help": "主模型不支持图像输入时，用图像转述模型把图片描述成文字，每张图片只转述一次并缓存。关闭或未配置转述模型时，图片以 [图片] 占位。"
+    },
+    "max_images": {
+      "label": "每次请求最多直接发送的图片数",
+      "help": "支持图像的模型只收到上下文中最近的这么多张图片，更早的图片按转述或占位处理，避免每轮重复发送大量图片。"
+    }
+  },
+  "knowledge": {
+    "enabled": {
+      "label": "启用知识库工具",
+      "help": "开启后按会话绑定和工具权限开放检索。主人会话可导入和删除文档。"
+    },
+    "chat": {
+      "label": "未绑定的 Chat 会话可检索默认库",
+      "help": "开启后，未绑定的 Chat 单聊和群聊可以检索默认库。显式绑定的会话按绑定选择检索范围。"
+    },
+    "chunk_chars": {
+      "label": "分块长度（字符）",
+      "help": "只影响之后导入的文档。"
+    },
+    "chunk_overlap": {
+      "label": "分块重叠（字符）",
+      "help": "相邻分块重复的长度，不能超过分块长度的一半；表格按行切分，不使用重叠。"
+    },
+    "max_file_mb": {
+      "label": "单个文件上限（MiB）",
+      "help": "WebUI 上传和私聊发送都受此限制。"
+    }
+  },
+  "meme": {
+    "enabled": {
+      "label": "启用表情管理器",
+      "help": "开启后提供表情工具，QQ 会话的回复可以用 <meme>分类</meme> 发送表情包。"
+    },
+    "capacity": {
+      "label": "表情存储上限",
+      "help": "自动收录和 meme_save 达到上限后停止；在 WebUI 手动上传不受限制。"
+    },
+    "inject": {
+      "label": "向模型说明表情用法",
+      "help": "在 QQ 会话的系统提示词末尾说明分类与标记格式。内容只随配置变化，不影响提示词缓存命中。"
+    },
+    "max_per_reply": {
+      "label": "每条回复最多表情数",
+      "help": "超出的 <meme> 标记会被忽略。"
+    },
+    "collect": {
+      "label": "从群聊自动收录",
+      "help": "白名单群内其他人发表情包时按概率收录，经转述、人设与分类判断后入库。"
+    },
+    "collect_rate": {
+      "label": "基础收录概率",
+      "help": "实际概率 = 基础概率 ×（1 − 已存数量 / 上限），表情库越满收录越少。"
+    },
+    "stickers_only": {
+      "label": "只收录表情包",
+      "help": "只收录 QQ 标记为表情包（动画表情、商城表情）的图片；关闭后普通图片也会参与收录。"
+    },
+    "persona_check": {
+      "label": "收录前判断是否贴合人设",
+      "help": "由表情路由的决策模型（没有则用文本模型）判断默认人格会不会发这个表情。"
+    },
+    "fit_threshold": {
+      "label": "人设契合度阈值",
+      "help": "契合度低于此值的表情不收录。"
+    }
+  },
+  "emotion": {
+    "enabled": {
+      "label": "启用情绪指标",
+      "help": "识别用户说话时的情绪和近况，影响回复语气。关闭时不调用任何模型，也不会改变提示词。"
+    },
+    "sensitivity": {
+      "label": "敏感度",
+      "help": "多小的信号才会更新情绪值。越高越容易被触发。"
+    },
+    "tone": {
+      "label": "语气幅度",
+      "help": "情绪对语气的改变幅度；高档允许一句真诚的关心。"
+    },
+    "initiative": {
+      "label": "主动性",
+      "help": "回复里主动关心的程度。只有 0.8 及以上、且主人状态很差时，才允许主动发一条关心消息。"
+    },
+    "persistence": {
+      "label": "延续性",
+      "help": "情绪值的衰减速度：0 约 6 小时减半，1 约 7 天减半。"
+    },
+    "judge_weight": {
+      "label": "判定模型权重",
+      "help": "决策模型给出的情绪强度在合成时的比重；没有可用判定模型时这一项不参与。"
+    },
+    "rules_weight": {
+      "label": "规则信号权重",
+      "help": "本地规则（受阻、催促、重复、失败、困难叙述）在合成时的比重。"
+    },
+    "sentiment_weight": {
+      "label": "负面用词权重",
+      "help": "负面用词强度的比重。三项按比例归一，不必相加为 1，全为 0 时不再更新情绪值。"
+    },
+    "developer": {
+      "label": "开发者日志",
+      "help": "把判定结果与当前值写入日志。界面不显示情绪值，也不记录消息原文。"
+    }
+  },
+  "createPersona": {
+    "name": "新人格",
+    "prompt": "你是一个可靠的私人助手。"
+  },
+  "webSearch": {
+    "enabled": {
+      "label": "启用网页搜索",
+      "help": "开启并配置所选提供商的密钥后，助手可调用网页搜索。"
+    },
+    "provider": {
+      "label": "搜索提供商"
+    },
+    "max_results": {
+      "label": "默认结果数量",
+      "help": "助手可在调用时调整，最多返回 10 条。"
+    },
+    "timeout": {
+      "label": "搜索超时（秒）"
+    }
+  },
+  "webSearchProvider": {
+    "search_depth": {
+      "label": "搜索深度",
+      "options": {
+        "basic": "基础",
+        "advanced": "深入",
+        "fast": "快速",
+        "ultra_fast": "极速"
+      }
+    },
+    "topic": {
+      "label": "搜索类别",
+      "options": {
+        "general": "综合",
+        "news": "新闻",
+        "finance": "财经"
+      }
+    },
+    "hl": {
+      "label": "搜索语言",
+      "help": "Google 搜索语言代码，例如 zh-cn 或 en。"
+    },
+    "gl": {
+      "label": "搜索地区",
+      "help": "国家或地区代码，例如 cn 或 us。"
+    },
+    "need_content": {
+      "label": "返回网页正文",
+      "help": "除了标题和摘要，同时获取来源网页正文。"
+    },
+    "localization": {
+      "label": "本地化 IP",
+      "help": "可选，用于本地化搜索结果的 IP 地址；留空使用默认结果。"
+    }
+  },
+  "mcpCommon": {
+    "id": {
+      "label": "服务名称",
+      "help": "工具名会以 mcp_<名称>_ 开头，只能使用字母、数字、下划线或短横线。"
+    },
+    "enabled": {
+      "label": "启用服务",
+      "help": "保存后连接服务并注册其工具；停用会断开连接并撤销工具。"
+    },
+    "transport": {
+      "label": "传输方式",
+      "options": {
+        "stdio": "stdio（本地进程）",
+        "http": "Streamable HTTP（远程服务）"
+      }
+    }
+  },
+  "mcpStdio": {
+    "command": {
+      "label": "启动命令",
+      "help": "每行一个参数（argv），不经过 shell。"
+    },
+    "env": {
+      "label": "环境变量",
+      "help": "JSON 对象。名称含 KEY、TOKEN、SECRET、PASSWORD 等的值保存时自动加密；也可填 env:变量名。"
+    },
+    "cwd": {
+      "label": "工作目录",
+      "placeholder": "留空则使用当前目录",
+      "help": "绝对路径。"
+    }
+  },
+  "mcpHttp": {
+    "url": {
+      "label": "服务地址",
+      "help": "Streamable HTTP 端点，不要在地址里包含账号密码。"
+    },
+    "headers": {
+      "label": "请求头",
+      "help": "JSON 对象，所有值保存时自动加密；也可填 env:变量名。"
+    }
+  },
+  "mcpPolicy": {
+    "timeout": {
+      "label": "调用超时（秒）"
+    },
+    "risk": {
+      "label": "工具安全等级",
+      "options": {
+        "safe": "safe（只读安全）"
+      },
+      "help": "此服务所有工具的默认等级，决定默认权限。不信任服务自报的只读标记。"
+    },
+    "tool_risks": {
+      "label": "逐工具安全等级",
+      "help": "按 MCP 原始工具名覆盖安全等级。"
+    },
+    "disabled_tools": {
+      "label": "隐藏的工具",
+      "placeholder": "每行一个 MCP 原始工具名",
+      "help": "这些工具不会提供给模型。"
+    }
+  },
+  "mcpSummary": {
+    "text": "未填写地址",
+    "text2": "未填写命令"
+  }
+}

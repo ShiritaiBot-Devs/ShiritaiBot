@@ -1,0 +1,25 @@
+{
+  "groups": {
+    "local": "Local",
+    "private": "QQ private chats",
+    "group": "QQ groups",
+    "feishuPrivate": "Feishu private chats",
+    "feishuGroup": "Feishu groups",
+    "background": "Background tasks"
+  },
+  "feishu": "Feishu",
+  "platformPrivate": "{platform} private chat {id}",
+  "platformGroup": "{platform} group {id}",
+  "qqOfficialPrivate": "Official QQ private chat {id}",
+  "qqOfficialGroup": "Official QQ group {id}",
+  "newChat": "New chat",
+  "hoursAgo_one": "{count} hour ago",
+  "hoursAgo_other": "{count} hours ago",
+  "minutesAgo_one": "{count} minute ago",
+  "minutesAgo_other": "{count} minutes ago",
+  "justNow": "Just now",
+  "background": "Background task {id}",
+  "group": "Group {id}",
+  "chat": "Chat {name}",
+  "defaultChat": "Default chat"
+}

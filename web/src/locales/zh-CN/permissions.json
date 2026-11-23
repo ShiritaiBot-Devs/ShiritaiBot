@@ -1,0 +1,48 @@
+{
+  "risk": {
+    "safe": {
+      "label": "安全",
+      "description": "只读查询、搜索与状态查看，无副作用"
+    },
+    "normal": {
+      "label": "一般",
+      "description": "局部写入且可恢复，如记记忆、建待办、写知识库"
+    },
+    "sensitive": {
+      "label": "敏感",
+      "description": "对外发送消息/文件、安装技能或外部 MCP 默认工具"
+    },
+    "dangerous": {
+      "label": "危险",
+      "description": "高危或不可逆操作，如 Shell、子代理、删除数据或踢人"
+    }
+  },
+  "permission": {
+    "deny": "禁止使用",
+    "manual": "需要人工审批",
+    "auto": "模型自动审批",
+    "allow": "无需审批"
+  },
+  "preset": {
+    "strict": {
+      "label": "保守：仅安全免审，其余人工审批",
+      "shortLabel": "保守",
+      "hint": "安全免审，一般/敏感/危险均需人工审批"
+    },
+    "balanced": {
+      "label": "平衡：安全与一般免审，敏感自动，危险人工",
+      "shortLabel": "平衡",
+      "hint": "安全与一般免审，敏感模型自动审批，危险人工审批"
+    },
+    "autonomous": {
+      "label": "高自治：安全与一般免审，敏感与危险自动审批",
+      "shortLabel": "高自治",
+      "hint": "安全与一般免审，敏感与危险由模型自动审批"
+    },
+    "full_access": {
+      "label": "完全放行：所有等级无需审批",
+      "shortLabel": "完全放行",
+      "hint": "所有风险等级工具无需审批"
+    }
+  }
+}

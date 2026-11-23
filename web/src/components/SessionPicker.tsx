@@ -7,6 +7,7 @@ import {
   isMainSession,
   sessionGroups,
 } from "../lib/sessions";
+import i18n from "../i18n";
 
 export function SessionOptions({
   ids,
@@ -70,7 +71,7 @@ export function SessionPicker({
   return (
     <div className="field">
       <label className="field-name" htmlFor={id}>
-        会话
+        {i18n.t("common:sessionPicker.session")}
       </label>
       <div className="inline">
         <select
@@ -82,7 +83,7 @@ export function SessionPicker({
         </select>
         {onReset && (
           <button type="button" onClick={onReset}>
-            恢复默认配置
+            {i18n.t("common:sessionPicker.reset")}
           </button>
         )}
       </div>

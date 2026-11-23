@@ -3,16 +3,40 @@ import type { FieldSpec } from "../config/schema";
 import { inferFieldSpec } from "../config/schema";
 import { SecretField } from "./SecretField";
 import { TextFieldList } from "./TextFieldList";
+import i18n, { tx } from "../i18n";
+
+/**
+ * A spec with its text translated. Specs may hold catalog keys ("settings:…") or,
+ * until their page is migrated, literal text, which `tx` passes through unchanged.
+ */
+function localized(spec: FieldSpec): FieldSpec {
+  return {
+    ...spec,
+    label: tx(spec.label),
+    help: tx(spec.help),
+    placeholder: tx(spec.placeholder),
+    optionLabels: spec.optionLabels
+      ? Object.fromEntries(
+          Object.entries(spec.optionLabels).map(([key, text]) => [
+            key,
+            tx(text),
+          ]),
+        )
+      : undefined,
+  };
+}
 
 export function jsonObjectError(value: unknown): string | null {
   try {
     const parsed = typeof value === "string" ? JSON.parse(value) : value;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return '请填写 JSON 对象，例如 {"temperature": 0.7}';
+      return i18n.t("json.objectRequired", {
+        example: '{"temperature": 0.7}',
+      });
     }
     return null;
   } catch {
-    return "JSON 格式无效，请检查引号、逗号和括号。";
+    return i18n.t("json.invalid");
   }
 }
 
@@ -65,7 +89,7 @@ function NumberInput({
 }
 
 export function Control({
-  spec,
+  spec: rawSpec,
   value,
   onChange,
 }: {
@@ -73,6 +97,7 @@ export function Control({
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
+  const spec = localized(rawSpec);
   if (spec.kind === "json") {
     const error = jsonObjectError(value);
     return (
@@ -149,7 +174,7 @@ export function Control({
     return (
       <div className="slider-field">
         <input
-          aria-label={`${spec.label}滑块`}
+          aria-label={i18n.t("field.slider", { label: spec.label })}
           type="range"
           min={spec.min}
           max={spec.max}
@@ -222,7 +247,7 @@ export function Control({
 }
 
 export function Field({
-  spec,
+  spec: rawSpec,
   value,
   onChange,
 }: {
@@ -230,6 +255,7 @@ export function Field({
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
+  const spec = localized(rawSpec);
   const help = spec.help ? (
     <small className="field-help">{spec.help}</small>
   ) : null;
@@ -253,7 +279,7 @@ export function Field({
     <div className={"field" + (spec.full ? " full" : "")}>
       <span className="field-name">{spec.label}</span>
       {help}
-      <Control spec={spec} value={value} onChange={onChange} />
+      <Control spec={rawSpec} value={value} onChange={onChange} />
     </div>
   );
 }

@@ -1,0 +1,25 @@
+{
+  "errorRate": {
+    "title": "Call error rate",
+    "hint": "Failed calls as a share of the model's calls. Internal retries of the same candidate model count once."
+  },
+  "tps": {
+    "title": "Generation speed",
+    "hint": "Output speed weighted by streaming time, excluding the first token. Requires the provider to report output tokens."
+  },
+  "ttft": {
+    "title": "Time to first token",
+    "hint": "Average time from sending a request to receiving the first text, reasoning, or tool output."
+  },
+  "trendDaily": "{title} by day. Use the left and right arrow keys to read values.",
+  "trendHourly": "{title} by hour. Use the left and right arrow keys to read values.",
+  "only": "Show only {model}",
+  "showAll": "Show all models",
+  "filter": "Filter models",
+  "title": "Model call performance",
+  "noTtft": "No first-token latency samples in this period",
+  "noTps": "No generation speed samples in this period",
+  "noSamples": "No calls in this period",
+  "selectedHour": "Selected hour; the last hour by default",
+  "selectedDay": "Selected day; the last day by default"
+}

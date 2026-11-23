@@ -1,13 +1,19 @@
 import { PageTabs } from "../components/PageTabs";
 import { ModelOptions } from "../components/ModelOptions";
 import { useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { Field, FieldForm } from "../components/FieldForm";
 import { HelpMenuSections } from "../components/HelpMenuSections";
 import { InstanceCollection } from "../components/InstanceCollection";
 import {
+  SessionLocaleList,
+  UiLanguageSelect,
+} from "../components/LanguageSettings";
+import {
   BASIC_SETTINGS_FIELDS,
   PROACTIVE_FIELDS,
   IDENTITY_FIELDS,
+  LANGUAGE_FIELDS,
   PERSONA_FIELDS,
   CONTEXT_FIELDS,
   EMOTION_FIELDS,
@@ -24,14 +30,21 @@ import {
   createPersona,
 } from "../config/schema";
 import type { ConfigPageProps } from "./common";
+import i18n from "../i18n";
 
 const SETTINGS_TABS = [
-  { id: "general", label: "通用设定" },
-  { id: "persona", label: "人格设定" },
-  { id: "extensions", label: "扩展功能" },
+  { id: "general", label: "settings:tabs.general" },
+  { id: "persona", label: "settings:tabs.persona" },
+  { id: "extensions", label: "settings:tabs.extensions" },
 ] as const;
 
-export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
+export function SettingsPage({
+  client,
+  act,
+  config,
+  setConfig,
+}: ConfigPageProps) {
+  const { t } = useTranslation("settings");
   const group = config.group_context;
   const setHeartflow = (heartflow: typeof group.heartflow) =>
     setConfig({ ...config, group_context: { ...group, heartflow } });
@@ -44,7 +57,7 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
         active={tab}
         onSelect={setTab}
         prefix="settings"
-        label="配置分类"
+        label={i18n.t("settings:tabsLabel")}
       />
       <div
         className="panel settings-card"
@@ -54,7 +67,22 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
         hidden={tab !== "general"}
       >
         <section className="settings-group">
-          <h2>称呼与唤起</h2>
+          <h2>{t("language.title")}</h2>
+          <div className="field-grid">
+            {LANGUAGE_FIELDS.map((spec) => (
+              <Field
+                key={spec.key}
+                spec={spec}
+                value={config[spec.key as "locale"]}
+                onChange={(next) => setConfig({ ...config, [spec.key]: next })}
+              />
+            ))}
+            <UiLanguageSelect />
+            <SessionLocaleList client={client} act={act} />
+          </div>
+        </section>
+        <section className="settings-group">
+          <h2>{i18n.t("settings:sections.identity")}</h2>
           <FieldForm
             value={config}
             fields={IDENTITY_FIELDS}
@@ -62,26 +90,21 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
           />
         </section>
         <details className="settings-group">
-          <summary>令牌使用说明</summary>
+          <summary>{i18n.t("settings:tokens.title")}</summary>
           <ul className="muted">
-            <li>
-              <strong>管理令牌</strong>：登录这个 WebUI 用。存在
-              data/web.token， 也可以用命令 <code>shiritaibot token</code>{" "}
-              查看。未登录时打开首页就是登录页 （也可以直接访问 /login）。
-            </li>
-            <li>
-              <strong>适配器访问令牌</strong>：Bot 连接 OneBot
-              协议端时带的密码，在「适配器」页填写； 要和 NapCat
-              里配置的访问令牌一致。没设访问令牌就留空。
-            </li>
-            <li>
-              <strong>NapCat WebUI 令牌</strong>：只用于打开 NapCat
-              自己的管理页面 （默认 http://127.0.0.1:6099 ），和上面两个无关。
-            </li>
+            {(["admin", "adapter", "napcat"] as const).map((token) => (
+              <li key={token}>
+                <Trans
+                  t={t}
+                  i18nKey={`tokens.${token}`}
+                  components={{ strong: <strong />, code: <code /> }}
+                />
+              </li>
+            ))}
           </ul>
         </details>
         <section className="settings-group">
-          <h2>运行设置</h2>
+          <h2>{i18n.t("settings:sections.runtime")}</h2>
           <div className="field-grid">
             {BASIC_SETTINGS_FIELDS.filter((spec) => spec.key !== "persona").map(
               (spec) => (
@@ -98,7 +121,7 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
           </div>
         </section>
         <section className="settings-group">
-          <h2>消息合并</h2>
+          <h2>{i18n.t("settings:sections.messageMerge")}</h2>
           <FieldForm
             value={config.policy}
             fields={MESSAGE_MERGE_FIELDS}
@@ -106,7 +129,7 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
           />
         </section>
         <section className="settings-group">
-          <h2>消息发送</h2>
+          <h2>{i18n.t("settings:sections.outbound")}</h2>
           <FieldForm
             value={config}
             fields={OUTBOUND_MESSAGE_FIELDS}
@@ -121,12 +144,14 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
           }
         />
         <section className="settings-group">
-          <h2>上下文管理</h2>
+          <h2>{i18n.t("settings:sections.context")}</h2>
           <div className="field-grid">
             <label className="field">
-              <span className="field-name">上下文管理策略</span>
+              <span className="field-name">
+                {i18n.t("settings:context.strategy")}
+              </span>
               <select
-                aria-label="上下文管理策略"
+                aria-label={i18n.t("settings:context.strategy")}
                 value={config.context.strategy}
                 onChange={(event) =>
                   setConfig({
@@ -138,14 +163,20 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
                   })
                 }
               >
-                <option value="discard">超限丢弃旧轮次</option>
-                <option value="compress">压缩旧轮次为摘要</option>
+                <option value="discard">
+                  {i18n.t("settings:context.discard")}
+                </option>
+                <option value="compress">
+                  {i18n.t("settings:context.compress")}
+                </option>
               </select>
             </label>
             <label className="field">
-              <span className="field-name">上下文压缩模型</span>
+              <span className="field-name">
+                {i18n.t("settings:context.model")}
+              </span>
               <select
-                aria-label="上下文压缩模型"
+                aria-label={i18n.t("settings:context.model")}
                 value={config.context.compression_model}
                 onChange={(event) =>
                   setConfig({
@@ -157,7 +188,7 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
                   })
                 }
               >
-                <option value="">使用 light 路由</option>
+                <option value="">{i18n.t("settings:context.useLight")}</option>
                 <ModelOptions
                   models={config.models.filter(
                     (item) =>
@@ -179,7 +210,7 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
           <Field
             spec={{
               key: "max_context_chars",
-              label: "上下文字符上限",
+              label: i18n.t("settings:context.maxChars"),
               kind: "number",
               min: 4000,
               max: 1000000,
@@ -194,7 +225,7 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
           />
         </section>
         <section className="settings-group">
-          <h2>群聊上下文感知</h2>
+          <h2>{i18n.t("settings:sections.groupContext")}</h2>
           <FieldForm
             value={config.group_context}
             fields={[
@@ -218,7 +249,9 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
                 onChange={setHeartflow}
               />
               <details>
-                <summary>心流高级设置</summary>
+                <summary>
+                  {i18n.t("settings:sections.heartflowAdvanced")}
+                </summary>
                 <FieldForm
                   value={group.heartflow}
                   fields={HEARTFLOW_ADVANCED_FIELDS}
@@ -237,7 +270,7 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
         hidden={tab !== "persona"}
       >
         <section className="settings-group">
-          <h2>基础人设</h2>
+          <h2>{i18n.t("settings:sections.basePersona")}</h2>
           <div className="field-grid">
             {BASIC_SETTINGS_FIELDS.filter((spec) => spec.key === "persona").map(
               (spec) => (
@@ -254,22 +287,24 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
           </div>
         </section>
         <section className="settings-group">
-          <h2>默认人格</h2>
+          <h2>{i18n.t("settings:persona.default")}</h2>
           <label className="field">
-            <span className="field-name">默认人格</span>
+            <span className="field-name">
+              {i18n.t("settings:persona.default")}
+            </span>
             <small className="field-help">
-              使用 /personas 查看名称和标识，/persona 标识
-              为当前会话切换人格；/persona default
-              恢复默认。仅主人可切换，下一轮生效。
+              {i18n.t("settings:persona.defaultHint")}
             </small>
             <select
-              aria-label="默认人格"
+              aria-label={i18n.t("settings:persona.default")}
               value={config.default_persona}
               onChange={(event) =>
                 setConfig({ ...config, default_persona: event.target.value })
               }
             >
-              <option value="">基础人设</option>
+              <option value="">
+                {i18n.t("settings:sections.basePersona")}
+              </option>
               {config.personas
                 .filter((item) => item.enabled)
                 .map((item) => (
@@ -281,7 +316,7 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
           </label>
         </section>
         <InstanceCollection
-          title="人格设定"
+          title={i18n.t("settings:persona.collection")}
           items={config.personas}
           create={() => createPersona(config.personas)}
           onChange={(personas) => {
@@ -305,7 +340,7 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
           }}
           fields={PERSONA_FIELDS}
           subtitle={(item) => item.name}
-          emptyText="添加多个人格，通过斜杠命令切换。"
+          emptyText={i18n.t("settings:persona.collectionHint")}
         />
       </div>
       <div
@@ -316,19 +351,20 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
         hidden={tab !== "extensions"}
       >
         <section className="settings-group">
-          <h2>网页搜索</h2>
+          <h2>{i18n.t("settings:sections.webSearch")}</h2>
           <FieldForm
             value={config.web_search}
             fields={WEB_SEARCH_FIELDS}
             onChange={(web_search) => setConfig({ ...config, web_search })}
           />
           <h3>
-            {
-              { tavily: "Tavily", serpapi: "SerpAPI", deepseek: "DeepSeek" }[
-                config.web_search.provider
-              ]
-            }{" "}
-            配置
+            {t("webSearch.providerSettings", {
+              provider: {
+                tavily: "Tavily",
+                serpapi: "SerpAPI",
+                deepseek: "DeepSeek",
+              }[config.web_search.provider],
+            })}
           </h3>
           <FieldForm
             key={config.web_search.provider}
@@ -346,7 +382,7 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
           />
         </section>
         <section className="settings-group">
-          <h2>长期记忆</h2>
+          <h2>{i18n.t("settings:sections.memory")}</h2>
           <FieldForm
             value={config.memory}
             fields={MEMORY_FIELDS}
@@ -354,7 +390,7 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
           />
         </section>
         <section className="settings-group">
-          <h2>主动性与打扰策略</h2>
+          <h2>{i18n.t("settings:sections.proactive")}</h2>
           <div className="field-grid">
             {PROACTIVE_FIELDS.map((spec) => (
               <Field
@@ -374,7 +410,7 @@ export function SettingsPage({ client, config, setConfig }: ConfigPageProps) {
           </div>
         </section>
         <section className="settings-group">
-          <h2>情绪（开发者选项）</h2>
+          <h2>{i18n.t("settings:sections.emotion")}</h2>
           <FieldForm
             value={config.emotion}
             fields={EMOTION_FIELDS}

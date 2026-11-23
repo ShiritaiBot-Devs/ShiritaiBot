@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { splitLines } from "../lib/utils";
+import i18n from "../i18n";
 
 /** Multiline editor for string arrays (list of group numbers, tool names, ...). */
 export function TextFieldList({
   value,
   onChange,
   label,
-  placeholder = "每行一个值",
+  placeholder = i18n.t("onePerLine"),
 }: {
   value: string[];
   onChange: (value: string[]) => void;

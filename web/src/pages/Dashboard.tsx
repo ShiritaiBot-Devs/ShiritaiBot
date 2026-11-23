@@ -3,6 +3,7 @@ import { modelColor, smoothLine, type ChartModel } from "../lib/charts";
 import { configuredModelName, modelName } from "../lib/models";
 import { LoadingBar } from "../components/LoadingBar";
 import { MetricIcon } from "../components/MetricIcon";
+import i18n, { tx } from "../i18n";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
 import { SessionOptions } from "../components/SessionPicker";
 import { useEffect, useRef, useState } from "react";
@@ -14,7 +15,12 @@ import type {
   Statistics,
   TokenBucket,
 } from "../api/types";
-import { formatBucketTime, formatDateTime, formatNumber } from "../lib/utils";
+import {
+  formatBucketTime,
+  formatDateTime,
+  formatNumber,
+  ownerTimeZone,
+} from "../lib/utils";
 
 const CURRENCY_SYMBOL: Record<Currency, string> = { USD: "$", CNY: "¥" };
 const CURRENCY_STORAGE_KEY = "shiritaibot.cost-currency";
@@ -78,20 +84,20 @@ function ModelTable({
   return (
     <section className="panel">
       <div className="panel-head">
-        <h3>模型用量</h3>
+        <h3>{i18n.t("dashboard:usage.title")}</h3>
       </div>
       {rows.length ? (
         <div className="table-scroll">
           <table className="usage-table">
             <thead>
               <tr>
-                <th scope="col">模型</th>
-                <th scope="col">调用</th>
-                <th scope="col">输入 tokens</th>
-                <th scope="col">缓存命中</th>
-                <th scope="col">命中率</th>
-                <th scope="col">输出 tokens</th>
-                <th scope="col">预估花费</th>
+                <th scope="col">{i18n.t("dashboard:col.model")}</th>
+                <th scope="col">{i18n.t("dashboard:col.calls")}</th>
+                <th scope="col">{i18n.t("dashboard:col.input")}</th>
+                <th scope="col">{i18n.t("dashboard:col.cached")}</th>
+                <th scope="col">{i18n.t("dashboard:col.hitRate")}</th>
+                <th scope="col">{i18n.t("dashboard:col.output")}</th>
+                <th scope="col">{i18n.t("dashboard:col.cost")}</th>
               </tr>
             </thead>
             <tbody>
@@ -119,9 +125,9 @@ function ModelTable({
                     ) : (
                       <span
                         className="muted"
-                        title="在「模型」页填写或获取单价"
+                        title={i18n.t("dashboard:noPriceHint")}
                       >
-                        未设单价
+                        {i18n.t("dashboard:noPrice")}
                       </span>
                     )}
                   </td>
@@ -131,17 +137,17 @@ function ModelTable({
           </table>
         </div>
       ) : (
-        <p className="muted">此区间内没有模型调用。</p>
+        <p className="muted">{i18n.t("dashboard:noCalls")}</p>
       )}
     </section>
   );
 }
 
 const HOUR_RANGES = [
-  [24, "24 小时"],
-  [72, "3 天"],
-  [168, "7 天"],
-  [720, "30 天"],
+  [24, "dashboard:ranges.h24"],
+  [72, "dashboard:ranges.d3"],
+  [168, "dashboard:ranges.d7"],
+  [720, "dashboard:ranges.d30"],
 ] as const;
 const UNATTRIBUTED = "unattributed";
 
@@ -173,7 +179,7 @@ function modelSeries(
   if (rest.length)
     series.push({
       key: "other",
-      label: `其他（${rest.length} 个）`,
+      label: i18n.t("dashboard:other", { count: rest.length }),
       color: OTHER_COLOR,
       value: (row) =>
         rest.reduce((sum, model) => sum + (row.models?.[model.id] ?? 0), 0),
@@ -280,8 +286,8 @@ function UsageChart({
                 aria-pressed={highlighted === item.key}
                 title={
                   highlighted === item.key
-                    ? "再次点击显示全部曲线"
-                    : `高亮 ${item.label}`
+                    ? i18n.t("dashboard:showAll")
+                    : i18n.t("dashboard:highlight", { label: item.label })
                 }
                 onClick={() =>
                   setFocusedSeries(highlighted === item.key ? null : item.key)
@@ -296,10 +302,14 @@ function UsageChart({
             type="button"
             className={`chart-scale-toggle${logScale ? " is-selected" : ""}`}
             aria-pressed={logScale}
-            title={logScale ? "切换为线性尺度" : "切换为对数尺度 (log10)"}
+            title={
+              logScale
+                ? i18n.t("dashboard:toLinear")
+                : i18n.t("dashboard:toLog")
+            }
             onClick={() => setLogScale((prev) => !prev)}
           >
-            对数尺度
+            {i18n.t("dashboard:logScale")}
           </button>
         </div>
       </div>
@@ -316,7 +326,10 @@ function UsageChart({
           className="hourly-chart"
           viewBox={`0 0 ${width} ${height + labelHeight}`}
           role="group"
-          aria-label={`${title}逐${daily ? "日" : "小时"}图表`}
+          aria-label={i18n.t(
+            daily ? "dashboard:chartDaily" : "dashboard:chartHourly",
+            { title },
+          )}
           onMouseLeave={() => setHover(null)}
         >
           {[0, 0.5, 1].map((level) => (
@@ -420,8 +433,9 @@ function UsageChart({
           </>
         ) : (
           <span className="muted">
-            默认高亮全部曲线；点击图例突出某条曲线，再次点击恢复全部。悬停或用
-            Tab 查看{daily ? "每日" : "每小时"}数据。
+            {i18n.t(
+              daily ? "dashboard:chartHintDaily" : "dashboard:chartHintHourly",
+            )}
           </span>
         )}
       </div>
@@ -519,22 +533,31 @@ export function Dashboard({ client }: { client: ApiClient }) {
     <section className="dashboard">
       <div className="panel-head">
         <div>
-          <h2>数据看板</h2>
+          <h2>{i18n.t("dashboard:title")}</h2>
           <p className="muted">
-            北京时间 · {daily ? "按日" : "按小时"}汇总 · 每 30 秒更新
+            {i18n.t(
+              daily ? "dashboard:summaryDaily" : "dashboard:summaryHourly",
+              { zone: ownerTimeZone() },
+            )}
           </p>
         </div>
         <div className="dashboard-filters">
           <select
-            aria-label="统计会话"
+            aria-label={i18n.t("dashboard:sessionFilter")}
             value={session}
             onChange={(event) => setSession(event.target.value)}
           >
-            <option value="">全部会话</option>
-            <option value={UNATTRIBUTED}>未归属会话</option>
+            <option value="">{i18n.t("dashboard:allSessions")}</option>
+            <option value={UNATTRIBUTED}>
+              {i18n.t("dashboard:unattributed")}
+            </option>
             <SessionOptions ids={sessionIds} titles={sessionNames} />
           </select>
-          <div className="range-tabs" role="group" aria-label="统计区间">
+          <div
+            className="range-tabs"
+            role="group"
+            aria-label={i18n.t("dashboard:range")}
+          >
             {HOUR_RANGES.map(([value, label]) => (
               <button
                 type="button"
@@ -543,24 +566,30 @@ export function Dashboard({ client }: { client: ApiClient }) {
                 aria-pressed={hours === value}
                 onClick={() => setHours(value)}
               >
-                {label}
+                {tx(label)}
               </button>
             ))}
           </div>
         </div>
       </div>
       {query.error && (
-        <QueryErrorNotice message={`读取统计失败：${query.error.message}`} />
+        <QueryErrorNotice
+          message={i18n.t("dashboard:statsFailed", {
+            error: query.error.message,
+          })}
+        />
       )}
       {sessions.error && (
         <QueryErrorNotice
-          message={`读取统计会话失败：${sessions.error.message}`}
+          message={i18n.t("dashboard:sessionsFailed", {
+            error: sessions.error.message,
+          })}
         />
       )}
       {warnings.length > 0 && (
         <section className="panel" role="alert">
           <div className="panel-head">
-            <h3>配置需要检查</h3>
+            <h3>{i18n.t("dashboard:configCheck")}</h3>
           </div>
           <ul className="muted">
             {warnings.map((warning) => (
@@ -574,42 +603,47 @@ export function Dashboard({ client }: { client: ApiClient }) {
           <div className="metrics metrics-wide">
             {(
               [
-                ["总 tokens", formatNumber(data.totals.total_tokens)],
+                ["tokens", formatNumber(data.totals.total_tokens)],
                 [
-                  "缓存命中率",
+                  "cacheRate",
                   formatRate(
                     data.totals.input_tokens
                       ? data.totals.cached_tokens / data.totals.input_tokens
                       : null,
                   ),
                 ],
-                ["预估花费", totalCost(data.costs ?? {}, currency, rate)],
-                ["对话消息", formatNumber(data.totals.messages)],
-                ["模型调用", formatNumber(data.totals.llm_calls)],
-                ["失败轮次", formatNumber(data.totals.failed_turns)],
+                ["cost", totalCost(data.costs ?? {}, currency, rate)],
+                ["messages", formatNumber(data.totals.messages)],
+                ["llmCalls", formatNumber(data.totals.llm_calls)],
+                ["failedTurns", formatNumber(data.totals.failed_turns)],
               ] as const
-            ).map(([label, value]) => (
+            ).map(([id, value]) => (
               <div
-                className={`metric${label === "预估花费" ? " cost-metric" : ""}`}
-                key={label}
+                className={`metric${id === "cost" ? " cost-metric" : ""}`}
+                key={id}
               >
-                <MetricIcon label={label} />
-                <span>{label}</span>
+                <MetricIcon id={id} />
+                <span>{i18n.t(`dashboard:metrics.${id}`)}</span>
                 <strong>{value}</strong>
-                {label === "预估花费" && (
+                {id === "cost" && (
                   <small className="cost-exchange-rate" role="status">
                     {rate !== null ? (
                       <>
                         <span
                           title={
                             exchange.data?.updated_at
-                              ? `汇率更新于 ${new Date(exchange.data.updated_at * 1000).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}（北京时间）`
+                              ? i18n.t("dashboard:ratesUpdated", {
+                                  time: formatDateTime(
+                                    exchange.data.updated_at,
+                                  ),
+                                  zone: ownerTimeZone(),
+                                })
                               : undefined
                           }
                         >
                           1 USD ≈ {rate.toFixed(4)} CNY
                           {exchange.data?.stale || exchange.error
-                            ? "（缓存汇率，更新暂不可用）"
+                            ? i18n.t("dashboard:staleRate")
                             : ""}
                         </span>
                         {" · "}
@@ -624,24 +658,34 @@ export function Dashboard({ client }: { client: ApiClient }) {
                     ) : exchange.isPending ? (
                       <LoadingBar
                         compact
-                        label="正在获取汇率，暂按原币种显示"
+                        label={i18n.t("dashboard:loadingRate")}
                       />
                     ) : (
-                      "汇率暂不可用，按原币种显示"
+                      i18n.t("dashboard:noRate")
                     )}
                   </small>
                 )}
                 <div className="metric-footer">
                   <small>
-                    过去 {hours === 24 ? "24 小时" : `${hours / 24} 天`}
+                    {hours === 24
+                      ? i18n.t("dashboard:past24h")
+                      : i18n.t("dashboard:pastDays", { count: hours / 24 })}
                   </small>
-                  {label === "预估花费" && (
+                  {id === "cost" && (
                     <button
                       type="button"
                       className="currency-toggle"
                       onClick={toggleCurrency}
-                      aria-label={`切换为${currency === "USD" ? "人民币" : "美元"}花费`}
-                      title={`当前选择${currency === "USD" ? "美元" : "人民币"}，点击切换`}
+                      aria-label={i18n.t(
+                        currency === "USD"
+                          ? "dashboard:toCny"
+                          : "dashboard:toUsd",
+                      )}
+                      title={i18n.t(
+                        currency === "USD"
+                          ? "dashboard:usdSelected"
+                          : "dashboard:cnySelected",
+                      )}
                     >
                       {currency === "USD" ? "$ USD" : "¥ CNY"}
                     </button>
@@ -656,13 +700,13 @@ export function Dashboard({ client }: { client: ApiClient }) {
             daily={daily}
           />
           <UsageChart
-            title="Token 用量（按模型）"
+            title={i18n.t("dashboard:tokenChart")}
             rows={data.buckets}
             daily={daily}
             series={[
               {
                 key: "total",
-                label: "总用量",
+                label: i18n.t("dashboard:totalUsage"),
                 color: "var(--text)",
                 value: field("total_tokens"),
               },
@@ -676,37 +720,34 @@ export function Dashboard({ client }: { client: ApiClient }) {
             rate={rate}
           />
           <UsageChart
-            title="对话消息"
+            title={i18n.t("dashboard:messagesChart")}
             rows={data.buckets}
             daily={daily}
             series={[
               {
                 key: "incoming_messages",
-                label: "用户消息",
+                label: i18n.t("dashboard:userMessages"),
                 color: "var(--chart-incoming)",
                 value: field("incoming_messages"),
               },
               {
                 key: "outgoing_messages",
-                label: "助手回复",
+                label: i18n.t("dashboard:assistantReplies"),
                 color: "var(--chart-outgoing)",
                 value: field("outgoing_messages"),
               },
             ]}
           />
           <p className="muted stats-note">
-            统计区间 {formatDateTime(data.start)} 至 {formatDateTime(data.end)}
-            ，首尾按实际区间截取。Token 取提供商返回的用量。
-            缺少会话归属的历史记录和连接测试等调用计入「未归属会话」。 缓存命中{" "}
-            {formatNumber(data.totals.cached_tokens)} tokens（已计入输入）。
-            花费按模型当前单价估算，仅供参考：缓存写入按输入单价计，不含分级定价与免费额度；
-            已删除或未设单价的模型不计入。
-            消息统计已入库的用户消息和最终回复，包含斜杠命令，不含工具结果与内部交接；
-            未返回用量的请求不估算 tokens。
+            {i18n.t("dashboard:statsNote", {
+              start: formatDateTime(data.start),
+              end: formatDateTime(data.end),
+              cached: formatNumber(data.totals.cached_tokens),
+            })}
           </p>
         </>
       ) : (
-        !query.error && <LoadingBar label="正在读取统计…" />
+        !query.error && <LoadingBar label={i18n.t("dashboard:loadingStats")} />
       )}
     </section>
   );

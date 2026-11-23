@@ -10,13 +10,15 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-20.19+-339933?logo=node.js&logoColor=white)
 ![OneBot](https://img.shields.io/badge/OneBot-V11-black)
-![Status](https://img.shields.io/badge/status-0.1.0-orange)
+![Status](https://img.shields.io/badge/status-0.3.1-orange)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
 [官网](https://shiritaibot.dev/) ·
 [文档](https://shiritaibot.dev/docs/models) ·
 [插件开发](https://shiritaibot.dev/docs/plugins) ·
-[问题反馈](https://github.com/XCM42-Orion/ShiritaiBot/issues)
+[问题反馈](https://github.com/ShiritaiBot-Devs/ShiritaiBot/issues)
+
+[English](README.en.md) · **简体中文**
 
 </div>
 
@@ -57,6 +59,7 @@ ShiritaiBot践行“一切皆工具(和Skill，未来方向)”的理念，希�
 - 🔌 **MCP 接入**：连接 stdio / Streamable HTTP MCP 服务器，工具统一纳入权限与审批
 - 🌐 **多模型路由**：支持 OpenAI Chat Completions / Responses、Anthropic、Gemini 协议，可设置主备模型和按任务路由，也可接入 Jev 等决策模型
 - 🖥️ **WebUI 控制台**：模型、连接、权限、记忆、日志、数据看板，都在浏览器里可视化管理
+- 🌏 **多语言**：支持简体中文（默认）和英文。可在 WebUI 设置所有会话的机器人语言，用 `/lang` 单独切换某个会话，管理界面也能在顶栏切换语言；管理界面已全部翻译，机器人消息的英文翻译仍在进行中
 
 ## 快速部署
 
@@ -67,7 +70,7 @@ ShiritaiBot践行“一切皆工具(和Skill，未来方向)”的理念，希�
 手动部署需要 Python 3.12+、[uv](https://docs.astral.sh/uv/) 和 Node.js 20.19+。
 
 ```bash
-git clone https://github.com/XCM42-Orion/ShiritaiBot.git
+git clone https://github.com/ShiritaiBot-Devs/ShiritaiBot.git
 cd ShiritaiBot
 uv sync
 npm --prefix web ci
@@ -110,7 +113,9 @@ Bot 跑在 Docker 或远程服务器时，仍在操作浏览器的电脑运行�
 
 欢迎参与ShiritaiBot的开发！
 
-[![贡献者](https://contrib.rocks/image?repo=XCM42-Orion/ShiritaiBot)](https://github.com/XCM42-Orion/ShiritaiBot/graphs/contributors)
+新增面向用户的文字时，请遵循[国际化指南](docs/I18N.md)（英文），以便翻译。
+
+[![贡献者](https://contrib.rocks/image?repo=ShiritaiBot-Devs/ShiritaiBot)](https://github.com/ShiritaiBot-Devs/ShiritaiBot/graphs/contributors)
 
 加入ShiritaiBot Issue反馈群，参与ShiritaiBot的后续工作：1134225815
 
@@ -126,7 +131,7 @@ Bot 跑在 Docker 或远程服务器时，仍在操作浏览器的电脑运行�
 > 
 > —— M42
 
-- [Mai-with-u/MaiBot](Mai-with-u/MaiBot) - 用于构建你的数字生命的Bot框架，ShiritaiBot参考了MaiBot的记忆层设计
+- [Mai-with-u/MaiBot](https://github.com/Mai-with-u/MaiBot) - 用于构建你的数字生命的Bot框架，ShiritaiBot参考了MaiBot的记忆层设计
 - [Einsia/OpenChronicle](https://github.com/Einsia/OpenChronicle) - 开创性的主动记忆设计
 - [XCM42-Orion/AutoWater](https://github.com/XCM42-Orion/AutoWater) - 轻量化的整活水群框架，！？轻量化的整整的化量轻？！
 

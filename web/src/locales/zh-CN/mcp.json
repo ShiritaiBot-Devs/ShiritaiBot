@@ -1,0 +1,18 @@
+{
+  "empty": "尚未配置 MCP 服务。",
+  "readOnly": "服务声明只读",
+  "hidden": "已隐藏",
+  "loadFailed": "读取 MCP 状态失败：{error}",
+  "statusHint": "MCP 工具以 mcp_服务名_工具名 注册，受各会话的工具权限与审批控制。状态反映已保存的配置。",
+  "statusTitle": "连接状态",
+  "reconnect": "重新连接",
+  "reconnected": "已重新连接，请查看连接状态",
+  "hint": "添加 stdio 本地进程或 Streamable HTTP 远程 MCP 服务，保存后可在「工具」中管理其权限。",
+  "servers": "MCP 服务器",
+  "status": {
+    "disabled": "未启用",
+    "error": "连接失败",
+    "connecting": "连接中",
+    "connected": "已连接"
+  }
+}

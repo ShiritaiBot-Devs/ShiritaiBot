@@ -11,20 +11,21 @@ import { Pagination } from "../components/Pagination";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
 import { KNOWLEDGE_FIELDS } from "../config/schema";
 import type { Action, SessionConfigPageProps } from "./common";
+import i18n, { tx } from "../i18n";
 
 const PAGE_SIZE = 20;
 const CHUNK_PAGE = 20;
 const ACCEPT =
   ".txt,.md,.markdown,.rst,.log,.json,.yaml,.yml,.xml,.csv,.tsv,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx";
 const SOURCES: Record<string, string> = {
-  web: "WebUI 上传",
-  qq: "QQ 私聊",
-  agent: "助手写入",
+  web: "knowledge:sources.web",
+  qq: "knowledge:sources.qq",
+  agent: "knowledge:sources.agent",
 };
 const MATCHES: Record<KnowledgeHit["match"], string> = {
-  hybrid: "关键词 + 语义",
-  keyword: "关键词",
-  semantic: "语义",
+  hybrid: "knowledge:matches.hybrid",
+  keyword: "knowledge:matches.keyword",
+  semantic: "knowledge:matches.semantic",
 };
 
 function formatBytes(bytes: number): string {
@@ -40,7 +41,9 @@ export function KnowledgePage(props: SessionConfigPageProps) {
     queryKey: ["knowledge-libraries"],
     queryFn: () => client.knowledgeLibraries(),
   });
-  const libraries = profiles.data ?? [{ id: "default", name: "默认知识库" }];
+  const libraries = profiles.data ?? [
+    { id: "default", name: i18n.t("knowledge:defaultLibrary") },
+  ];
   const library = libraries.some((entry) => entry.id === selected)
     ? selected
     : "default";
@@ -49,7 +52,7 @@ export function KnowledgePage(props: SessionConfigPageProps) {
     <>
       <KnowledgeLibraries {...props} />
       <section className="panel">
-        <h2>检索与导入设置</h2>
+        <h2>{i18n.t("knowledge:settings.title")}</h2>
         <FieldForm
           value={config.knowledge}
           fields={KNOWLEDGE_FIELDS}
@@ -58,7 +61,9 @@ export function KnowledgePage(props: SessionConfigPageProps) {
       </section>
       <section className="panel">
         <label className="field">
-          <span className="field-name">管理的知识库</span>
+          <span className="field-name">
+            {i18n.t("knowledge:libraries.title")}
+          </span>
           <select
             value={library}
             onChange={(event) => setSelected(event.target.value)}
@@ -72,7 +77,9 @@ export function KnowledgePage(props: SessionConfigPageProps) {
         </label>
         {profiles.error && (
           <QueryErrorNotice
-            message={`读取库列表失败：${profiles.error.message}`}
+            message={i18n.t("knowledge:libraries.loadFailed", {
+              error: profiles.error.message,
+            })}
           />
         )}
       </section>
@@ -112,14 +119,20 @@ function KnowledgeContent({
     <>
       <SearchPanel client={client} library={library} />
       <section className="panel">
-        <h2>文档</h2>
+        <h2>{i18n.t("knowledge:documents.title")}</h2>
         {data && (
           <p className="muted">
-            {data.documents} 篇 · {data.chunks} 个分块 ·{" "}
-            {formatBytes(data.bytes)} · 向量{" "}
+            {i18n.t("knowledge:documents.summary", {
+              documents: data.documents,
+              chunks: data.chunks,
+              size: formatBytes(data.bytes),
+            })}{" "}
             {data.index.model
-              ? `${data.index.indexed} 已索引，${data.index.pending} 待计算`
-              : "未配置 Embedding，检索只用关键词"}
+              ? i18n.t("knowledge:documents.indexed", {
+                  indexed: data.index.indexed,
+                  pending: data.index.pending,
+                })
+              : i18n.t("knowledge:documents.noEmbedding")}
           </p>
         )}
         <UploadForm client={client} act={act} limit={limit} library={library} />
@@ -132,27 +145,29 @@ function KnowledgeContent({
           }}
         >
           <input
-            aria-label="筛选文档"
+            aria-label={i18n.t("knowledge:filter.label")}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="标题或文件名"
+            placeholder={i18n.t("knowledge:filter.placeholder")}
           />
           <button type="submit">
             <Search size={16} />
-            筛选
+            {i18n.t("knowledge:filter.submit")}
           </button>
         </form>
         {listing.error && (
           <QueryErrorNotice
-            message={`读取知识库失败：${listing.error.message}`}
+            message={i18n.t("knowledge:documents.loadFailed", {
+              error: listing.error.message,
+            })}
           />
         )}
         {data && !data.items.length ? (
           <EmptyState
             text={
               query
-                ? "没有符合条件的文档"
-                : "知识库还是空的。上传文件，或在 QQ 私聊里发给助手。"
+                ? i18n.t("knowledge:documents.noMatch")
+                : i18n.t("knowledge:documents.empty")
             }
           />
         ) : (
@@ -170,7 +185,7 @@ function KnowledgeContent({
         )}
         {data && (
           <Pagination
-            label="文档分页"
+            label={i18n.t("knowledge:documents.pages")}
             page={data.page}
             total={data.total}
             pageSize={PAGE_SIZE}
@@ -210,36 +225,41 @@ function UploadForm({
             } catch (error) {
               setFiles(files.slice(index));
               throw new Error(
-                `${file.name}：${error instanceof Error ? error.message : "上传失败"}`,
+                i18n.t("knowledge:upload.failed", {
+                  file: file.name,
+                  error:
+                    error instanceof Error
+                      ? error.message
+                      : i18n.t("knowledge:upload.failedShort"),
+                }),
                 { cause: error },
               );
             }
           }
           setFiles([]);
           setReset((value) => value + 1);
-        }, "文档已加入知识库");
+        }, i18n.t("knowledge:upload.done"));
       }}
     >
       <label className="field">
         <span className="field-name">
-          上传文件（每个 {limit} MiB 以内，可多选）
+          {i18n.t("knowledge:upload.label", { limit })}
         </span>
         <input
           key={reset}
-          aria-label="知识库文件"
+          aria-label={i18n.t("knowledge:upload.files")}
           type="file"
           multiple
           accept={ACCEPT}
           onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
         />
-        <small className="muted">
-          支持 txt、md、pdf、doc(x)、csv、xls(x)、ppt(x) 等文本格式；扫描版 PDF
-          需要先做 OCR。
-        </small>
+        <small className="muted">{i18n.t("knowledge:upload.formats")}</small>
       </label>
       <button type="submit" className="primary" disabled={!files.length}>
         <Upload size={16} />
-        上传{files.length > 1 ? ` ${files.length} 个文件` : ""}
+        {files.length > 1
+          ? i18n.t("knowledge:upload.submitMany", { count: files.length })
+          : i18n.t("knowledge:upload.submit")}
       </button>
     </form>
   );
@@ -261,8 +281,8 @@ function SearchPanel({
   });
   return (
     <section className="panel">
-      <h2>检索测试</h2>
-      <p className="muted">结果和助手调用 kb_search 时看到的相同。</p>
+      <h2>{i18n.t("knowledge:search.title")}</h2>
+      <p className="muted">{i18n.t("knowledge:search.hint")}</p>
       <form
         className="inline"
         onSubmit={(event) => {
@@ -271,22 +291,30 @@ function SearchPanel({
         }}
       >
         <input
-          aria-label="检索知识库"
+          aria-label={i18n.t("knowledge:search.label")}
           value={draft}
           maxLength={500}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="输入一个问题或关键词"
+          placeholder={i18n.t("knowledge:search.placeholder")}
         />
         <button type="submit" disabled={!draft.trim()}>
           <Search size={16} />
-          检索
+          {i18n.t("knowledge:search.submit")}
         </button>
       </form>
-      {hits.isFetching && <LoadingBar label="检索知识库" />}
-      {hits.error && (
-        <QueryErrorNotice message={`检索失败：${hits.error.message}`} />
+      {hits.isFetching && (
+        <LoadingBar label={i18n.t("knowledge:search.label")} />
       )}
-      {hits.data && !hits.data.length && <EmptyState text="没有检索到内容" />}
+      {hits.error && (
+        <QueryErrorNotice
+          message={i18n.t("knowledge:search.failed", {
+            error: hits.error.message,
+          })}
+        />
+      )}
+      {hits.data && !hits.data.length && (
+        <EmptyState text={i18n.t("knowledge:search.empty")} />
+      )}
       {hits.data?.map((hit) => (
         <article className="kb-chunk" key={`${hit.document}#${hit.seq}`}>
           <div className="kb-chunk-head">
@@ -295,7 +323,7 @@ function SearchPanel({
             <code>
               {hit.document}#{hit.seq}
             </code>
-            <span className="tag">{MATCHES[hit.match]}</span>
+            <span className="tag">{tx(MATCHES[hit.match])}</span>
           </div>
           <p>{hit.text}</p>
         </article>
@@ -324,7 +352,8 @@ function DocumentRow({
           <strong>{row.title}</strong>
           <span className="muted">
             <code>{row.id}</code> · {row.filename} · {formatBytes(row.bytes)} ·{" "}
-            {row.chunks} 个分块 · {SOURCES[row.source] ?? row.source} ·{" "}
+            {i18n.t("knowledge:chunks", { count: row.chunks })} ·{" "}
+            {tx(SOURCES[row.source] ?? row.source)} ·{" "}
             {new Date(row.created * 1000).toLocaleDateString()}
           </span>
         </div>
@@ -334,11 +363,13 @@ function DocumentRow({
             aria-expanded={open}
             onClick={() => setOpen((value) => !value)}
           >
-            {open ? "收起" : "查看分块"}
+            {open
+              ? i18n.t("knowledge:collapse")
+              : i18n.t("knowledge:showChunks")}
           </button>
           <button
             type="button"
-            aria-label={`下载 ${row.title}`}
+            aria-label={i18n.t("knowledge:download", { title: row.title })}
             onClick={() =>
               void act(async () => {
                 const url = URL.createObjectURL(
@@ -362,21 +393,21 @@ function DocumentRow({
                 onClick={() =>
                   void act(
                     () => client.deleteKnowledge(row.id, library),
-                    "文档已删除",
+                    i18n.t("knowledge:deleted"),
                   )
                 }
               >
-                确认删除
+                {i18n.t("knowledge:confirmDelete")}
               </button>
               <button type="button" onClick={() => setConfirming(false)}>
-                取消
+                {i18n.t("knowledge:cancel")}
               </button>
             </>
           ) : (
             <button
               type="button"
               className="danger"
-              aria-label={`删除 ${row.title}`}
+              aria-label={i18n.t("knowledge:delete", { title: row.title })}
               onClick={() => setConfirming(true)}
             >
               <Trash2 size={16} />
@@ -421,7 +452,11 @@ function ChunkList({
   return (
     <div className="kb-chunks">
       {detail.error && (
-        <QueryErrorNotice message={`读取分块失败：${detail.error.message}`} />
+        <QueryErrorNotice
+          message={i18n.t("knowledge:chunksFailed", {
+            error: detail.error.message,
+          })}
+        />
       )}
       {detail.data?.items.map((chunk) => (
         <article className="kb-chunk" key={chunk.seq}>
@@ -433,7 +468,7 @@ function ChunkList({
         </article>
       ))}
       <Pagination
-        label={`文档 ${id} 分块分页`}
+        label={i18n.t("knowledge:chunkPages", { id })}
         page={page}
         total={total}
         pageSize={CHUNK_PAGE}

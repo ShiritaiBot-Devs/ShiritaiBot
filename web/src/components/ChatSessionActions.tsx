@@ -3,6 +3,7 @@ import { Ellipsis, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
 import type { SessionItem } from "../lib/sessions";
 import type { WebChat } from "../api/types";
 import { useNotice } from "../hooks/useNotice";
+import i18n from "../i18n";
 
 export interface ChatActions {
   onUpdate: (
@@ -74,7 +75,7 @@ export function ChatSessionActions({
         type="button"
         ref={trigger}
         popoverTarget={menuId}
-        aria-label={`${item.title}的更多操作`}
+        aria-label={i18n.t("chat:actions.more", { title: item.title })}
         aria-haspopup="menu"
         disabled={saving}
       >
@@ -85,7 +86,7 @@ export function ChatSessionActions({
         id={menuId}
         popover="auto"
         role="menu"
-        aria-label="对话操作"
+        aria-label={i18n.t("chat:actions.menu")}
         className="chat-actions-menu"
         onBeforeToggle={(event) => {
           if (event.newState !== "open" || !trigger.current) return;
@@ -121,11 +122,13 @@ export function ChatSessionActions({
       >
         <button type="button" role="menuitem" onClick={() => edit("rename")}>
           <Pencil size={15} />
-          重命名
+          {i18n.t("chat:actions.rename")}
         </button>
         <button type="button" role="menuitem" onClick={() => void pin()}>
           {item.pinned ? <PinOff size={15} /> : <Pin size={15} />}{" "}
-          {item.pinned ? "取消置顶" : "置顶"}
+          {item.pinned
+            ? i18n.t("chat:actions.unpin")
+            : i18n.t("chat:actions.pin")}
         </button>
         <button
           type="button"
@@ -134,14 +137,18 @@ export function ChatSessionActions({
           onClick={() => edit("delete")}
         >
           <Trash2 size={15} />
-          删除
+          {i18n.t("chat:actions.delete")}
         </button>
       </div>
       {editing && (
         <dialog
           className="adapter-dialog chat-edit-dialog"
           ref={dialog}
-          aria-label={editing === "rename" ? "重命名对话" : "删除对话"}
+          aria-label={
+            editing === "rename"
+              ? i18n.t("chat:actions.renameTitle")
+              : i18n.t("chat:actions.deleteTitle")
+          }
           onCancel={(event) => {
             event.preventDefault();
             if (!saving) setEditing(null);
@@ -153,10 +160,14 @@ export function ChatSessionActions({
               if (!saving) void submit();
             }}
           >
-            <h2>{editing === "rename" ? "重命名对话" : "删除对话"}</h2>
+            <h2>
+              {editing === "rename"
+                ? i18n.t("chat:actions.renameTitle")
+                : i18n.t("chat:actions.deleteTitle")}
+            </h2>
             {editing === "rename" ? (
               <label className="field">
-                <span>对话名称</span>
+                <span>{i18n.t("chat:actions.name")}</span>
                 <input
                   value={title}
                   autoFocus
@@ -165,7 +176,9 @@ export function ChatSessionActions({
                 />
               </label>
             ) : (
-              <p>删除「{item.title}」及其聊天记录？此操作无法撤销。</p>
+              <p>
+                {i18n.t("chat:actions.deleteConfirm", { title: item.title })}
+              </p>
             )}
             {error && <p role="alert">{error}</p>}
             <div className="actions adapter-dialog-actions">
@@ -175,14 +188,16 @@ export function ChatSessionActions({
                 autoFocus={editing === "delete"}
                 onClick={() => setEditing(null)}
               >
-                取消
+                {i18n.t("chat:actions.cancel")}
               </button>
               <button
                 type="submit"
                 className={editing === "delete" ? "danger" : "primary"}
                 disabled={saving || (editing === "rename" && !title.trim())}
               >
-                {editing === "delete" ? "删除" : "保存"}
+                {editing === "delete"
+                  ? i18n.t("chat:actions.delete")
+                  : i18n.t("chat:actions.save")}
               </button>
             </div>
           </form>

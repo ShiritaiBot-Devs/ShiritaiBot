@@ -1,0 +1,81 @@
+{
+  "upload": {
+    "failed": "{file}：{error}",
+    "failedShort": "上传失败",
+    "label": "上传文件（每个 {limit} MiB 以内，可多选）",
+    "submit": "上传",
+    "submitMany_other": "上传 {count} 个文件",
+    "formats": "支持 txt、md、pdf、doc(x)、csv、xls(x)、ppt(x) 等文本格式；扫描版 PDF 需要先做 OCR。",
+    "files": "知识库文件",
+    "done": "文档已加入知识库"
+  },
+  "chunks_other": "{count} 个分块",
+  "chunkPages": "文档 {id} 分块分页",
+  "chunksFailed": "读取分块失败：{error}",
+  "delete": "删除 {title}",
+  "cancel": "取消",
+  "confirmDelete": "确认删除",
+  "deleted": "文档已删除",
+  "download": "下载 {title}",
+  "showChunks": "查看分块",
+  "collapse": "收起",
+  "search": {
+    "empty": "没有检索到内容",
+    "failed": "检索失败：{error}",
+    "label": "检索知识库",
+    "submit": "检索",
+    "placeholder": "输入一个问题或关键词",
+    "hint": "结果和助手调用 kb_search 时看到的相同。",
+    "title": "检索测试"
+  },
+  "documents": {
+    "pages": "文档分页",
+    "empty": "知识库还是空的。上传文件，或在 QQ 私聊里发给助手。",
+    "noMatch": "没有符合条件的文档",
+    "loadFailed": "读取知识库失败：{error}",
+    "noEmbedding": "未配置 Embedding，检索只用关键词",
+    "indexed": "{indexed} 已索引，{pending} 待计算",
+    "title": "文档",
+    "summary": "{documents} 篇 · {chunks} 个分块 · {size} · 向量"
+  },
+  "filter": {
+    "submit": "筛选",
+    "placeholder": "标题或文件名",
+    "label": "筛选文档"
+  },
+  "libraries": {
+    "loadFailed": "读取库列表失败：{error}",
+    "title": "管理的知识库",
+    "disable": "停用知识库",
+    "remove": "移出配置",
+    "removeHint": "移出配置会保留磁盘上的文档",
+    "displayNameOf": "{key} 的显示名称",
+    "idHint": "标识须以小写字母开头，使用字母、数字、下划线或连字符，且未被占用。",
+    "add": "添加知识库",
+    "namePlaceholder": "显示名称",
+    "nameLabel": "知识库名称",
+    "idPlaceholder": "标识，例如 project",
+    "idLabel": "知识库标识",
+    "settings": "知识库设置"
+  },
+  "settings": {
+    "title": "检索与导入设置"
+  },
+  "defaultLibrary": "默认知识库",
+  "matches": {
+    "semantic": "语义",
+    "keyword": "关键词",
+    "hybrid": "关键词 + 语义"
+  },
+  "sources": {
+    "agent": "助手写入",
+    "qq": "QQ 私聊",
+    "web": "WebUI 上传"
+  },
+  "bindings": {
+    "default": "沿用默认访问规则",
+    "library": "使用的知识库",
+    "hint": "同一个库可以绑定多个会话。绑定到群聊后，群成员可通过助手检索该库。新增库保存后即可上传文档。",
+    "title": "会话绑定"
+  }
+}

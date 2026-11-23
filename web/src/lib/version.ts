@@ -1,4 +1,5 @@
 import type { ReleaseInfo, UpdateStatus } from "../api/types";
+import { currentLocale } from "../i18n";
 
 type Parsed = { core: number[]; pre: string[] | null };
 
@@ -74,7 +75,7 @@ export function formatDate(value: string | null | undefined): string {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("zh-CN", {
+  return date.toLocaleDateString(currentLocale(), {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

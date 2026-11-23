@@ -6,6 +6,7 @@ import { EmptyState } from "../components/EmptyState";
 import { useState } from "react";
 import { Pagination, PAGE_SIZE } from "../components/Pagination";
 import type { PageProps } from "./common";
+import i18n from "../i18n";
 
 export function EventsPage({ client }: PageProps) {
   const [page, setPage] = useState(1);
@@ -17,9 +18,11 @@ export function EventsPage({ client }: PageProps) {
 
   return (
     <section className="panel">
-      <h2>事件时间线</h2>
+      <h2>{i18n.t("events:timeline")}</h2>
       {events.error && (
-        <QueryErrorNotice message={`读取事件失败：${events.error.message}`} />
+        <QueryErrorNotice
+          message={i18n.t("events:loadFailed", { error: events.error.message })}
+        />
       )}
       {events.data?.items.map((row) => (
         <article className="record" key={row.id}>
@@ -35,11 +38,11 @@ export function EventsPage({ client }: PageProps) {
         </article>
       ))}
       {!events.data?.items.length && !events.error && !events.isPending && (
-        <EmptyState text="来自插件、提醒和子代理的事件会汇集在这里。" />
+        <EmptyState text={i18n.t("events:empty")} />
       )}
-      {events.isPending && <LoadingBar label="正在读取事件…" />}
+      {events.isPending && <LoadingBar label={i18n.t("events:loading")} />}
       <Pagination
-        label="主动动态"
+        label={i18n.t("events:pages")}
         page={events.data?.page ?? page}
         total={events.data?.total ?? 0}
         onChange={setPage}

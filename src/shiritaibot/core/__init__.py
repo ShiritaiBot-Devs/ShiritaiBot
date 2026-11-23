@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal, Protocol
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
+from shiritaibot.i18n import t
+
 if TYPE_CHECKING:
     from shiritaibot.auth.menu import ApprovalMenu
 
@@ -212,4 +214,18 @@ class InteractionRequired(Exception):
 
 
 class PublicError(Exception):
-    """A deliberately sanitized error suitable for the owner or model."""
+    """A deliberately sanitized error suitable for the owner or model.
+
+    The message may be a catalog key with ``{name}`` params; it is rendered in the locale
+    active when the error is shown (``str(exc)``), not when it is raised. Plain text that
+    is not a key is shown unchanged.
+    """
+
+    def __init__(self, *args: Any, **params: Any):
+        super().__init__(*args)
+        self.params = params
+
+    def __str__(self) -> str:
+        if len(self.args) == 1 and isinstance(self.args[0], str):
+            return t(self.args[0], **self.params)
+        return super().__str__()

@@ -1,0 +1,69 @@
+{
+  "language": {
+    "title": "语言",
+    "botLabel": "机器人语言",
+    "botHelp": "没有用 /lang 单独设置语言的会话使用此语言：/help、错误提示、通知和机器人的回复都用它，即使用户用其他语言发消息也一样。人设里指定了回复语言时，以人设为准。",
+    "uiHelp": "只影响这个浏览器里的管理界面，不影响机器人。",
+    "overridesTitle": "用 /lang 单独设置语言的会话",
+    "overridesHelp": "这些会话使用自己的语言，不使用上方的默认语言；即使人设指定了其他回复语言也一样。",
+    "overridesEmpty": "目前没有会话用 /lang 单独设置语言。",
+    "session": "会话",
+    "locale": "语言",
+    "useDefault": "恢复默认",
+    "cleared": "{session} 已恢复使用默认语言。",
+    "loadFailed": "无法读取会话语言设置。"
+  },
+  "tokens": {
+    "admin": "<strong>管理令牌</strong>：登录这个 WebUI 用。存在 data/web.token，也可以用命令 <code>shiritaibot token</code> 查看。未登录时打开首页就是登录页（也可以直接访问 /login）。",
+    "adapter": "<strong>适配器访问令牌</strong>：Bot 连接 OneBot 协议端时带的密码，在「适配器」页填写；要和 NapCat 里配置的访问令牌一致。没设访问令牌就留空。",
+    "napcat": "<strong>NapCat WebUI 令牌</strong>：只用于打开 NapCat 自己的管理页面（默认 http://127.0.0.1:6099），和上面两个无关。",
+    "title": "令牌使用说明"
+  },
+  "sections": {
+    "emotion": "情绪（开发者选项）",
+    "proactive": "主动性与打扰策略",
+    "memory": "长期记忆",
+    "webSearch": "网页搜索",
+    "basePersona": "基础人设",
+    "heartflowAdvanced": "心流高级设置",
+    "groupContext": "群聊上下文感知",
+    "context": "上下文管理",
+    "outbound": "消息发送",
+    "messageMerge": "消息合并",
+    "runtime": "运行设置",
+    "identity": "称呼与唤起"
+  },
+  "persona": {
+    "collectionHint": "添加多个人格，通过斜杠命令切换。",
+    "collection": "人格设定",
+    "default": "默认人格",
+    "defaultHint": "使用 /personas 查看名称和标识，/persona 标识 为当前会话切换人格；/persona default 恢复默认。仅主人可切换，下一轮生效。"
+  },
+  "context": {
+    "maxChars": "上下文字符上限",
+    "useLight": "使用 light 路由",
+    "model": "上下文压缩模型",
+    "compress": "压缩旧轮次为摘要",
+    "discard": "超限丢弃旧轮次",
+    "strategy": "上下文管理策略"
+  },
+  "tabsLabel": "配置分类",
+  "tabs": {
+    "extensions": "扩展功能",
+    "persona": "人格设定",
+    "general": "通用设定"
+  },
+  "webSearch": {
+    "providerSettings": "{provider} 配置"
+  },
+  "helpMenu": {
+    "loadFailed": "读取分区失败：{error}",
+    "moveDown": "下移 {title}",
+    "moveUp": "上移 {title}",
+    "show": "显示 {title}",
+    "loading": "正在加载分区…",
+    "hint": "文字和图片菜单共用分区设置。用右侧箭头调整顺序。",
+    "reset": "恢复默认",
+    "title": "/help 菜单分区"
+  }
+}

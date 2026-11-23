@@ -1,0 +1,12 @@
+{
+  "lang": {
+    "description": "Show the bot language; /lang en|zh-CN sets it for this session; /lang default returns to the global default (owner only)",
+    "current_session": "Language for this session: {name} (set with /lang; overrides the persona's language)",
+    "current_default": "Language for this session: {name} (global default)",
+    "saved": "The new language applies from the next message.",
+    "usage": "Options: {options}. Use /lang default to return to the global default.",
+    "unknown": "Unsupported language: {value}. Options: {options}.",
+    "owner_only": "Only the owner can change the session language.",
+    "status": "Language: {name}"
+  }
+}

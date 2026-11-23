@@ -6,6 +6,7 @@ import { EmptyState } from "../components/EmptyState";
 import { Field } from "../components/FieldForm";
 import type { SkillInfo } from "../api/types";
 import type { ConfigPageProps } from "./common";
+import i18n from "../i18n";
 
 export function SkillsPage({
   client,
@@ -59,13 +60,13 @@ export function SkillsPage({
   return (
     <>
       <section className="panel">
-        <h2>技能设置</h2>
+        <h2>{i18n.t("skills:settings.title")}</h2>
         <Field
           spec={{
             key: "enabled",
-            label: "启用技能系统",
+            label: i18n.t("skills:settings.enabled.label"),
             kind: "boolean",
-            help: "开启后 Agent 模式提供 skill_list / skill_read / skill_write 等工具。",
+            help: i18n.t("skills:settings.enabled.help"),
           }}
           value={skills.enabled}
           onChange={(enabled) => setSkills({ enabled: Boolean(enabled) })}
@@ -73,9 +74,9 @@ export function SkillsPage({
         <Field
           spec={{
             key: "inject",
-            label: "在系统提示中列出技能",
+            label: i18n.t("skills:settings.list.label"),
             kind: "boolean",
-            help: "列出已启用技能的名称和描述，让助手在合适时自动读取对应技能。",
+            help: i18n.t("skills:settings.list.help"),
           }}
           value={skills.inject}
           onChange={(inject) => setSkills({ inject: Boolean(inject) })}
@@ -83,14 +84,14 @@ export function SkillsPage({
       </section>
       <section className="panel">
         <div className="panel-head">
-          <h2>技能列表</h2>
+          <h2>{i18n.t("skills:list.title")}</h2>
           <button
             type="button"
             disabled={working}
             onClick={() => setInstalling(!installing)}
           >
             <Plus size={14} />
-            安装技能
+            {i18n.t("skills:install.title")}
           </button>
         </div>
         {installing && (
@@ -101,19 +102,15 @@ export function SkillsPage({
               if (file)
                 void mutate(
                   () => client.installSkill(file, replace),
-                  "技能已安装",
+                  i18n.t("skills:installed"),
                 );
             }}
           >
-            <p className="muted">
-              支持 .skill / .zip 技能包或单个 SKILL.md（最大 10
-              MiB）。也可以直接在 QQ
-              里把技能文件发给助手，让它安装。技能附带的脚本属于外部代码，只安装信任的技能。
-            </p>
+            <p className="muted">{i18n.t("skills:install.hint")}</p>
             <label className="field">
-              技能文件
+              {i18n.t("skills:install.file")}
               <input
-                aria-label="技能文件"
+                aria-label={i18n.t("skills:install.file")}
                 type="file"
                 accept=".skill,.zip,.md"
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}
@@ -126,19 +123,19 @@ export function SkillsPage({
                   checked={replace}
                   onChange={(event) => setReplace(event.target.checked)}
                 />{" "}
-                覆盖同名技能
+                {i18n.t("skills:install.replace")}
               </span>
             </label>
             <div className="actions">
               <button type="submit" disabled={working || !file}>
-                上传并安装
+                {i18n.t("skills:install.submit")}
               </button>
               <button
                 type="button"
                 disabled={working}
                 onClick={() => setInstalling(false)}
               >
-                取消
+                {i18n.t("skills:cancel")}
               </button>
             </div>
           </form>
@@ -147,41 +144,47 @@ export function SkillsPage({
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="确认删除技能"
+            aria-label={i18n.t("skills:remove.dialog")}
             className="config-editor"
           >
-            <h3>确认删除 {removing}？</h3>
-            <p>技能目录会被删除，无法恢复。</p>
+            <h3>{i18n.t("skills:remove.title", { name: removing })}</h3>
+            <p>{i18n.t("skills:remove.hint")}</p>
             <div className="actions">
               <button
                 type="button"
                 className="danger"
                 disabled={working}
                 onClick={() =>
-                  void mutate(() => client.removeSkill(removing), "技能已删除")
+                  void mutate(
+                    () => client.removeSkill(removing),
+                    i18n.t("skills:removed"),
+                  )
                 }
               >
-                确认删除
+                {i18n.t("skills:remove.confirm")}
               </button>
               <button
                 type="button"
                 disabled={working}
                 onClick={() => setRemoving(null)}
               >
-                取消
+                {i18n.t("skills:cancel")}
               </button>
             </div>
           </div>
         )}
         {listing.isPending ? (
-          <LoadingBar label="正在读取技能…" />
+          <LoadingBar label={i18n.t("skills:loading")} />
         ) : listing.isError ? (
           <p role="alert">{listing.error.message}</p>
         ) : !rows.length ? (
-          <EmptyState text="尚未安装技能。" />
+          <EmptyState text={i18n.t("skills:empty")} />
         ) : (
           <div className="config-workspace">
-            <section className="config-sidebar" aria-label="技能列表">
+            <section
+              className="config-sidebar"
+              aria-label={i18n.t("skills:list.title")}
+            >
               {rows.map((row) => {
                 const enabled = !skills.disabled.includes(row.name);
                 return (
@@ -200,9 +203,15 @@ export function SkillsPage({
                     <span>
                       <strong>{row.name}</strong>
                       <small>
-                        {row.source === "bundled" ? "内置" : "已安装"}
-                        {row.overrides ? " · 覆盖内置" : ""}
-                        {row.error ? " · 无效" : enabled ? "" : " · 已停用"}
+                        {row.source === "bundled"
+                          ? i18n.t("skills:source.builtin")
+                          : i18n.t("skills:source.installed")}
+                        {row.overrides ? i18n.t("skills:flags.overrides") : ""}
+                        {row.error
+                          ? i18n.t("skills:flags.invalid")
+                          : enabled
+                            ? ""
+                            : i18n.t("skills:flags.disabled")}
                       </small>
                     </span>
                   </button>
@@ -225,7 +234,7 @@ export function SkillsPage({
                         onClick={() => setRemoving(current.name)}
                       >
                         <Trash2 size={14} />
-                        删除
+                        {i18n.t("skills:remove.button")}
                       </button>
                     )}
                   </div>
@@ -233,22 +242,28 @@ export function SkillsPage({
                   <Field
                     spec={{
                       key: "skill-enabled",
-                      label: "启用此技能",
+                      label: i18n.t("skills:item.enabled.label"),
                       kind: "boolean",
-                      help: "停用后不会出现在系统提示中，也不能被读取。修改后请保存。",
+                      help: i18n.t("skills:item.enabled.help"),
                     }}
                     value={!skills.disabled.includes(current.name)}
                     onChange={(value) => toggle(current.name, Boolean(value))}
                   />
-                  <p className="muted">位置：{current.path}</p>
+                  <p className="muted">
+                    {i18n.t("skills:item.path", { path: current.path })}
+                  </p>
                   {detail.data && (
                     <>
-                      <h3>文件</h3>
+                      <h3>{i18n.t("skills:item.files")}</h3>
                       <ul className="plain-list">
                         {detail.data.files.map((item) => (
                           <li key={item.path}>
                             <code>{item.path}</code>{" "}
-                            <small className="muted">{item.bytes} 字节</small>
+                            <small className="muted">
+                              {i18n.t("skills:item.bytes", {
+                                count: item.bytes,
+                              })}
+                            </small>
                           </li>
                         ))}
                       </ul>

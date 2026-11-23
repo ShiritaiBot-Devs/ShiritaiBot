@@ -1,6 +1,8 @@
 /** Indeterminate progress, with a screen-reader label instead of visible text. */
+import i18n from "../i18n";
+
 export function LoadingBar({
-  label = "正在加载",
+  label = i18n.t("loading"),
   compact = false,
 }: {
   label?: string;

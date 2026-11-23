@@ -1,0 +1,34 @@
+{
+  "callbackPath": "回调路径",
+  "loadingConnections": "读取连接状态",
+  "status": {
+    "disconnected": "未连接",
+    "error": "连接异常",
+    "reconnecting": "重新连接中",
+    "connecting": "连接中",
+    "connected": "已连接"
+  },
+  "credentialsOk": "凭证可用",
+  "statusUnavailable": "状态暂不可用",
+  "loadingStatus": "正在读取状态",
+  "disabled": "未启用",
+  "pending": "待保存",
+  "empty": "添加实例，连接 QQ 或飞书。",
+  "type": {
+    "qq_official": "QQ 官方机器人",
+    "feishu": "飞书应用机器人",
+    "lark": "Lark 应用机器人"
+  },
+  "instances": "适配器实例",
+  "feishuSavedDisabled": "飞书实例已保存为未启用。",
+  "feishuSaved": "飞书实例已保存，正在连接。",
+  "saveFirst": "请先保存或放弃未保存的配置，再创建飞书机器人。",
+  "add": {
+    "continue": "继续",
+    "scan": "扫码一键创建",
+    "manual": "手动配置",
+    "type": "适配器类型",
+    "title": "添加机器人"
+  },
+  "cancel": "取消"
+}

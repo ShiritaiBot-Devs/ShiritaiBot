@@ -7,61 +7,69 @@ import { EmptyState } from "../components/EmptyState";
 import { SessionOptions } from "../components/SessionPicker";
 import type { RoutineKind, RoutineRecord } from "../api/types";
 import { isMainSession, sessionTitle } from "../lib/sessions";
-import { TIME_ZONE, formatDateTime, localInputToIso } from "../lib/utils";
+import {
+  dateFormat,
+  formatDateTime,
+  localInputToIso,
+  ownerTimeZone,
+} from "../lib/utils";
 import type { PageProps } from "./common";
+import i18n, { currentLocale, tx } from "../i18n";
 
 const KINDS: { value: RoutineKind; label: string }[] = [
-  { value: "todo", label: "待办" },
-  { value: "event", label: "日程" },
-  { value: "course", label: "课程" },
-  { value: "reminder", label: "提醒" },
-  { value: "job", label: "定时 Agent 任务" },
+  { value: "todo", label: "routine:kinds.todo" },
+  { value: "event", label: "routine:kinds.event" },
+  { value: "course", label: "routine:kinds.course" },
+  { value: "reminder", label: "routine:kinds.reminder" },
+  { value: "job", label: "routine:kinds.job" },
 ];
 
 const KIND_LABEL: Record<RoutineKind, string> = {
-  todo: "待办",
-  event: "日程",
-  course: "课程",
-  reminder: "提醒",
-  job: "定时任务",
+  todo: "routine:kinds.todo",
+  event: "routine:kinds.event",
+  course: "routine:kinds.course",
+  reminder: "routine:kinds.reminder",
+  job: "routine:kindShort.job",
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  open: "进行中",
-  scheduled: "已排期",
-  fired: "已触发",
-  completed: "已完成",
-  cancelled: "已取消",
+  open: "routine:status.open",
+  scheduled: "routine:status.scheduled",
+  fired: "routine:status.fired",
+  completed: "routine:status.completed",
+  cancelled: "routine:status.cancelled",
 };
 
-const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
+/** Monday-first weekday names in the interface language. */
+function weekdayNames(width: "narrow" | "short") {
+  const format = new Intl.DateTimeFormat(currentLocale(), {
+    weekday: width,
+    timeZone: "UTC",
+  });
+  // 1 January 2024 was a Monday.
+  return Array.from({ length: 7 }, (_, i) =>
+    format.format(Date.UTC(2024, 0, 1 + i)),
+  );
+}
 const DEFAULT_SESSION = "web:owner";
 const LEGACY_SCOPE = "owner";
 /** Guard against runaway multi-day events. */
 const MAX_SPAN_DAYS = 62;
 
-const dayKeyFormat = new Intl.DateTimeFormat("en-CA", {
-  timeZone: TIME_ZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-const clockFormat = new Intl.DateTimeFormat("zh-CN", {
-  timeZone: TIME_ZONE,
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
+const dayKeyFormat = () =>
+  dateFormat({ year: "numeric", month: "2-digit", day: "2-digit" }, "en-CA");
+const clockFormat = () =>
+  dateFormat({ hour: "2-digit", minute: "2-digit", hour12: false });
 
 /** "YYYY-MM-DD" of the instant in the dashboard time zone. */
 function dayKey(value: string | Date): string | null {
   const date = typeof value === "string" ? new Date(value) : value;
-  return Number.isNaN(date.getTime()) ? null : dayKeyFormat.format(date);
+  return Number.isNaN(date.getTime()) ? null : dayKeyFormat().format(date);
 }
 
 function clock(value: string): string {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : clockFormat.format(date);
+  return Number.isNaN(date.getTime()) ? "" : clockFormat().format(date);
 }
 
 /** Calendar arithmetic on date-only keys, done in UTC so DST never bites. */
@@ -127,8 +135,13 @@ function RoutineItem({
       ? `${formatDateTime(row.due)} – ${formatDateTime(row.end)}`
       : formatDateTime(row.due)
     : row.cron
-      ? `Cron：${row.cron}${row.next_fire ? ` · 下次 ${formatDateTime(row.next_fire)}` : ""}`
-      : "没有截止时间";
+      ? row.next_fire
+        ? i18n.t("routine:cronNext", {
+            cron: row.cron,
+            next: formatDateTime(row.next_fire),
+          })
+        : i18n.t("routine:cron", { cron: row.cron })
+      : i18n.t("routine:noDue");
   return (
     <article
       className={`routine-item kind-${row.kind}${isDone(row) ? " done" : ""}`}
@@ -140,8 +153,8 @@ function RoutineItem({
         </span>
       </div>
       <span className="tag">
-        {KIND_LABEL[row.kind] ?? row.kind} ·{" "}
-        {STATUS_LABEL[row.status] ?? row.status}
+        {tx(KIND_LABEL[row.kind] ?? row.kind)} ·{" "}
+        {tx(STATUS_LABEL[row.status] ?? row.status)}
       </span>
       {!isDone(row) && (
         <div className="actions">
@@ -150,22 +163,22 @@ function RoutineItem({
             onClick={() =>
               void act(
                 () => client.setRoutineStatus(row.id, "completed"),
-                "已标记完成",
+                i18n.t("routine:markedDone"),
               )
             }
           >
-            完成
+            {i18n.t("routine:done")}
           </button>
           <button
             type="button"
             onClick={() =>
               void act(
                 () => client.setRoutineStatus(row.id, "cancelled"),
-                "已取消",
+                i18n.t("routine:cancelled"),
               )
             }
           >
-            取消
+            {i18n.t("routine:cancel")}
           </button>
         </div>
       )}
@@ -234,34 +247,44 @@ function RoutineCalendar({
       <section className="panel">
         <div className="panel-head calendar-head">
           <h2>
-            {cursor.year} 年 {cursor.month + 1} 月
+            {new Intl.DateTimeFormat(currentLocale(), {
+              year: "numeric",
+              month: "long",
+              timeZone: "UTC",
+            }).format(Date.UTC(cursor.year, cursor.month, 1))}
           </h2>
           <div className="inline calendar-nav">
             <button
               type="button"
-              aria-label="上个月"
+              aria-label={i18n.t("routine:prevMonth")}
               onClick={() => shiftMonth(-1)}
             >
               <ChevronLeft size={16} />
             </button>
             <button type="button" onClick={goToday}>
-              今天
+              {i18n.t("routine:today")}
             </button>
             <button
               type="button"
-              aria-label="下个月"
+              aria-label={i18n.t("routine:nextMonth")}
               onClick={() => shiftMonth(1)}
             >
               <ChevronRight size={16} />
             </button>
           </div>
         </div>
-        <div className="calendar" role="grid" aria-label="日程日历">
-          {WEEKDAYS.map((name) => (
-            <div className="calendar-weekday" role="columnheader" key={name}>
-              {name}
-            </div>
-          ))}
+        <div
+          className="calendar"
+          role="grid"
+          aria-label={i18n.t("routine:calendar")}
+        >
+          {weekdayNames(currentLocale() === "zh-CN" ? "narrow" : "short").map(
+            (name) => (
+              <div className="calendar-weekday" role="columnheader" key={name}>
+                {name}
+              </div>
+            ),
+          )}
           {grid.map((key) => {
             const items = (byDay.get(key) ?? []).filter(
               (row) => row.kind !== "course",
@@ -283,7 +306,10 @@ function RoutineCalendar({
                 aria-pressed={key === selection?.day}
                 aria-haspopup="dialog"
                 aria-expanded={key === selection?.day}
-                aria-label={`${key}，${items.length} 项`}
+                aria-label={i18n.t("routine:dayLabel", {
+                  day: key,
+                  count: items.length,
+                })}
                 onClick={(event) => {
                   setSelection(
                     selection?.day === key
@@ -331,11 +357,11 @@ function RoutineCalendar({
             (kind) => (
               <span key={kind}>
                 <i className={`kind-${kind}`} />
-                {KIND_LABEL[kind]}
+                {tx(KIND_LABEL[kind])}
               </span>
             ),
           )}
-          <span>点击日期查看全部安排（含课程）</span>
+          <span>{i18n.t("routine:calendarHint")}</span>
         </div>
       </section>
       {selection && (
@@ -352,7 +378,7 @@ function RoutineCalendar({
       )}
       {undated.length > 0 && (
         <section className="panel">
-          <h2>未排期待办与定时任务</h2>
+          <h2>{i18n.t("routine:unscheduled")}</h2>
           {undated.map((row) => (
             <RoutineItem
               key={row.id}
@@ -456,8 +482,13 @@ function RoutineDayPopover({
     };
   }, [anchor]);
 
-  const [year, month, date] = day.split("-").map(Number);
-  const weekday = WEEKDAYS[(keyToUtc(day).getUTCDay() + 6) % 7];
+  const title = new Intl.DateTimeFormat(currentLocale(), {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+    timeZone: "UTC",
+  }).format(keyToUtc(day));
   return createPortal(
     <div
       className="routine-day-popover"
@@ -467,12 +498,10 @@ function RoutineDayPopover({
       tabIndex={-1}
     >
       <div className="panel-head">
-        <h2 id={titleId}>
-          {year} 年 {month} 月 {date} 日 · 周{weekday}
-        </h2>
+        <h2 id={titleId}>{title}</h2>
         <button
           type="button"
-          aria-label="关闭当日安排"
+          aria-label={i18n.t("routine:closeDay")}
           onClick={() => {
             anchor.focus();
             onClose();
@@ -492,7 +521,7 @@ function RoutineDayPopover({
           />
         ))
       ) : (
-        <EmptyState text="这一天没有安排。" />
+        <EmptyState text={i18n.t("routine:dayEmpty")} />
       )}
     </div>,
     document.body,
@@ -521,7 +550,7 @@ export function RoutinePage({ client, act }: PageProps) {
     queryFn: () => client.webChats(),
   });
   const names = new Map(chats.data?.map((chat) => [chat.id, chat.title]));
-  names.set(LEGACY_SCOPE, "历史未归属");
+  names.set(LEGACY_SCOPE, i18n.t("routine:legacy"));
 
   const rows = useMemo(
     () =>
@@ -549,21 +578,21 @@ export function RoutinePage({ client, act }: PageProps) {
         title,
         due: localInputToIso(due),
         cron: kind === "job" ? cron : "",
-        timezone: "Asia/Shanghai",
+        timezone: ownerTimeZone(),
       });
       setTitle("");
       setDue("");
       setFilter((current) =>
         current && current === filter ? session : current,
       );
-    }, "已创建");
+    }, i18n.t("routine:created"));
   }
 
   return (
     <>
       <section className="panel">
         <label className="inline">
-          <span className="field-name">查看会话</span>
+          <span className="field-name">{i18n.t("routine:viewSession")}</span>
           <select
             value={filter}
             onChange={(event) => {
@@ -572,7 +601,7 @@ export function RoutinePage({ client, act }: PageProps) {
               if (isMainSession(scope)) setSession(scope);
             }}
           >
-            <option value="">全部会话</option>
+            <option value="">{i18n.t("routine:allSessions")}</option>
             {(filter === LEGACY_SCOPE ||
               routineScopes.includes(LEGACY_SCOPE)) && (
               <option value={LEGACY_SCOPE}>{names.get(LEGACY_SCOPE)}</option>
@@ -582,11 +611,13 @@ export function RoutinePage({ client, act }: PageProps) {
         </label>
       </section>
       <section className="panel">
-        <h2>安排下一件事</h2>
+        <h2>{i18n.t("routine:new.title")}</h2>
         <form onSubmit={create}>
           <div className="field-grid">
             <label className="field">
-              <span className="field-name">所属会话</span>
+              <span className="field-name">
+                {i18n.t("routine:new.session")}
+              </span>
               <select
                 value={session}
                 onChange={(event) => setSession(event.target.value)}
@@ -595,23 +626,25 @@ export function RoutinePage({ client, act }: PageProps) {
               </select>
             </label>
             <div className="field">
-              <span className="field-name">类型</span>
+              <span className="field-name">{i18n.t("routine:new.kind")}</span>
               <select
-                aria-label="类型"
+                aria-label={i18n.t("routine:new.kind")}
                 value={kind}
                 onChange={(event) => setKind(event.target.value as RoutineKind)}
               >
                 {KINDS.map((item) => (
                   <option key={item.value} value={item.value}>
-                    {item.label}
+                    {tx(item.label)}
                   </option>
                 ))}
               </select>
             </div>
             <div className="field">
-              <span className="field-name">内容</span>
+              <span className="field-name">
+                {i18n.t("routine:new.content")}
+              </span>
               <input
-                aria-label="内容"
+                aria-label={i18n.t("routine:new.content")}
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 required
@@ -619,7 +652,7 @@ export function RoutinePage({ client, act }: PageProps) {
             </div>
             {kind === "job" ? (
               <div className="field">
-                <span className="field-name">Cron（Asia/Shanghai）</span>
+                <span className="field-name">Cron（{ownerTimeZone()}）</span>
                 <input
                   aria-label="Cron"
                   value={cron}
@@ -628,9 +661,9 @@ export function RoutinePage({ client, act }: PageProps) {
               </div>
             ) : (
               <div className="field">
-                <span className="field-name">时间（浏览器本地时区）</span>
+                <span className="field-name">{i18n.t("routine:new.time")}</span>
                 <input
-                  aria-label="时间"
+                  aria-label={i18n.t("routine:new.timeLabel")}
                   type="datetime-local"
                   value={due}
                   onChange={(event) => setDue(event.target.value)}
@@ -639,29 +672,29 @@ export function RoutinePage({ client, act }: PageProps) {
                   }
                 />
                 {kind === "course" && (
-                  <span className="muted">
-                    课程仅供查询，不提醒，也不触发 Proactive Loop。
-                  </span>
+                  <span className="muted">{i18n.t("routine:courseHint")}</span>
                 )}
               </div>
             )}
           </div>
           <button type="submit" className="primary">
             <Plus size={16} />
-            创建
+            {i18n.t("routine:create")}
           </button>
         </form>
       </section>
       {routines.error && (
         <section className="panel">
           <QueryErrorNotice
-            message={`读取日程失败：${routines.error.message}`}
+            message={i18n.t("routine:loadFailed", {
+              error: routines.error.message,
+            })}
           />
         </section>
       )}
       <RoutineCalendar rows={rows} names={names} client={client} act={act} />
       {filter && routines.isSuccess && rows.length === 0 && (
-        <EmptyState text="此会话暂无日程。" />
+        <EmptyState text={i18n.t("routine:empty")} />
       )}
     </>
   );

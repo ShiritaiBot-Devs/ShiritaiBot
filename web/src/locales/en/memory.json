@@ -1,0 +1,78 @@
+{
+  "profiles": {
+    "default": "Default memory",
+    "feishu": "Feishu memory"
+  },
+  "bindings": {
+    "invalid": "Invalid · {store}",
+    "list": "Bound sessions",
+    "none": "No long-term memory store",
+    "useDefault": "Use the session's default store",
+    "store": "Memory store",
+    "title": "Session bindings"
+  },
+  "resolution": "Resolution: {text}",
+  "pages": "memories",
+  "loading": "Loading memories…",
+  "empty": "This store has no memories yet.",
+  "noMatch": "No matching memories.",
+  "history": "History",
+  "detailFailed": "Couldn't load details: {error}",
+  "loadingDetail": "Loading memory details",
+  "details": "Details and evidence",
+  "collapse": "Collapse",
+  "loadFailed": "Couldn't load memories: {error}",
+  "search": {
+    "submit": "Search",
+    "placeholder": "Names, things, or keywords (including superseded and forgotten entries)",
+    "label": "Search memories"
+  },
+  "browse": {
+    "ownerHint": "In the owner's chat, you can ask the agent to remember, forget, or correct a memory.",
+    "sessionHint": "Session stores extract memories from their bound sessions.",
+    "kind": "Memory type",
+    "store": "Memory store to browse",
+    "title": "Browse memories"
+  },
+  "custom": {
+    "remove": "Remove from settings",
+    "removeHint": "Removing it from the settings keeps its data on disk. Add the same ID again to restore it.",
+    "displayNameOf": "Display name of {key}",
+    "add": "Add memory store",
+    "audience": "Access",
+    "namePlaceholder": "for example Project memory",
+    "nameLabel": "Memory store name",
+    "name": "Display name",
+    "idPlaceholder": "for example project",
+    "idLabel": "Memory store ID",
+    "id": "ID",
+    "title": "Custom memory stores"
+  },
+  "audience": {
+    "personal": "Personal store",
+    "session": "Session store"
+  },
+  "settings": {
+    "hint": "Personal stores are for the owner's sessions. Several group chats or guest private chats can explicitly share one session store.",
+    "title": "Memory store settings"
+  },
+  "status": {
+    "resolved": "Resolved",
+    "open": "Waiting for the owner",
+    "archived": "Forgotten",
+    "superseded": "Superseded",
+    "conflicted": "Conflicting",
+    "candidate": "New",
+    "confirmed": "Confirmed",
+    "active": "Active"
+  },
+  "kinds": {
+    "conflict": "Needs confirming",
+    "event": "Events",
+    "fact": "Facts",
+    "entity": "People and things",
+    "all": "All"
+  },
+  "sessionCount_one": "{count} session",
+  "sessionCount_other": "{count} sessions"
+}

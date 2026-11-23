@@ -1,6 +1,7 @@
 import { Check, X } from "lucide-react";
 import type { ApprovalRecord } from "../api/types";
 import { formatDateTime } from "../lib/utils";
+import i18n from "../i18n";
 
 export function ApprovalCard({
   approval,
@@ -14,11 +15,16 @@ export function ApprovalCard({
   return (
     <article className="approval">
       <div>
-        <span className="eyebrow">需要你确认 · {approval.id}</span>
+        <span className="eyebrow">
+          {i18n.t("chat:approval.needsYou", { id: approval.id })}
+        </span>
         <h3>{approval.tool}</h3>
         <pre>{JSON.stringify(approval.args, null, 2)}</pre>
         <p className="muted">
-          {approval.scope} · {formatDateTime(approval.expires)} 前有效
+          {approval.scope} ·{" "}
+          {i18n.t("chat:approval.validUntil", {
+            time: formatDateTime(approval.expires),
+          })}
         </p>
       </div>
       <div className="actions">
@@ -29,11 +35,11 @@ export function ApprovalCard({
           onClick={() => onResolve(true)}
         >
           <Check size={14} />
-          允许这一次
+          {i18n.t("chat:approval.allowOnce")}
         </button>
         <button type="button" disabled={busy} onClick={() => onResolve(false)}>
           <X size={14} />
-          拒绝
+          {i18n.t("chat:approval.deny")}
         </button>
       </div>
     </article>

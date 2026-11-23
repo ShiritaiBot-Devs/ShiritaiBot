@@ -1,0 +1,34 @@
+{
+  "callbackPath": "Callback path",
+  "loadingConnections": "Loading connection status",
+  "status": {
+    "disconnected": "Not connected",
+    "error": "Connection error",
+    "reconnecting": "Reconnecting",
+    "connecting": "Connecting",
+    "connected": "Connected"
+  },
+  "credentialsOk": "Credentials work",
+  "statusUnavailable": "Status unavailable",
+  "loadingStatus": "Loading status",
+  "disabled": "Disabled",
+  "pending": "Unsaved",
+  "empty": "Add an instance to connect QQ or Feishu.",
+  "type": {
+    "qq_official": "Official QQ bot",
+    "feishu": "Feishu app bot",
+    "lark": "Lark app bot"
+  },
+  "instances": "Adapter instances",
+  "feishuSavedDisabled": "Feishu instance saved as disabled.",
+  "feishuSaved": "Feishu instance saved. Connecting.",
+  "saveFirst": "Save or discard your unsaved changes before creating a Feishu bot.",
+  "add": {
+    "continue": "Continue",
+    "scan": "Create by scanning a QR code",
+    "manual": "Configure manually",
+    "type": "Adapter type",
+    "title": "Add a bot"
+  },
+  "cancel": "Cancel"
+}

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import type { ApiClient } from "../api/client";
 import type { HelpMenuSectionSetting } from "../api/types";
+import i18n from "../i18n";
 
 export function HelpMenuSections({
   client,
@@ -39,19 +40,27 @@ export function HelpMenuSections({
       aria-labelledby="help-menu-sections-title"
     >
       <div className="panel-head">
-        <h2 id="help-menu-sections-title">/help 菜单分区</h2>
+        <h2 id="help-menu-sections-title">
+          {i18n.t("settings:helpMenu.title")}
+        </h2>
         <button
           type="button"
           disabled={!value.length}
           onClick={() => onChange([])}
         >
-          恢复默认
+          {i18n.t("settings:helpMenu.reset")}
         </button>
       </div>
-      <p className="muted">文字和图片菜单共用分区设置。用右侧箭头调整顺序。</p>
-      {catalog.isPending && <p role="status">正在加载分区…</p>}
+      <p className="muted">{i18n.t("settings:helpMenu.hint")}</p>
+      {catalog.isPending && (
+        <p role="status">{i18n.t("settings:helpMenu.loading")}</p>
+      )}
       {catalog.isError && (
-        <p role="alert">读取分区失败：{catalog.error.message}</p>
+        <p role="alert">
+          {i18n.t("settings:helpMenu.loadFailed", {
+            error: catalog.error.message,
+          })}
+        </p>
       )}
       {rows.map(({ id, title, visible, index }, position) => (
         <div className="list-row" key={id}>
@@ -59,7 +68,7 @@ export function HelpMenuSections({
             <span className="field-name">{title}</span>
             <input
               type="checkbox"
-              aria-label={`显示 ${title}`}
+              aria-label={i18n.t("settings:helpMenu.show", { title })}
               checked={visible}
               onChange={(event) => {
                 const visible = event.target.checked;
@@ -74,7 +83,7 @@ export function HelpMenuSections({
           <button
             type="button"
             className="icon-button"
-            aria-label={`上移 ${title}`}
+            aria-label={i18n.t("settings:helpMenu.moveUp", { title })}
             disabled={position === 0}
             onClick={() => move(index, rows[position - 1].index)}
           >
@@ -83,7 +92,7 @@ export function HelpMenuSections({
           <button
             type="button"
             className="icon-button"
-            aria-label={`下移 ${title}`}
+            aria-label={i18n.t("settings:helpMenu.moveDown", { title })}
             disabled={position === rows.length - 1}
             onClick={() => move(index, rows[position + 1].index)}
           >

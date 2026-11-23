@@ -753,6 +753,11 @@
   color: var(--accent);
 }
 
+.login-language {
+  display: flex;
+  justify-content: flex-end;
+}
+
 @media (max-width: 700px) {
   .chart-panel {
     padding-left: 42px;

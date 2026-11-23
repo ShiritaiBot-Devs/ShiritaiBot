@@ -7,6 +7,7 @@
 } from "lucide-react";
 import { toolFailure, type ToolItem } from "../lib/timeline";
 import { ShellCall } from "./ShellCall";
+import i18n from "../i18n";
 
 function pretty(text = "") {
   try {
@@ -35,7 +36,7 @@ function argumentPreview(text: string) {
 
 export function ToolGroup({ items }: { items: ToolItem[] }) {
   return (
-    <div className="tool-trace" aria-label="工具调用">
+    <div className="tool-trace" aria-label={i18n.t("chat:tools.calls")}>
       {items.map(({ call, result }) => {
         if (call.function.name === "shell")
           return <ShellCall key={call.id} item={{ call, result }} />;
@@ -51,15 +52,16 @@ export function ToolGroup({ items }: { items: ToolItem[] }) {
                   <ChevronRight size={12} />
                 </span>
                 <span className="trace-preview">
-                  {argumentPreview(call.function.arguments) || "无参数"}
+                  {argumentPreview(call.function.arguments) ||
+                    i18n.t("chat:tools.noArgs")}
                 </span>
               </summary>
               <div className="trace-details">
-                <strong>参数</strong>
+                <strong>{i18n.t("chat:tools.args")}</strong>
                 <pre>{pretty(call.function.arguments)}</pre>
                 {result && (
                   <>
-                    <strong>返回结果</strong>
+                    <strong>{i18n.t("chat:tools.result")}</strong>
                     <pre>{pretty(result.content)}</pre>
                   </>
                 )}
@@ -69,7 +71,11 @@ export function ToolGroup({ items }: { items: ToolItem[] }) {
               className={`trace-status ${!result ? "waiting" : failed ? "failed" : "done"}`}
             >
               <StatusIcon size={13} />
-              {!result ? "执行中" : failed ? "失败" : "已完成"}
+              {!result
+                ? i18n.t("chat:tools.running")
+                : failed
+                  ? i18n.t("chat:tools.failed")
+                  : i18n.t("chat:tools.done")}
             </div>
           </div>
         );

@@ -1,5 +1,6 @@
 import type { PluginConfig, PluginInfo } from "../api/types";
 import { JsonSetting, SchemaFields } from "./PluginSchemaField";
+import i18n from "../i18n";
 
 export function PluginSettingsForm({
   plugin,
@@ -21,9 +22,9 @@ export function PluginSettingsForm({
         extraKeys={Object.keys(record)}
       />
       <details>
-        <summary>编辑完整配置 JSON</summary>
+        <summary>{i18n.t("plugins:schema.editJson")}</summary>
         <JsonSetting
-          label="插件配置 JSON"
+          label={i18n.t("plugins:schema.jsonLabel")}
           value={record}
           onChange={(value) => onChange(value as Record<string, unknown>)}
         />

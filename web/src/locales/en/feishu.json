@@ -1,0 +1,37 @@
+{
+  "created": "{platform} app created:",
+  "generate": "Generate QR code",
+  "regenerate": "Generate a new QR code",
+  "generating": "Generating…",
+  "saveDisabled": "Save as disabled",
+  "saveConnect": "Save and connect",
+  "saving": "Saving…",
+  "cancel": "Cancel",
+  "statusRetry": "Can't read the scan status right now. Retrying.",
+  "bindOwner": "After connecting, send a private message as the instance instructs to bind the owner.",
+  "alreadyEnabled": "A Feishu connection is already enabled, so the new instance will be saved disabled.",
+  "enableAfterSave": "Enable the connection after saving",
+  "memory": {
+    "default": "Default memory",
+    "feishu": "Separate Feishu memory"
+  },
+  "memoryProfile": "Memory store",
+  "instanceId": "Instance ID",
+  "openAuth": "Open the authorization page",
+  "waiting": "Waiting for confirmation on your phone",
+  "qrLabel": "QR code for creating a Feishu app",
+  "platform": {
+    "feishu": "Feishu"
+  },
+  "platformLabel": "Platform",
+  "hint": "Confirm on your phone, then save it to ShiritaiBot.",
+  "title": "Create a Feishu bot by scanning",
+  "saveFailed": "Couldn't save the bot",
+  "qrFailed": "Couldn't generate the QR code",
+  "terminal": {
+    "error": "Creation didn't finish",
+    "expired": "The QR code or authorization expired",
+    "denied": "Authorization cancelled",
+    "applied": "Feishu instance saved"
+  }
+}

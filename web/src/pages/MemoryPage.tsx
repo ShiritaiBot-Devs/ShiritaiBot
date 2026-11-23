@@ -9,28 +9,39 @@ import { SessionPicker } from "../components/SessionPicker";
 import type { MemoryKind, MemoryProfileConfig } from "../api/types";
 import { adapterSessionId, isMainSession, sessionTitle } from "../lib/sessions";
 import type { SessionConfigPageProps } from "./common";
+import i18n, { tx } from "../i18n";
 
 const KINDS: { key: MemoryKind | ""; label: string }[] = [
-  { key: "", label: "全部" },
-  { key: "entity", label: "人物与事物" },
-  { key: "fact", label: "事实" },
-  { key: "event", label: "事件" },
-  { key: "conflict", label: "待确认" },
+  { key: "", label: "memory:kinds.all" },
+  { key: "entity", label: "memory:kinds.entity" },
+  { key: "fact", label: "memory:kinds.fact" },
+  { key: "event", label: "memory:kinds.event" },
+  { key: "conflict", label: "memory:kinds.conflict" },
 ];
 const STATUS: Record<string, string> = {
-  active: "有效",
-  confirmed: "已确认",
-  candidate: "新认识",
-  conflicted: "有冲突",
-  superseded: "已取代",
-  archived: "已遗忘",
-  open: "待主人确认",
-  resolved: "已处理",
+  active: "memory:status.active",
+  confirmed: "memory:status.confirmed",
+  candidate: "memory:status.candidate",
+  conflicted: "memory:status.conflicted",
+  superseded: "memory:status.superseded",
+  archived: "memory:status.archived",
+  open: "memory:status.open",
+  resolved: "memory:status.resolved",
 };
 
 const BUILTIN_PROFILES: Record<string, MemoryProfileConfig> = {
-  default: { name: "默认记忆库", audience: "personal" },
-  feishu: { name: "飞书记忆库", audience: "personal" },
+  default: {
+    get name() {
+      return i18n.t("memory:profiles.default");
+    },
+    audience: "personal",
+  },
+  feishu: {
+    get name() {
+      return i18n.t("memory:profiles.feishu");
+    },
+    audience: "personal",
+  },
 };
 
 function MemorySettings({
@@ -71,13 +82,11 @@ function MemorySettings({
 
   return (
     <section className="panel memory-settings">
-      <h2>记忆库设置</h2>
-      <p className="muted">
-        个人库供主人会话使用。多个群聊或访客私聊可以显式共用同一个会话库。
-      </p>
+      <h2>{i18n.t("memory:settings.title")}</h2>
+      <p className="muted">{i18n.t("memory:settings.hint")}</p>
       <div className="memory-settings-columns">
         <section className="memory-settings-section">
-          <h3>自定义记忆库</h3>
+          <h3>{i18n.t("memory:custom.title")}</h3>
           <form
             className="memory-settings-fields"
             onSubmit={(event) => {
@@ -98,10 +107,10 @@ function MemorySettings({
             }}
           >
             <label className="field">
-              <span>标识</span>
+              <span>{i18n.t("memory:custom.id")}</span>
               <input
-                aria-label="记忆库标识"
-                placeholder="例如 project"
+                aria-label={i18n.t("memory:custom.idLabel")}
+                placeholder={i18n.t("memory:custom.idPlaceholder")}
                 pattern="[a-z][a-z0-9_\-]{0,63}"
                 value={id}
                 onChange={(event) => setId(event.target.value)}
@@ -109,10 +118,10 @@ function MemorySettings({
               />
             </label>
             <label className="field">
-              <span>显示名称</span>
+              <span>{i18n.t("memory:custom.name")}</span>
               <input
-                aria-label="记忆库名称"
-                placeholder="例如 项目记忆库"
+                aria-label={i18n.t("memory:custom.nameLabel")}
+                placeholder={i18n.t("memory:custom.namePlaceholder")}
                 maxLength={80}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -120,9 +129,9 @@ function MemorySettings({
               />
             </label>
             <label className="field">
-              <span>访问范围</span>
+              <span>{i18n.t("memory:custom.audience")}</span>
               <select
-                aria-label="访问范围"
+                aria-label={i18n.t("memory:custom.audience")}
                 value={audience}
                 onChange={(event) =>
                   setAudience(
@@ -130,15 +139,19 @@ function MemorySettings({
                   )
                 }
               >
-                <option value="personal">个人库</option>
-                <option value="shared">会话库</option>
+                <option value="personal">
+                  {i18n.t("memory:audience.personal")}
+                </option>
+                <option value="shared">
+                  {i18n.t("memory:audience.session")}
+                </option>
               </select>
             </label>
             <button
               type="submit"
               disabled={!id || !name.trim() || Object.hasOwn(profiles, id)}
             >
-              添加记忆库
+              {i18n.t("memory:custom.add")}
             </button>
           </form>
           {Object.entries(custom).map(([key, profile]) => {
@@ -153,7 +166,7 @@ function MemorySettings({
               <div className="memory-profile-row" key={key}>
                 <div className="field">
                   <input
-                    aria-label={`${key} 的显示名称`}
+                    aria-label={i18n.t("memory:custom.displayNameOf", { key })}
                     value={profile.name}
                     maxLength={80}
                     onChange={(event) =>
@@ -171,14 +184,16 @@ function MemorySettings({
                   />
                   <small className="muted">
                     <code>{key}</code> ·{" "}
-                    {profile.audience === "shared" ? "会话库" : "个人库"} ·{" "}
-                    {count} 个会话
+                    {profile.audience === "shared"
+                      ? i18n.t("memory:audience.session")
+                      : i18n.t("memory:audience.personal")}{" "}
+                    · {i18n.t("memory:sessionCount", { count })}
                   </small>
                 </div>
                 <button
                   type="button"
                   disabled={count > 0 || usedByAdapter}
-                  title="移出配置会保留磁盘数据，重新添加同标识可恢复"
+                  title={i18n.t("memory:custom.removeHint")}
                   onClick={() => {
                     const next = { ...custom };
                     delete next[key];
@@ -188,14 +203,14 @@ function MemorySettings({
                     });
                   }}
                 >
-                  移出配置
+                  {i18n.t("memory:custom.remove")}
                 </button>
               </div>
             );
           })}
         </section>
         <section className="memory-settings-section">
-          <h3>会话绑定</h3>
+          <h3>{i18n.t("memory:bindings.title")}</h3>
           <div className="memory-settings-fields">
             <SessionPicker
               client={client}
@@ -209,19 +224,25 @@ function MemorySettings({
               onChange={setSession}
             />
             <label className="field">
-              <span className="field-name">使用的记忆库</span>
+              <span className="field-name">
+                {i18n.t("memory:bindings.store")}
+              </span>
               <select
                 disabled={!isMainSession(session)}
                 value={bindings[session] ?? ""}
                 onChange={(event) => bind(event.target.value)}
               >
                 <option value="">
-                  {personal ? "使用会话默认库" : "未绑定长期记忆库"}
+                  {personal
+                    ? i18n.t("memory:bindings.useDefault")
+                    : i18n.t("memory:bindings.none")}
                 </option>
                 {bindings[session] &&
                   !eligible.some(([key]) => key === bindings[session]) && (
                     <option value={bindings[session]} disabled>
-                      已失效 · {bindings[session]}
+                      {i18n.t("memory:bindings.invalid", {
+                        store: bindings[session],
+                      })}
                     </option>
                   )}
                 {eligible.map(([key, profile]) => (
@@ -236,7 +257,7 @@ function MemorySettings({
             <div
               className="memory-binding-list"
               role="group"
-              aria-label="已绑定会话"
+              aria-label={i18n.t("memory:bindings.list")}
             >
               {Object.entries(bindings).map(([key, value]) => (
                 <button
@@ -288,10 +309,10 @@ export function MemoryPage(props: SessionConfigPageProps) {
     <>
       <MemorySettings {...props} />
       <section className="panel">
-        <h2>浏览记忆</h2>
+        <h2>{i18n.t("memory:browse.title")}</h2>
         <div className="memory-browser-filters">
           <select
-            aria-label="浏览的记忆库"
+            aria-label={i18n.t("memory:browse.store")}
             value={profile}
             onChange={(event) => {
               setProfile(event.target.value);
@@ -299,15 +320,21 @@ export function MemoryPage(props: SessionConfigPageProps) {
               setOpen("");
             }}
           >
-            {(profiles.data ?? [{ id: "default", name: "默认记忆库" }]).map(
-              (row) => (
-                <option key={row.id} value={row.id}>
-                  {row.name}
-                </option>
-              ),
-            )}
+            {(
+              profiles.data ?? [
+                { id: "default", name: i18n.t("memory:profiles.default") },
+              ]
+            ).map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.name}
+              </option>
+            ))}
           </select>
-          <div className="range-tabs" role="group" aria-label="记忆类型">
+          <div
+            className="range-tabs"
+            role="group"
+            aria-label={i18n.t("memory:browse.kind")}
+          >
             {KINDS.map(({ key, label }) => (
               <button
                 type="button"
@@ -320,7 +347,7 @@ export function MemoryPage(props: SessionConfigPageProps) {
                   setOpen("");
                 }}
               >
-                {label}
+                {tx(label)}
               </button>
             ))}
           </div>
@@ -328,8 +355,8 @@ export function MemoryPage(props: SessionConfigPageProps) {
         <p className="muted">
           {profiles.data?.find((row) => row.id === profile)?.audience ===
           "shared"
-            ? "会话库从绑定会话中提取记忆。"
-            : "可以在主人对话里让 Agent 记住、忘掉或更正一条记忆。"}
+            ? i18n.t("memory:browse.sessionHint")
+            : i18n.t("memory:browse.ownerHint")}
         </p>
         <form
           className="inline"
@@ -341,33 +368,37 @@ export function MemoryPage(props: SessionConfigPageProps) {
           }}
         >
           <input
-            aria-label="搜索记忆"
+            aria-label={i18n.t("memory:search.label")}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="人名、事物或关键词（包括已取代和已遗忘的条目）"
+            placeholder={i18n.t("memory:search.placeholder")}
           />
           <button type="submit">
             <Search size={16} />
-            搜索
+            {i18n.t("memory:search.submit")}
           </button>
         </form>
         {memories.error && (
           <QueryErrorNotice
-            message={`读取记忆失败：${memories.error.message}`}
+            message={i18n.t("memory:loadFailed", {
+              error: memories.error.message,
+            })}
           />
         )}
         {memories.data?.items.map((row) => (
           <article className="record" key={row.id}>
             <div className="panel-head">
               <span className="tag">
-                {row.id} · {STATUS[row.status] ?? row.status}
+                {row.id} · {tx(STATUS[row.status] ?? row.status)}
               </span>
               <button
                 type="button"
                 aria-expanded={open === row.id}
                 onClick={() => setOpen(open === row.id ? "" : row.id)}
               >
-                {open === row.id ? "收起" : "详情与证据"}
+                {open === row.id
+                  ? i18n.t("memory:collapse")
+                  : i18n.t("memory:details")}
               </button>
             </div>
             <p
@@ -381,10 +412,14 @@ export function MemoryPage(props: SessionConfigPageProps) {
             </p>
             {open === row.id && (
               <div className="memory-detail">
-                {detail.isFetching && <LoadingBar label="读取记忆详情" />}
+                {detail.isFetching && (
+                  <LoadingBar label={i18n.t("memory:loadingDetail")} />
+                )}
                 {detail.error && (
                   <QueryErrorNotice
-                    message={`读取详情失败：${detail.error.message}`}
+                    message={i18n.t("memory:detailFailed", {
+                      error: detail.error.message,
+                    })}
                   />
                 )}
                 {detail.data?.id === row.id && (
@@ -398,7 +433,7 @@ export function MemoryPage(props: SessionConfigPageProps) {
                     ))}
                     {detail.data.history?.length ? (
                       <>
-                        <h4>历史</h4>
+                        <h4>{i18n.t("memory:history")}</h4>
                         {detail.data.history.map((line) => (
                           <p className="muted" key={line}>
                             {line}
@@ -417,7 +452,9 @@ export function MemoryPage(props: SessionConfigPageProps) {
                     ))}
                     {detail.data.resolution && (
                       <p className="muted">
-                        处理结果：{detail.data.resolution}
+                        {i18n.t("memory:resolution", {
+                          text: detail.data.resolution,
+                        })}
                       </p>
                     )}
                   </>
@@ -430,12 +467,12 @@ export function MemoryPage(props: SessionConfigPageProps) {
           !memories.error &&
           !memories.isPending && (
             <EmptyState
-              text={query ? "没有匹配的记忆。" : "这个库还没有记忆。"}
+              text={query ? i18n.t("memory:noMatch") : i18n.t("memory:empty")}
             />
           )}
-        {memories.isPending && <LoadingBar label="正在读取记忆…" />}
+        {memories.isPending && <LoadingBar label={i18n.t("memory:loading")} />}
         <Pagination
-          label="记忆库"
+          label={i18n.t("memory:pages")}
           page={memories.data?.page ?? page}
           total={memories.data?.total ?? 0}
           loading={memories.isFetching}

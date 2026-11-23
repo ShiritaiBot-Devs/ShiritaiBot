@@ -2,8 +2,9 @@ import { useState } from "react";
 import { isMainSession, sessionTitle } from "../lib/sessions";
 import type { SessionConfigPageProps } from "../pages/common";
 import { SessionPicker } from "./SessionPicker";
+import i18n from "../i18n";
 
-const DEFAULT_NAME = "默认知识库";
+const DEFAULT_NAME = i18n.t("knowledge:defaultLibrary");
 
 export function KnowledgeLibraries({
   client,
@@ -38,14 +39,14 @@ export function KnowledgeLibraries({
   }
 
   function label(library: string) {
-    if (library === "disabled") return "停用知识库";
+    if (library === "disabled") return i18n.t("knowledge:libraries.disable");
     if (library === "default") return DEFAULT_NAME;
     return libraries[library]?.name ?? library;
   }
 
   return (
     <section className="panel">
-      <h2>知识库设置</h2>
+      <h2>{i18n.t("knowledge:libraries.settings")}</h2>
       <form
         className="inline"
         onSubmit={(event) => {
@@ -57,35 +58,33 @@ export function KnowledgeLibraries({
         }}
       >
         <input
-          aria-label="知识库标识"
-          placeholder="标识，例如 project"
+          aria-label={i18n.t("knowledge:libraries.idLabel")}
+          placeholder={i18n.t("knowledge:libraries.idPlaceholder")}
           maxLength={64}
           value={id}
           onChange={(event) => setId(event.target.value)}
           required
         />
         <input
-          aria-label="知识库名称"
-          placeholder="显示名称"
+          aria-label={i18n.t("knowledge:libraries.nameLabel")}
+          placeholder={i18n.t("knowledge:libraries.namePlaceholder")}
           maxLength={80}
           value={name}
           onChange={(event) => setName(event.target.value)}
           required
         />
         <button type="submit" disabled={!validId || !name.trim()}>
-          添加知识库
+          {i18n.t("knowledge:libraries.add")}
         </button>
       </form>
       {id && !validId && (
-        <p className="muted">
-          标识须以小写字母开头，使用字母、数字、下划线或连字符，且未被占用。
-        </p>
+        <p className="muted">{i18n.t("knowledge:libraries.idHint")}</p>
       )}
       {Object.entries(libraries).map(([key, library]) => (
         <div className="inline" key={key}>
           <code>{key}</code>
           <input
-            aria-label={`${key} 的显示名称`}
+            aria-label={i18n.t("knowledge:libraries.displayNameOf", { key })}
             value={library.name}
             maxLength={80}
             onChange={(event) =>
@@ -100,21 +99,19 @@ export function KnowledgeLibraries({
           <button
             type="button"
             disabled={Object.values(bindings).includes(key)}
-            title="移出配置会保留磁盘上的文档"
+            title={i18n.t("knowledge:libraries.removeHint")}
             onClick={() => {
               const next = { ...libraries };
               delete next[key];
               update({ libraries: next });
             }}
           >
-            移出配置
+            {i18n.t("knowledge:libraries.remove")}
           </button>
         </div>
       ))}
-      <h3>会话绑定</h3>
-      <p className="muted">
-        同一个库可以绑定多个会话。绑定到群聊后，群成员可通过助手检索该库。新增库保存后即可上传文档。
-      </p>
+      <h3>{i18n.t("knowledge:bindings.title")}</h3>
+      <p className="muted">{i18n.t("knowledge:bindings.hint")}</p>
       <div className="field-grid">
         <SessionPicker
           client={client}
@@ -128,14 +125,18 @@ export function KnowledgeLibraries({
           onChange={setSession}
         />
         <label className="field">
-          <span className="field-name">使用的知识库</span>
+          <span className="field-name">
+            {i18n.t("knowledge:bindings.library")}
+          </span>
           <select
             disabled={!isMainSession(session)}
             value={bindings[session] ?? ""}
             onChange={(event) => bind(event.target.value)}
           >
-            <option value="">沿用默认访问规则</option>
-            <option value="disabled">停用知识库</option>
+            <option value="">{i18n.t("knowledge:bindings.default")}</option>
+            <option value="disabled">
+              {i18n.t("knowledge:libraries.disable")}
+            </option>
             <option value="default">{DEFAULT_NAME}</option>
             {Object.entries(libraries).map(([key, library]) => (
               <option key={key} value={key}>

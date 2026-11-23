@@ -1,0 +1,12 @@
+{
+  "lang": {
+    "description": "查看机器人语言；/lang en|zh-CN 为本会话切换语言；/lang default 恢复全局默认（切换仅主人）",
+    "current_session": "本会话语言：{name}（由 /lang 设定，优先于人设指定的语言）",
+    "current_default": "本会话语言：{name}（全局默认）",
+    "saved": "新的语言设置从下一条消息开始生效。",
+    "usage": "可选：{options}；/lang default 恢复全局默认。",
+    "unknown": "不支持的语言：{value}。可选：{options}。",
+    "owner_only": "只有主人可以切换会话语言。",
+    "status": "语言：{name}"
+  }
+}

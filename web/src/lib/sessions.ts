@@ -1,5 +1,6 @@
 import type { AdapterConfig, TurnRecord, WebChat } from "../api/types";
-import { TIME_ZONE } from "./utils";
+import i18n from "../i18n";
+import { dateFormat } from "./utils";
 
 export function isMainSession(value: string): boolean {
   return /^(?:web:[^:\s]{1,128}|(?:group|private):[A-Za-z0-9_-]{1,64}:[^:\s]{1,256})$/.test(
@@ -37,12 +38,24 @@ const GROUP_ORDER: SessionGroupKey[] = [
 ];
 
 const GROUP_LABELS: Record<SessionGroupKey, string> = {
-  local: "本机",
-  private: "QQ 私聊",
-  group: "QQ 群聊",
-  "feishu-private": "飞书私聊",
-  "feishu-group": "飞书群聊",
-  background: "后台任务",
+  get local() {
+    return i18n.t("sessions:groups.local");
+  },
+  get private() {
+    return i18n.t("sessions:groups.private");
+  },
+  get group() {
+    return i18n.t("sessions:groups.group");
+  },
+  get "feishu-private"() {
+    return i18n.t("sessions:groups.feishuPrivate");
+  },
+  get "feishu-group"() {
+    return i18n.t("sessions:groups.feishuGroup");
+  },
+  get background() {
+    return i18n.t("sessions:groups.background");
+  },
 };
 
 const QQ_OFFICIAL_SESSION =
@@ -76,8 +89,7 @@ export function sessionRole(id: string): SessionGroupKey {
 }
 
 function clock(timestamp: number): string {
-  const parts = new Intl.DateTimeFormat("zh-CN", {
-    timeZone: TIME_ZONE,
+  const parts = dateFormat({
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -90,8 +102,7 @@ function clock(timestamp: number): string {
 }
 
 function day(timestamp: number): string {
-  const parts = new Intl.DateTimeFormat("zh-CN", {
-    timeZone: TIME_ZONE,
+  const parts = dateFormat({
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(new Date(timestamp));
@@ -101,37 +112,53 @@ function day(timestamp: number): string {
 }
 
 export function sessionTitle(id: string): string {
-  if (id === "web:owner") return "默认对话";
+  if (id === "web:owner") return i18n.t("sessions:defaultChat");
   if (id.startsWith("web:")) {
     const rest = id.slice(4);
     if (/^\d+$/.test(rest) && Number.isFinite(new Date(Number(rest)).getTime()))
-      return `对话 ${clock(Number(rest))}`;
-    return `对话 ${rest}`;
+      return i18n.t("sessions:chat", { name: clock(Number(rest)) });
+    return i18n.t("sessions:chat", { name: rest });
   }
   const feishu = FEISHU_SESSION.exec(id);
   if (feishu) {
-    const platform = feishu[2] === "lark" ? "Lark" : "飞书";
-    const kind = feishu[1] === "private" ? "私聊" : "群聊";
-    return `${platform}${kind} ${feishu[3]}`;
+    const platform = feishu[2] === "lark" ? "Lark" : i18n.t("sessions:feishu");
+    return i18n.t(
+      feishu[1] === "private"
+        ? "sessions:platformPrivate"
+        : "sessions:platformGroup",
+      { platform, id: feishu[3] },
+    );
   }
   const official = QQ_OFFICIAL_SESSION.exec(id);
   if (official)
-    return `QQ 官方${official[1] === "private" ? "私聊" : "群聊"} ${official[2]}`;
+    return i18n.t(
+      official[1] === "private"
+        ? "sessions:qqOfficialPrivate"
+        : "sessions:qqOfficialGroup",
+      { id: official[2] },
+    );
   const private_ = /^private:[^:]+:([^:]+)$/.exec(id);
   if (private_) return `QQ ${private_[1]}`;
   const group = /^group:[^:]+:([^:]+)$/.exec(id);
-  if (group) return `群 ${group[1]}`;
+  if (group) return i18n.t("sessions:group", { id: group[1] });
   const background = /^background:proactive:([^:]+)$/.exec(id);
-  if (background) return `后台任务 ${background[1].slice(0, 6)}`;
+  if (background)
+    return i18n.t("sessions:background", { id: background[1].slice(0, 6) });
   return id;
 }
 
 export function relativeTime(at: number, now: number = Date.now()): string {
   if (!at) return "";
   const elapsed = now - at;
-  if (elapsed < 60_000) return "刚刚";
-  if (elapsed < 3_600_000) return `${Math.floor(elapsed / 60_000)} 分钟前`;
-  if (elapsed < 86_400_000) return `${Math.floor(elapsed / 3_600_000)} 小时前`;
+  if (elapsed < 60_000) return i18n.t("sessions:justNow");
+  if (elapsed < 3_600_000)
+    return i18n.t("sessions:minutesAgo", {
+      count: Math.floor(elapsed / 60_000),
+    });
+  if (elapsed < 86_400_000)
+    return i18n.t("sessions:hoursAgo", {
+      count: Math.floor(elapsed / 3_600_000),
+    });
   return day(at);
 }
 
@@ -184,7 +211,10 @@ export function sessionGroups(
     items.push(
       webChats?.get(id) ?? {
         id,
-        title: webChats && id.startsWith("web:") ? "新对话" : sessionTitle(id),
+        title:
+          webChats && id.startsWith("web:")
+            ? i18n.t("sessions:newChat")
+            : sessionTitle(id),
       },
     );
     buckets.set(key, items);

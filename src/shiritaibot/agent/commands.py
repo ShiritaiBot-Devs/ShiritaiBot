@@ -11,6 +11,7 @@ from shiritaibot.auth.menu import RISK_LABELS
 from shiritaibot.config import SessionPolicy, preset_risks
 from shiritaibot.core import PublicError, uid
 from shiritaibot.core.logs import get_logger
+from shiritaibot.i18n import LOCALE_NAMES, LOCALES, normalize, t, use_locale
 
 if TYPE_CHECKING:
     from shiritaibot.plugin.core.hooks import Handler
@@ -22,6 +23,8 @@ COMMANDS = {
     "model": "查看当前模型；/model 模型标识 切换；/model default 恢复路由",
     "personas": "列出可用人格的标识和名称",
     "persona": "查看当前人格；/persona 人格标识 切换；/persona default 恢复默认（切换仅主人）",
+    # Values may be catalog keys; visible_builtin_commands renders them (docs/I18N.md).
+    "lang": "commands.lang.description",
     "new": "开始新上下文，保留历史与长期记忆（仅主人）",
     "clear": "同 /new",
     "stop": "停止当前任务及自己的排队消息",
@@ -41,7 +44,7 @@ PRIVATE_COMMANDS = {"tasks", "memory", "approve", "deny", "grants"}
 OWNER_COMMANDS = {"new", "clear"}
 COMMAND_TOOLS = {"memory": "memory_search", "tasks": "subagent_list"}
 COMMAND_GROUPS = {
-    "builtin:session": ("会话", ("help", "status", "new", "clear", "stop", "mode")),
+    "builtin:session": ("会话", ("help", "status", "new", "clear", "stop", "mode", "lang")),
     "builtin:models": ("模型与人格", ("models", "model", "personas", "persona")),
     "builtin:tools": ("工具与审批", ("tools", "permissions", "approve", "deny", "grants")),
     "builtin:memory": ("记忆与任务", ("memory", "tasks")),
@@ -68,13 +71,13 @@ def visible_builtin_commands(ctx, registry) -> dict[str, str]:
             tool = registry.tools.get(tool_name)
             if tool is None or registry.permissions.decision(ctx, tool) == "deny":
                 continue
-        visible[name] = description
+        visible[name] = t(description)
     return visible
 
 
 def help_section_titles(handlers: Iterable[Handler]) -> dict[str, str]:
     return {
-        **{key: title for key, (title, _) in COMMAND_GROUPS.items()},
+        **{key: t(title) for key, (title, _) in COMMAND_GROUPS.items()},
         **{f"plugin:{handler.plugin}": f"插件 · {handler.plugin}" for handler in handlers},
     }
 
@@ -115,6 +118,8 @@ async def command(runtime, ctx, text):
         capability = COMMAND_TOOLS.get(name)
         if capability:
             await runtime.registry.permissions.check(ctx, runtime.registry.tools[capability], {})
+        if name == "lang" and argument and (not ctx.owner or ctx.background):
+            raise PublicError("commands.lang.owner_only")
         if name in OWNER_COMMANDS or (name in {"model", "persona"} and argument):
             if not ctx.owner or ctx.background:
                 raise PublicError("只有主人可以重置会话、切换模型或人格。")
@@ -223,7 +228,30 @@ async def command(runtime, ctx, text):
                     or cfg.selected_persona()
                 )
                 answer += f"\n人格：{persona.name if persona else '基础人设'}"
+                locale, _ = await runtime.session_locale(ctx.session)
+                answer += "\n" + t("commands.lang.status", name=LOCALE_NAMES[locale])
                 answer += f"\n状态：{'执行中' if actor and actor.current else '空闲'}\n排队：{actor.queue.qsize() if actor else 0}"
+        elif name == "lang":
+            options = ", ".join(f"{code} ({LOCALE_NAMES[code]})" for code in LOCALES)
+            if argument:
+                # Stored apart from SessionPolicy: a policy entry replaces the session's
+                # defaults wholesale, and /lang must not touch mode or tool permissions.
+                if argument.casefold() == "default":
+                    await runtime.store.delete("session_locale", ctx.session)
+                elif chosen := normalize(argument):
+                    await runtime.store.put("session_locale", ctx.session, {"locale": chosen})
+                else:
+                    raise PublicError("commands.lang.unknown", value=argument[:40], options=options)
+            locale, forced = await runtime.session_locale(ctx.session)
+            # Confirm in the language just chosen.
+            with use_locale(locale):
+                answer = t(
+                    "commands.lang.current_session" if forced else "commands.lang.current_default",
+                    name=LOCALE_NAMES[locale],
+                )
+                if argument:
+                    answer += "\n" + t("commands.lang.saved")
+                answer += "\n" + t("commands.lang.usage", options=options)
         elif name in {"tools", "permissions", "mode"}:
             permissions = runtime.registry.permissions
             profile = permissions.session_policy(ctx).model_copy(deep=True)

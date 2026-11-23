@@ -1,0 +1,84 @@
+{
+  "shell": {
+    "diffOutput": "Diff output",
+    "editedFiles": "Edited files",
+    "returned": "Returned",
+    "success": "Succeeded",
+    "failure": "Failed",
+    "exitCode": "Exit code {code}",
+    "executing": "Running",
+    "outputTruncated": "Output truncated",
+    "copyAll": "Copy the command and output",
+    "record": "Run log",
+    "ran": "Ran",
+    "failed": "Failed to run",
+    "running": "Running",
+    "diffTruncated": "Diff preview truncated",
+    "copyDiff": "Copy the diff of {path}",
+    "copied": "Copied.",
+    "copyFailed": "Couldn't copy. Select the text and copy it instead."
+  },
+  "actions": {
+    "deleteConfirm": "Delete \"{title}\" and its messages? This can't be undone.",
+    "save": "Save",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "name": "Chat name",
+    "deleteTitle": "Delete chat",
+    "renameTitle": "Rename chat",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "rename": "Rename",
+    "menu": "Chat actions",
+    "more": "More actions for {title}"
+  },
+  "webOnly": "Only WebUI chats can be sent from here. Reply to other chats on their own platform.",
+  "workspace": {
+    "waiting": "Waiting for the assistant to reply",
+    "replying": "The assistant is replying",
+    "greeting": "What would you like to do today? ⭐",
+    "historyFailed": "Couldn't load the chat: {error}",
+    "loading": "Loading chats…",
+    "webChatsFailed": "Couldn't load web chats: {error}",
+    "settings": "Settings",
+    "newChat": "New chat",
+    "sessions": "Chats",
+    "denied": "Denied.",
+    "allowed": "Allowed."
+  },
+  "sidebar": {
+    "pending": "Awaiting approval",
+    "running": "Running",
+    "pinned": "Pinned",
+    "list": "Chats",
+    "new": "New chat",
+    "title": "Chats"
+  },
+  "page": {
+    "empty": "Start with a sentence. Set up model routes under Models & Services first.",
+    "historyFailed": "Couldn't load the session: {error}",
+    "history": "Chat history",
+    "new": "New session",
+    "session": "Session"
+  },
+  "tools": {
+    "done": "Done",
+    "failed": "Failed",
+    "running": "Running",
+    "result": "Result",
+    "args": "Arguments",
+    "noArgs": "No arguments",
+    "calls": "Tool calls"
+  },
+  "approval": {
+    "needsYou": "Needs your confirmation · {id}",
+    "deny": "Deny",
+    "allowOnce": "Allow once",
+    "validUntil": "valid until {time}"
+  },
+  "timeline": {
+    "elapsed": "Took {time}",
+    "sendFailed": "Couldn't send",
+    "failed": "This turn failed"
+  }
+}

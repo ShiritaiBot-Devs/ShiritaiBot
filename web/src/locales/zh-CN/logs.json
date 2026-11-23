@@ -1,0 +1,49 @@
+{
+  "recentEntries_other": "最近 {count} 条",
+  "recentLines_other": "最近 {count} 行",
+  "raw": {
+    "title": "原始日志",
+    "rollingTitle": "原始滚动日志",
+    "hint": "日志文件：data/logs/shiritaibot.log（单文件 5 MB 滚动，保留 3 份）",
+    "empty": "暂无日志输出。",
+    "failed": "读取原始日志失败：{error}",
+    "refresh": "刷新",
+    "autoScroll": "自动滚动",
+    "lines": "显示行数",
+    "filter": "过滤原始日志"
+  },
+  "activity": {
+    "title": "活动记录",
+    "failed": "读取日志失败：{error}"
+  },
+  "runtime": {
+    "title": "运行日志",
+    "hint": "「记录级别」决定终端、日志文件和本页记录哪些日志，修改后立即生效并在重启后保留； 「筛选级别」只影响本页显示。文件：data/logs/shiritaibot.log。",
+    "empty": "暂无运行日志。",
+    "failed": "读取运行日志失败：{error}",
+    "filter": "过滤运行日志"
+  },
+  "tabs": "日志类型",
+  "loading": "读取日志",
+  "filterPlaceholder": "过滤关键词…",
+  "follow": "实时跟随",
+  "count": "显示条数",
+  "source": {
+    "all": "全部来源",
+    "label": "日志来源"
+  },
+  "filter": {
+    "label": "筛选级别",
+    "error": "只看 ERROR",
+    "warning": "只看 WARNING 及以上",
+    "log": "只看 LOG 及以上",
+    "all": "显示全部"
+  },
+  "record": {
+    "updated": "日志级别已更新，立即生效",
+    "label": "记录级别",
+    "hint": "立即生效：终端、日志文件和本页同时按此级别记录",
+    "info": "LOG（默认）",
+    "debug": "DEBUG（全部细节）"
+  }
+}

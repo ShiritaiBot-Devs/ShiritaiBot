@@ -1,0 +1,47 @@
+{
+  "metrics": {
+    "adapters": {
+      "label": "协议连接",
+      "note": "已启用的适配器实例"
+    },
+    "tools": {
+      "label": "可用工具",
+      "note": "内置能力与插件"
+    },
+    "approvals": {
+      "label": "等待审批",
+      "note": "需要你的确认"
+    },
+    "subagents": {
+      "label": "子代理任务",
+      "note": "正在执行或排队"
+    }
+  },
+  "pendingTitle": "待你确认 · {count}",
+  "activity": {
+    "latest": "最近记录：{time}",
+    "empty": "配置完成后，助手的活动会显示在这里。",
+    "loading": "读取最近活动",
+    "title": "最近活动"
+  },
+  "connections": {
+    "manage": "管理连接",
+    "empty": "在「协议连接」中添加 QQ 或飞书实例。",
+    "loading": "读取连接状态",
+    "title": "连接状态"
+  },
+  "deniedOnce": "已拒绝本次调用",
+  "allowedOnce": "已允许本次调用",
+  "setup": {
+    "go": "去设置",
+    "todo": "未完成",
+    "done": "已完成",
+    "hint": "按顺序完成下面几项，助手就能接消息了。",
+    "title": "开始使用",
+    "adapter": "连接 QQ 或飞书（适配器）",
+    "webSearch": "填写网页搜索密钥（可选）",
+    "routes": "给 chat / agent 路由选模型",
+    "model": "添加并启用模型",
+    "provider": "添加并启用提供商（API Key）"
+  }
+}

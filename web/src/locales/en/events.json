@@ -1,0 +1,7 @@
+{
+  "pages": "events",
+  "loading": "Loading events…",
+  "empty": "Events from plugins, reminders, and subagents show up here.",
+  "loadFailed": "Couldn't load events: {error}",
+  "timeline": "Event timeline"
+}

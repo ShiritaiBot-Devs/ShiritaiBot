@@ -1,5 +1,6 @@
 import { LoadingBar } from "./LoadingBar";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ChevronRight,
   CloudDownload,
@@ -7,6 +8,7 @@ import {
   RotateCw,
 } from "lucide-react";
 import { NAV_GROUPS, pageMeta } from "../navigation";
+import { UiLanguageSelect } from "./LanguageSettings";
 import type { PageId } from "../navigation";
 
 export function AppShell({
@@ -40,6 +42,7 @@ export function AppShell({
   updateAvailable: boolean;
   children: ReactNode;
 }) {
+  const { t } = useTranslation("shell");
   const meta = pageMeta(page);
   return (
     <div className="layout">
@@ -56,31 +59,31 @@ export function AppShell({
             <img src="/icon.png" alt="" />
           </span>
           <span>
-            ShiritaiBot<small>控制台</small>
+            ShiritaiBot<small>{t("brand.console")}</small>
           </span>
         </a>
-        <nav aria-label="主导航">
+        <nav aria-label={t("nav.main")}>
           {NAV_GROUPS.map((group) => (
             <div
               className="nav-group"
-              key={group.label}
+              key={group.id}
               role="group"
-              aria-label={group.label}
+              aria-label={t(`nav.${group.id}`)}
             >
               <div className="nav-group-title" aria-hidden="true">
-                {group.label}
+                {t(`nav.${group.id}`)}
               </div>
-              {group.pages.map(({ id, label, icon: Icon }) => (
+              {group.pages.map(({ id, icon: Icon }) => (
                 <button
                   type="button"
                   key={id}
-                  title={label}
+                  title={t(`pages.${id}.label`)}
                   className={meta.id === id ? "active" : ""}
                   aria-current={meta.id === id ? "page" : undefined}
                   onClick={() => onNavigate(id)}
                 >
                   <Icon size={18} aria-hidden="true" />
-                  <span>{label}</span>
+                  <span>{t(`pages.${id}.label`)}</span>
                   {id === "approvals" && pendingApprovals > 0 && (
                     <b>{pendingApprovals}</b>
                   )}
@@ -96,11 +99,11 @@ export function AppShell({
               aria-hidden="true"
             />
             {restarting ? (
-              <LoadingBar compact label="正在重启…" />
+              <LoadingBar compact label={t("status.restarting")} />
             ) : online ? (
-              "系统运行中"
+              t("status.online")
             ) : (
-              "连接未就绪"
+              t("status.offline")
             )}
             <small>{version}</small>
           </div>
@@ -110,14 +113,14 @@ export function AppShell({
             onClick={onRestart}
             disabled={restartDisabled || restarting}
             title={restartHint}
-            aria-label={restarting ? "正在重启" : "重启"}
+            aria-label={restarting ? t("restart.busy") : t("restart.label")}
           >
             {restarting ? (
-              <LoadingBar compact label="正在重启…" />
+              <LoadingBar compact label={t("status.restarting")} />
             ) : (
               <>
                 <RotateCw size={16} aria-hidden="true" />
-                <span>重启</span>
+                <span>{t("restart.label")}</span>
               </>
             )}
           </button>
@@ -126,51 +129,63 @@ export function AppShell({
       <main id="main-content">
         <header className="console-header">
           <div className="console-crumb">
-            <span className="muted">本机控制台</span>
+            <span className="muted">{t("header.crumb")}</span>
             <ChevronRight size={13} aria-hidden="true" />
-            <span aria-current="page">{meta.label}</span>
+            <span aria-current="page">{t(`pages.${meta.id}.label`)}</span>
           </div>
           <div className="console-actions">
-            <span className="local-badge">仅本机</span>
+            <span className="local-badge">{t("header.localOnly")}</span>
             <button
               type="button"
               className="chat-mode-button"
-              aria-label="对话模式"
+              aria-label={t("header.chatMode")}
               onClick={onOpenChat}
             >
               <MessageSquare size={14} aria-hidden="true" />
-              <span className="console-action-label">对话模式</span>
+              <span className="console-action-label">
+                {t("header.chatMode")}
+              </span>
             </button>
             <button
               type="button"
               className="update-button"
-              aria-label="检查更新"
+              aria-label={t("header.checkUpdate")}
               onClick={onCheckUpdate}
-              title={updateAvailable ? "有可用的新版本" : "检查更新"}
+              title={
+                updateAvailable
+                  ? t("header.updateAvailable")
+                  : t("header.checkUpdate")
+              }
             >
               <CloudDownload size={14} aria-hidden="true" />
-              <span className="console-action-label">检查更新</span>
+              <span className="console-action-label">
+                {t("header.checkUpdate")}
+              </span>
               {updateAvailable && (
-                <span className="update-dot" aria-label="有新版本" />
+                <span
+                  className="update-dot"
+                  aria-label={t("header.newVersion")}
+                />
               )}
             </button>
+            <UiLanguageSelect compact />
             <button type="button" onClick={onLogout}>
-              退出
+              {t("header.logout")}
             </button>
           </div>
         </header>
         <div className="content">
           <div className="page-title">
             <div>
-              <h1>{meta.label}</h1>
-              <p className="subtitle">{meta.subtitle}</p>
+              <h1>{t(`pages.${meta.id}.label`)}</h1>
+              <p className="subtitle">{t(`pages.${meta.id}.subtitle`)}</p>
             </div>
           </div>
           {children}
         </div>
         <footer>
-          ShiritaiBot <span>·</span> 本地数据
-          <span className="muted">明确权限 · 持续记忆</span>
+          ShiritaiBot <span>·</span> {t("footer.localData")}
+          <span className="muted">{t("footer.tagline")}</span>
         </footer>
       </main>
     </div>

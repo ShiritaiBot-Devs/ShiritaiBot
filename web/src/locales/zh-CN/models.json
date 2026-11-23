@@ -1,0 +1,135 @@
+{
+  "moveUpLabel": "上移 {model}",
+  "removeFromRoute": "移除路由 {model}",
+  "addToRoute": "添加 {route} 路由模型",
+  "modelCount_other": "{count} 个模型",
+  "addModelLabel": "添加模型 {model}",
+  "deleteModelLabel": "删除模型 {model}",
+  "emptyProviders": "从左侧添加一个提供商开始配置。",
+  "fetchPricing": "从提供商获取单价",
+  "fetching": "获取中…",
+  "pricingFetched": "已从提供商获取单价",
+  "subscriptionExtra": {
+    "help": "填写套餐 Responses 接口支持的附加参数。请求始终使用流式响应，且 store 为 false。"
+  },
+  "subscriptionOutput": {
+    "help": "用于本地上下文估算。实际输出上限由 ChatGPT 套餐接口决定。",
+    "label": "预留输出 tokens"
+  },
+  "noRemote": "提供商没有返回可用模型，可手动添加。",
+  "remotePrice": "{sep}${input} / ${output} 每百万 tokens",
+  "searchPlaceholder": "搜索模型名称",
+  "searchRemote": "搜索远程模型",
+  "fetchHint": "使用当前填写的地址和密钥获取，无需先保存。点击右侧 ＋ 添加，再保存配置。",
+  "subscriptionHint": "连接账号后可获取套餐可用的模型。点击右侧 ＋ 添加，再保存配置。",
+  "addManually": "手动添加",
+  "fetchModels": "获取提供商模型",
+  "fetched": "已获取模型列表",
+  "modelsTitle": "模型",
+  "remove": "移除",
+  "removeProvider": "移除提供商",
+  "unnamedProvider": "未命名提供商",
+  "addModel": "添加模型",
+  "addSessionModel": "添加会话模型",
+  "moveUp": "上移",
+  "notConfigured": "未配置",
+  "inherit": {
+    "global": "跟随全局默认",
+    "light": "使用分诊与摘要路由"
+  },
+  "handoff": {
+    "label": "Chat 转 Work 判断",
+    "help": "私聊和网页对话分到 Agent Chat 后，只带可见对话与摘要。 Chat 判断需要执行任务或核查细节时，本轮转给 Agent Work。"
+  },
+  "split": {
+    "label": "启用 Agent Work/Chat 分流",
+    "help": "开启后由分流模型判断每条新消息属于 Work 还是 Chat；关闭时 Agent 模式统一使用 Agent Work 模型。"
+  },
+  "vectorsLoading": "正在读取记忆向量状态…",
+  "vectors": {
+    "none_other": "未配置 Embedding：{count} 条记忆只用名称链接和关键词检索",
+    "indexed": "当前向量模型 {model}：已索引 {indexed} 条，待计算 {pending} 条"
+  },
+  "vectorStatus": "记忆向量状态",
+  "chatsFailed": "读取网页会话失败：{error}",
+  "sessionHint": "未设置的路由跟随全局默认。会话内通过 /model 选择的回复模型优先。",
+  "scopeSession": "指定 Main 会话",
+  "scopeGlobal": "全局默认",
+  "scope": "配置范围",
+  "routeList": {
+    "firstModel": "添加首个模型时，会自动设为 Chat、Agent Work 和分诊路由的默认模型。",
+    "intro": "每条路由从上到下依次尝试；同一条路由在各标签页中是同一份配置。",
+    "title": "模型路由",
+    "subtitle": "用途说明与备用顺序"
+  },
+  "emptyText": "添加提供商，连接你的第一个模型。",
+  "emptyDecision": "添加 systemone 协议的提供商（如 TypeSafe）。",
+  "unnamed": "未命名",
+  "providers": "提供商",
+  "providerList": "提供商列表",
+  "categoryGroup": "模型类型",
+  "pricing": {
+    "summary": "输入 {input} / 缓存 {cached} / 输出 {output} {currency} 每百万 tokens",
+    "notPublished": "提供商没有公开此模型的单价，请按官网价格手动填写",
+    "notListed": "提供商的模型列表中没有 {model}"
+  },
+  "intro": {
+    "embedding": "为长期记忆计算向量的模型，支持 OpenAI 兼容 /embeddings 与 Gemini 接口；可以复用语言模型的提供商。",
+    "decision": "Jev 等判断模型（systemone 协议）只做分类和打分，不生成文本，只能用于分流、分诊、记忆、自动审批和表情分类路由；判断失败时改用同一路由里的文本模型。",
+    "text": "生成文本、调用工具的模型。"
+  },
+  "categories": {
+    "decision": "决策模型（Systemone）",
+    "text": "语言模型"
+  },
+  "routes": {
+    "embedding": {
+      "help": "做什么：为记忆条目和查询计算向量，用于语义检索。适合：支持中文的 Embedding 模型。只使用第一个可用模型；更换后后台全量重算，期间只用关键词检索。留空时记忆检索只用名称链接和关键词。",
+      "label": "Embedding 模型"
+    },
+    "meme": {
+      "help": "做什么：表情管理器为收录的表情包写简短文字描述（用于检索，也给看不到图的模型看），并判断表情是否贴合人设、属于哪个分类。适合：便宜快速的多模态轻量模型；Jev 等判断模型可放在前面负责人设与分类判断，转述仍由后面的多模态模型完成。文本模型只能选择模态包含图像的模型。",
+      "label": "表情转述与分类模型"
+    },
+    "vision": {
+      "help": "做什么：主模型不支持图像输入时，把上下文中的图片描述成文字，结果按图片缓存。适合：便宜、看图准确、能转录图中文字的多模态模型。只能选择模态包含图像的模型。",
+      "label": "图像转述模型"
+    },
+    "approval": {
+      "help": "做什么：权限为“模型自动审批”的工具调用前，独立审查工具、完整参数与用户请求，决定批准或拒绝。不调用工具。适合：判断严谨、能稳定输出 JSON 的文本模型；Jev 等判断模型可放在文本模型之前，只有把握足够时直接采用，否则改用后面的文本模型。全部失败、超时或返回无效时拒绝执行。留空时使用分诊与摘要模型。",
+      "label": "工具自动审批模型"
+    },
+    "memory": {
+      "help": "做什么：后台从私聊和外部事件中抽取人物、事实、事件，判断证据是否支持、是否同一人、新旧事实关系。不直接回复主人，不阻塞对话。适合：中文理解好、能稳定输出 JSON、价格适中的文本模型（抽错会长期留在记忆里，准确比快重要）；Jev 等判断模型可放在文本模型之前，失败时自动改用文本模型。留空时使用分诊与摘要模型。",
+      "label": "记忆模型"
+    },
+    "light": {
+      "help": "做什么：为外部事件评估重要性；每轮短期记忆摘要和上下文压缩也使用此路由，自动审批路由留空时同样使用。适合：便宜快速的模型；可把 Jev 放在最前面做分诊，但摘要等需要生成文本，请再添加一个文本模型。",
+      "label": "主动事件分诊与摘要模型"
+    },
+    "router": {
+      "help": "做什么：Agent 模式下新消息进入时判断属于 Work 还是 Chat。适合：Jev 等判断模型，或 RPS 高的小模型。",
+      "label": "工作/对话分流模型"
+    },
+    "agent_chat": {
+      "help": "做什么：Agent 模式下日常的询问与对话。适合：世界知识丰富、适合情感陪伴的模型（例如 Gemini、Grok）。",
+      "label": "Agent Chat 模型"
+    },
+    "agent": {
+      "help": "做什么：执行 Main Loop 与 Proactive Loop 的长程工作任务（多步工具调用）。适合：工具调用稳定、长程任务能力强的模型。未启用分流时，Agent 模式全部使用此模型。",
+      "label": "Agent Work 模型"
+    },
+    "chat": {
+      "help": "做什么：Chat 模式会话（如群聊）的回复。适合：响应快、价格低、中文对话自然的模型。",
+      "label": "Chat 默认模型"
+    }
+  },
+  "presets": {
+    "paratera": "并行智算云",
+    "anthropic": "Anthropic兼容",
+    "openaiResponses": "OpenAI兼容(Responses)",
+    "openaiCompletions": "OpenAI兼容(Completions)",
+    "menu": "提供商预设",
+    "add": "新增提供商"
+  }
+}

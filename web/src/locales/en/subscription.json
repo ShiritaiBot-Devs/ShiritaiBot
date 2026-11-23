@@ -1,0 +1,27 @@
+{
+  "calls_one": "{calls} request",
+  "calls_other": "{calls} requests",
+  "tokens": "Input {input} · output {output} tokens",
+  "helperSteps": "On the computer you're using to view the WebUI, run the helper you downloaded: <code>py {helper}</code> on Windows, or <code>python3 {helper}</code> on macOS / Linux. After signing in to ChatGPT, paste the callback URL the helper shows here. The authorization request expires in {minutes} minutes.",
+  "usage": {
+    "last7": "Last 7 days",
+    "today": "Today",
+    "title": "This instance's usage"
+  },
+  "finish": "Finish authorization",
+  "callbackUrl": "One-time callback URL",
+  "authorized": "Authorized to use the ChatGPT plan.",
+  "revokeHint": "This instance is disconnected. Remote revocation wasn't confirmed, so you can remove the app's authorization in ChatGPT's usage settings.",
+  "disconnect": "Disconnect",
+  "disconnectedDone": "ChatGPT account disconnected.",
+  "reconnect": "Reconnect",
+  "redownload": "Download the authorization helper again",
+  "limitHit": "The latest call hit a usage limit. Check which limits apply in ChatGPT.",
+  "saveFirst": "Save the settings first, then connect the deployer's ChatGPT account.",
+  "viewUsage": "View ChatGPT usage",
+  "disconnected": "Not connected",
+  "expired": "Authorization expired. Reconnect.",
+  "connected": "Connected, using the ChatGPT plan",
+  "title": "ChatGPT plan",
+  "region": "ChatGPT plan connection and usage"
+}

@@ -1,0 +1,83 @@
+{
+  "commands": "Commands ({count})",
+  "tools": "Tools ({count})",
+  "hooks": "Hooks ({count})",
+  "priority": "Priority {priority}",
+  "remove": {
+    "title": "Remove {name}?",
+    "button": "Remove",
+    "confirm": "Remove",
+    "hint": "This stops the plugin, removes its tools and notification channels, and deletes its code directory and settings. Its data and history are kept.",
+    "dialog": "Confirm plugin removal"
+  },
+  "meta": {
+    "id": "Plugin ID: {id}",
+    "author": "Author: {author}",
+    "platforms": "Platforms: {platforms}"
+  },
+  "settings": {
+    "hint": "Save after changing settings. A manual reload uses the saved settings and rereads the plugin's code and setting definitions.",
+    "fillTemplate": "Fill in the settings template",
+    "title": "Plugin settings"
+  },
+  "reloadOne": "Reload this plugin",
+  "reloadedOne": "Plugin reloaded.",
+  "enable": {
+    "help": "After saving, the plugin loads and registers its tools and notification channels.",
+    "label": "Enable plugin"
+  },
+  "keepOld": " If it was running before, the old instance keeps running.",
+  "repo": "Repository",
+  "legacy": "Legacy API",
+  "legacyHint": "Uses the old plugin.toml plugin API",
+  "list": "Plugins",
+  "empty": "No plugins found yet. Upload a ZIP, install from GitHub, or put one in the plugin directory and click Reload plugins.",
+  "scanning": "Scanning the plugin directory…",
+  "cancel": "Cancel",
+  "removed": "Plugin removed. The plugin list is updated.",
+  "install": {
+    "cancel": "Cancel install",
+    "submit": "Install and scan",
+    "zipLabel": "ZIP package",
+    "zipFile": "ZIP package (max 20 MiB)",
+    "repo": "GitHub repository URL",
+    "github": "Public GitHub repository",
+    "zip": "Upload a ZIP package",
+    "source": "Install from",
+    "idPlaceholder": "for example hello_world",
+    "idLabel": "ID of the plugin to install",
+    "id": "Plugin ID",
+    "hint": "Plugins run in the same process as ShiritaiBot, so only install plugins you trust. New plugins start disabled: configure them, enable them, and save.",
+    "title": "Install plugin"
+  },
+  "installed": "Plugin installed. Configure and enable it.",
+  "reload": "Reload plugins",
+  "reloaded": "Rescanned and reloaded plugins. Check each plugin's status.",
+  "title": "Plugin management",
+  "ownerOnly": "Owner only",
+  "status": {
+    "error": "Failed to load",
+    "disabled": "Disabled",
+    "loaded": "Running"
+  },
+  "schema": {
+    "unknownTemplateEdit": "Unknown template {key}. You can edit the JSON directly.",
+    "missingTemplateKey": "(missing __template_key)",
+    "addEntry": "Add entry",
+    "entryTemplate": "{label} entry template",
+    "removeEntry": "Remove item {n} {name}",
+    "entryName": "{label} item {n}",
+    "unknownTemplate": "Unknown template",
+    "noEntries": "No entries added yet.",
+    "addParam": "Add parameter",
+    "allAdded": "All parameters added",
+    "addableParams": "Parameters you can add to {label}",
+    "removeParam": "Remove parameter {name}",
+    "noParams": "No parameters added yet.",
+    "invalidArray": "Enter a valid JSON array before saving.",
+    "invalidObject": "Enter a valid JSON object before saving.",
+    "patternMismatch": "Doesn't match the required format: ",
+    "jsonLabel": "Plugin settings JSON",
+    "editJson": "Edit the full settings JSON"
+  }
+}

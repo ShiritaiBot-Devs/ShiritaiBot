@@ -7,6 +7,7 @@ import {
   schemaLabel,
   templateEntry,
 } from "../lib/pluginSchema";
+import i18n from "../i18n";
 
 /** The recursive field renderer, passed in to avoid a circular import. */
 type FieldComponent = ComponentType<{
@@ -43,7 +44,7 @@ export function DictField({
   return (
     <div className="plugin-collection">
       {Object.keys(value).length === 0 && (
-        <p className="muted">尚未添加参数。</p>
+        <p className="muted">{i18n.t("plugins:schema.noParams")}</p>
       )}
       {Object.entries(value).map(([key, item]) => {
         const child = templates[key] ?? {};
@@ -57,7 +58,9 @@ export function DictField({
             />
             <button
               type="button"
-              aria-label={`移除参数 ${schemaLabel(key, child)}`}
+              aria-label={i18n.t("plugins:schema.removeParam", {
+                name: schemaLabel(key, child),
+              })}
               onClick={() => {
                 const next = { ...value };
                 delete next[key];
@@ -71,7 +74,7 @@ export function DictField({
       })}
       <div className="inline">
         <select
-          aria-label={`${label}可添加参数`}
+          aria-label={i18n.t("plugins:schema.addableParams", { label })}
           value={pending ?? ""}
           disabled={!available.length}
           onChange={(event) => setChoice(event.target.value)}
@@ -83,7 +86,7 @@ export function DictField({
               </option>
             ))
           ) : (
-            <option value="">已添加全部参数</option>
+            <option value="">{i18n.t("plugins:schema.allAdded")}</option>
           )}
         </select>
         <button
@@ -95,7 +98,7 @@ export function DictField({
           }
         >
           <Plus size={14} />
-          添加参数
+          {i18n.t("plugins:schema.addParam")}
         </button>
       </div>
     </div>
@@ -139,12 +142,15 @@ export function TemplateListField({
 
   return (
     <div className="plugin-collection">
-      {rows.length === 0 && <p className="muted">尚未添加条目。</p>}
+      {rows.length === 0 && (
+        <p className="muted">{i18n.t("plugins:schema.noEntries")}</p>
+      )}
       {rows.map((entry, index) => {
         const id = ids.current[index];
         const key = String(entry?.__template_key ?? "");
         const template = templates[key];
-        const name = template?.name || key || "未知模板";
+        const name =
+          template?.name || key || i18n.t("plugins:schema.unknownTemplate");
         const display = template?.display_item
           ? summaryText(pickPath(entry, template.display_item))
           : "";
@@ -173,11 +179,15 @@ export function TemplateListField({
                 ) : (
                   <>
                     <p className="field-error" role="alert">
-                      未知模板 {key || "（缺少 __template_key）"}，可直接编辑
-                      JSON。
+                      {i18n.t("plugins:schema.unknownTemplateEdit", {
+                        key: key || i18n.t("plugins:schema.missingTemplateKey"),
+                      })}
                     </p>
                     <Field
-                      name={`${label}第 ${index + 1} 项`}
+                      name={i18n.t("plugins:schema.entryName", {
+                        label,
+                        n: index + 1,
+                      })}
                       schema={{ type: "object" }}
                       value={entry}
                       onChange={update}
@@ -188,7 +198,10 @@ export function TemplateListField({
             </details>
             <button
               type="button"
-              aria-label={`移除第 ${index + 1} 项 ${name}`}
+              aria-label={i18n.t("plugins:schema.removeEntry", {
+                n: index + 1,
+                name,
+              })}
               onClick={() => {
                 ids.current.splice(index, 1);
                 onChange(rows.filter((_, at) => at !== index));
@@ -201,7 +214,7 @@ export function TemplateListField({
       })}
       <div className="inline">
         <select
-          aria-label={`${label}条目模板`}
+          aria-label={i18n.t("plugins:schema.entryTemplate", { label })}
           value={choice}
           disabled={!keys.length}
           onChange={(event) => setChoice(event.target.value)}
@@ -223,7 +236,7 @@ export function TemplateListField({
           }}
         >
           <Plus size={14} />
-          添加条目
+          {i18n.t("plugins:schema.addEntry")}
         </button>
       </div>
     </div>

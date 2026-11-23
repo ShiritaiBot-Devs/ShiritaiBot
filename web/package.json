@@ -12,11 +12,13 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.0",
+    "i18next": "^26.7.2",
     "lucide-react": "^0.468.0",
     "mdast-util-find-and-replace": "^3.0.5",
     "qrcode.react": "4.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-i18next": "^17.1.13",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1"
   },

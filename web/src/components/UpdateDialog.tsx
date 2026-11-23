@@ -2,6 +2,7 @@ import { LoadingBar } from "./LoadingBar";
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Trans, useTranslation } from "react-i18next";
 import {
   CircleCheck,
   CircleX,
@@ -29,12 +30,7 @@ const ACTIVE: UpdatePhase[] = [
   "deploying",
   "restarting",
 ];
-const STEPS: { phase: UpdatePhase; label: string }[] = [
-  { phase: "downloading", label: "下载源码" },
-  { phase: "building", label: "构建 WebUI" },
-  { phase: "deploying", label: "部署与依赖" },
-  { phase: "restarting", label: "重启服务" },
-];
+const STEPS = ["downloading", "building", "deploying", "restarting"] as const;
 
 type Selection = { kind: "release"; tag: string } | { kind: "commit" };
 
@@ -51,6 +47,7 @@ export function UpdateDialog({
   restarting: boolean;
   blockedReason: string | null;
 }) {
+  const { t } = useTranslation(["update", "common"]);
   const queryClient = useQueryClient();
   const [closing, setClosing] = useState(false);
   const [showBeta, setShowBeta] = useState(false);
@@ -253,9 +250,9 @@ export function UpdateDialog({
       >
         <div className="update-head">
           <div>
-            <h2 id="update-title">检查更新</h2>
+            <h2 id="update-title">{t("title")}</h2>
             <small className="muted">
-              当前版本{" "}
+              {t("currentVersion")}{" "}
               <code>
                 {current
                   ? current.kind === "commit"
@@ -264,7 +261,7 @@ export function UpdateDialog({
                   : "…"}
               </code>
               {current?.deployed_at &&
-                " · 部署于 " + formatDate(current.deployed_at)}
+                t("deployedAt", { date: formatDate(current.deployed_at) })}
               {status.data && (
                 <>
                   {" · "}
@@ -285,11 +282,11 @@ export function UpdateDialog({
                 type="button"
                 onClick={() => void refresh()}
                 disabled={refreshing}
-                aria-label="重新检查"
-                title="重新检查"
+                aria-label={t("recheck")}
+                title={t("recheck")}
               >
                 {refreshing ? (
-                  <LoadingBar compact label="检查更新" />
+                  <LoadingBar compact label={t("title")} />
                 ) : (
                   <RefreshCw size={14} aria-hidden="true" />
                 )}
@@ -299,8 +296,8 @@ export function UpdateDialog({
               type="button"
               onClick={close}
               disabled={active}
-              aria-label="关闭"
-              title={active ? "更新进行中，请稍候" : "关闭"}
+              aria-label={t("common:close")}
+              title={active ? t("busy") : t("common:close")}
             >
               <X size={14} aria-hidden="true" />
             </button>
@@ -326,21 +323,24 @@ export function UpdateDialog({
           />
         ) : (
           <>
-            <section className="update-notes" aria-label="更新日志">
+            <section className="update-notes" aria-label={t("notes")}>
               {selected?.kind === "commit" && commit ? (
                 <>
                   <div className="update-notes-title">
                     <GitCommitHorizontal size={16} aria-hidden="true" />
                     <strong>
-                      {gitMode ? "最新提交" : "开发版"} {shortSha(commit.sha)}
+                      {gitMode ? t("latestCommit") : t("devBuild")}{" "}
+                      {shortSha(commit.sha)}
                     </strong>
-                    {!gitMode && <span className="tag beta">未发布</span>}
+                    {!gitMode && (
+                      <span className="tag beta">{t("unreleased")}</span>
+                    )}
                     {commit.url && (
                       <a
                         href={commit.url}
                         target="_blank"
                         rel="noreferrer noopener"
-                        aria-label="在 GitHub 查看提交"
+                        aria-label={t("viewCommit")}
                       >
                         <ExternalLink size={13} aria-hidden="true" />
                       </a>
@@ -348,16 +348,18 @@ export function UpdateDialog({
                   </div>
                   {gitMode && (
                     <p className="muted">
-                      Git 部署：将更新到跟踪分支 {commit.branch} 的最新提交。
-                      有未提交的修改或本地独有提交时会停止更新。
+                      {t("gitHint", { branch: commit.branch })}
                     </p>
                   )}
                   <p className="muted">
                     {commit.base
-                      ? `相对 ${commit.base} 新增 ${commit.ahead_by} 个提交`
-                      : `最近 ${commit.commits.length} 个提交`}
+                      ? t("ahead", {
+                          base: commit.base,
+                          count: commit.ahead_by,
+                        })
+                      : t("recent", { count: commit.commits.length })}
                     {commit.ahead_by > commit.commits.length &&
-                      `，显示最近 ${commit.commits.length} 个`}
+                      t("showingRecent", { count: commit.commits.length })}
                   </p>
                   <ul className="commit-list">
                     {commit.commits.map((row) => (
@@ -375,14 +377,14 @@ export function UpdateDialog({
                     <Tag size={16} aria-hidden="true" />
                     <strong>{release.name}</strong>
                     {release.prerelease && (
-                      <span className="tag beta">测试版</span>
+                      <span className="tag beta">{t("beta")}</span>
                     )}
                     {release.url && (
                       <a
                         href={release.url}
                         target="_blank"
                         rel="noreferrer noopener"
-                        aria-label="在 GitHub 查看版本"
+                        aria-label={t("viewRelease")}
                       >
                         <ExternalLink size={13} aria-hidden="true" />
                       </a>
@@ -391,7 +393,7 @@ export function UpdateDialog({
                   {release.body.trim() ? (
                     <Markdown text={release.body} />
                   ) : (
-                    <p className="muted">此版本没有填写更新日志。</p>
+                    <p className="muted">{t("noNotes")}</p>
                   )}
                 </>
               ) : (
@@ -399,17 +401,17 @@ export function UpdateDialog({
                     ? preview.isPending
                     : releases.isPending || (showCommit && preview.isPending)
                 ) ? (
-                <LoadingBar label="正在检查 GitHub…" />
+                <LoadingBar label={t("checkingGithub")} />
               ) : releases.isError ? (
                 <p role="alert">{releases.error.message}</p>
               ) : (
                 <p className="muted">
-                  {showBeta ? "仓库还没有发布版本。" : "还没有正式版。"}
+                  {showBeta ? t("noReleases") : t("noStable")}
                 </p>
               )}
             </section>
 
-            <section className="update-picker" aria-label="版本选择">
+            <section className="update-picker" aria-label={t("picker")}>
               {!gitMode && (
                 <div className="update-filters">
                   <label>
@@ -421,7 +423,7 @@ export function UpdateDialog({
                         setPage(1);
                       }}
                     />
-                    显示测试版
+                    {t("showBeta")}
                   </label>
                   <label>
                     <input
@@ -434,21 +436,25 @@ export function UpdateDialog({
                           setSelected({ kind: "commit" });
                       }}
                     />
-                    显示未发布的最新提交
+                    {t("showCommit")}
                   </label>
                 </div>
               )}
-              <div className="update-versions" role="listbox" aria-label="版本">
+              <div
+                className="update-versions"
+                role="listbox"
+                aria-label={t("versions")}
+              >
                 {includeCommit && page === 1 && (
                   <>
                     {preview.isPending && (
-                      <LoadingBar label="正在读取最新提交…" />
+                      <LoadingBar label={t("loadingCommit")} />
                     )}
                     {preview.isError && (
                       <p role="alert">{preview.error.message}</p>
                     )}
                     {preview.isSuccess && !commit && (
-                      <p className="muted">最新提交已包含在最新版本中。</p>
+                      <p className="muted">{t("commitIncluded")}</p>
                     )}
                     {commit && (
                       <button
@@ -464,12 +470,14 @@ export function UpdateDialog({
                         <GitCommitHorizontal size={15} aria-hidden="true" />
                         <span>
                           <strong>
-                            {gitMode ? "最新提交" : "开发版"}{" "}
+                            {gitMode ? t("latestCommit") : t("devBuild")}{" "}
                             {shortSha(commit.sha)}
                           </strong>
                           <small>{commit.message}</small>
                         </span>
-                        {!gitMode && <span className="tag beta">未发布</span>}
+                        {!gitMode && (
+                          <span className="tag beta">{t("unreleased")}</span>
+                        )}
                         <small className="muted">
                           {formatDate(commit.date)}
                         </small>
@@ -500,16 +508,18 @@ export function UpdateDialog({
                         <strong>{row.tag}</strong>
                         {row.name !== row.tag && <small>{row.name}</small>}
                       </span>
-                      {isCurrent && <span className="tag current">当前</span>}
+                      {isCurrent && (
+                        <span className="tag current">{t("current")}</span>
+                      )}
                       {!isCurrent &&
                         page === 1 &&
                         index === 0 &&
                         current &&
                         isNewer(row, current) && (
-                          <span className="tag new">新版本</span>
+                          <span className="tag new">{t("new")}</span>
                         )}
                       {row.prerelease && (
-                        <span className="tag beta">测试版</span>
+                        <span className="tag beta">{t("beta")}</span>
                       )}
                       <small className="muted">
                         {formatDate(row.published_at)}
@@ -520,7 +530,7 @@ export function UpdateDialog({
               </div>
               {!gitMode && (releases.data?.total ?? 0) > PAGE_SIZE && (
                 <Pagination
-                  label="版本"
+                  label={t("versionPages")}
                   page={page}
                   total={releases.data?.total ?? 0}
                   pageSize={PAGE_SIZE}
@@ -536,26 +546,24 @@ export function UpdateDialog({
                 {confirming && target ? (
                   <div className="update-confirm">
                     {inspecting ? (
-                      <LoadingBar label="比对本地修改" />
+                      <LoadingBar label={t("comparing")} />
                     ) : inspectError ? (
                       <>
                         <p role="alert">{inspectError}</p>
-                        <span>
-                          未能比对本地修改，已停止。可以重试，或取消本次更新。
-                        </span>
+                        <span>{t("compareFailed")}</span>
                         <div className="actions">
                           <button
                             type="button"
                             className="primary"
                             onClick={() => void beginConfirm()}
                           >
-                            重试比对
+                            {t("retryCompare")}
                           </button>
                           <button
                             type="button"
                             onClick={() => setConfirming(false)}
                           >
-                            取消
+                            {t("common:cancel")}
                           </button>
                         </div>
                       </>
@@ -564,8 +572,9 @@ export function UpdateDialog({
                         {inspection && inspection.files.length > 0 ? (
                           <div className="update-local">
                             <strong>
-                              目标版本会覆盖或删除以下 {inspection.files.length}{" "}
-                              个本地改过的文件：
+                              {t("overwrites", {
+                                count: inspection.files.length,
+                              })}
                             </strong>
                             <ul className="update-local-files">
                               {inspection.files.map((file) => (
@@ -573,28 +582,33 @@ export function UpdateDialog({
                                   <code>{file.path}</code>
                                   <span className="tag">
                                     {file.kind === "modified"
-                                      ? "被覆盖"
-                                      : "被删除"}
+                                      ? t("modified")
+                                      : t("deleted")}
                                   </span>
                                 </li>
                               ))}
                             </ul>
                             {inspection.patch ? (
                               <small className="muted">
-                                已保存本地修改补丁：
+                                {t("patchSaved")}
                                 <code>{inspection.patch}</code>
                               </small>
                             ) : (
                               <small className="muted">
-                                未能保存补丁，这些修改无法自动恢复。
+                                {t("patchFailed")}
                               </small>
                             )}
                           </div>
                         ) : (
                           <span>
-                            {gitMode ? "将快进更新到 " : "将下载 "}
-                            <code>{target.label}</code>
-                            ，重新构建并重启服务。期间机器人会短暂离线。
+                            <Trans
+                              t={t}
+                              i18nKey={
+                                gitMode ? "applyFastForward" : "applyDownload"
+                              }
+                              values={{ target: target.label }}
+                              components={{ code: <code /> }}
+                            />
                           </span>
                         )}
                         <div className="actions">
@@ -605,17 +619,17 @@ export function UpdateDialog({
                             disabled={starting}
                           >
                             {inspection && inspection.files.length > 0
-                              ? "仍然更新"
+                              ? t("updateAnyway")
                               : gitMode
-                                ? "确认更新"
-                                : "确认切换"}
+                                ? t("confirmUpdate")
+                                : t("confirmSwitch")}
                           </button>
                           <button
                             type="button"
                             onClick={() => setConfirming(false)}
                             disabled={starting}
                           >
-                            取消
+                            {t("common:cancel")}
                           </button>
                         </div>
                       </>
@@ -631,10 +645,12 @@ export function UpdateDialog({
                     onClick={() => void beginConfirm()}
                   >
                     {selectedIsCurrent
-                      ? "已是当前版本"
+                      ? t("alreadyCurrent")
                       : target
-                        ? `${gitMode ? "更新到" : "切换到"} ${target.label}`
-                        : "选择一个版本"}
+                        ? t(gitMode ? "updateTo" : "switchTo", {
+                            target: target.label,
+                          })
+                        : t("choose")}
                   </button>
                 )}
               </div>
@@ -659,11 +675,12 @@ function Progress({
   current: string;
   onBack: () => void;
 }) {
+  const { t } = useTranslation("update");
   const log = useRef<HTMLPreElement>(null);
   useEffect(() => {
     if (log.current) log.current.scrollTop = log.current.scrollHeight;
   }, [output.length]);
-  const index = STEPS.findIndex((step) => step.phase === phase);
+  const index = STEPS.findIndex((step) => step === phase);
   const done = phase === "done";
   const failed = phase === "failed";
   return (
@@ -671,30 +688,30 @@ function Progress({
       {done ? (
         <div className="update-result ok">
           <CircleCheck size={36} aria-hidden="true" />
-          <strong>更新完成</strong>
-          <span className="muted">当前版本 {current}</span>
+          <strong>{t("done")}</strong>
+          <span className="muted">{t("currentIs", { current })}</span>
         </div>
       ) : failed ? (
         <div className="update-result failed">
           <CircleX size={36} aria-hidden="true" />
-          <strong>更新失败</strong>
+          <strong>{t("failed")}</strong>
           <span role="alert">{message}</span>
-          <span className="muted">服务未重启，请查看上方错误和更新日志。</span>
+          <span className="muted">{t("failedHint")}</span>
         </div>
       ) : (
         <ol className="update-steps">
           {STEPS.map((step, i) => (
             <li
-              key={step.phase}
+              key={step}
               className={i < index ? "done" : i === index ? "active" : ""}
             >
               <span className="update-step-dot" aria-hidden="true" />
-              {step.label}
+              {t(`steps.${step}`)}
             </li>
           ))}
         </ol>
       )}
-      {!done && !failed && <LoadingBar label={message || "更新中"} />}
+      {!done && !failed && <LoadingBar label={message || t("updating")} />}
       {output.length > 0 && !done && (
         <pre ref={log} className="update-log">
           {output.join("\n")}
@@ -703,7 +720,7 @@ function Progress({
       {(done || failed) && (
         <div className="actions">
           <button type="button" onClick={onBack}>
-            返回版本列表
+            {t("back")}
           </button>
         </div>
       )}

@@ -1,5 +1,6 @@
 import { PERMISSION_PRESETS } from "./permissions";
 import type { PermissionPreset } from "../api/types";
+import i18n from "../i18n";
 
 export type SendMode = "steer" | "queue";
 
@@ -9,18 +10,30 @@ export interface ComposerOption<T extends string> {
   hint: string;
 }
 
-export const SEND_MODES: ComposerOption<SendMode>[] = [
-  { value: "steer", label: "插话", hint: "执行中的任务直接把这条交给模型" },
-  { value: "queue", label: "排队", hint: "等这一轮结束后再按顺序发送" },
-];
+// Getters, so labels follow the interface language when it changes.
+export const SEND_MODES: ComposerOption<SendMode>[] = (
+  ["steer", "queue"] as const
+).map((value) => ({
+  value,
+  get label() {
+    return i18n.t(`composer:sendModes.${value}.label`);
+  },
+  get hint() {
+    return i18n.t(`composer:sendModes.${value}.hint`);
+  },
+}));
 
 export type Preset = PermissionPreset;
 
 export const PRESETS: ComposerOption<Preset>[] = PERMISSION_PRESETS.map(
   (item) => ({
     value: item.value,
-    label: item.shortLabel,
-    hint: item.hint,
+    get label() {
+      return item.shortLabel;
+    },
+    get hint() {
+      return item.hint;
+    },
   }),
 );
 

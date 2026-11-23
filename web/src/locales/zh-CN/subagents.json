@@ -1,0 +1,16 @@
+{
+  "runs": {
+    "empty": "在对话中委派任务，审批后会出现在这里。",
+    "stop": "停止",
+    "stopRequested": "已请求停止",
+    "waiting": "等待回复：",
+    "failed": "读取任务失败：{error}",
+    "title": "任务记录"
+  },
+  "detect": "检测 CLI",
+  "detected": "已检测到 CLI",
+  "skillsFailed": "读取技能失败：{error}",
+  "toolsFailed": "读取工具失败：{error}",
+  "empty": "添加 ShiritaiBot 内置子代理或外部 CLI 实例。",
+  "instances": "子代理实例"
+}

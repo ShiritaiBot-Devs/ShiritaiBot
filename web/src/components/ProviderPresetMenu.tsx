@@ -4,6 +4,7 @@ import {
   PROVIDER_PRESETS,
   type ProviderPreset,
 } from "../config/provider-presets";
+import i18n, { tx } from "../i18n";
 
 export function ProviderPresetMenu({
   onSelect,
@@ -69,7 +70,7 @@ export function ProviderPresetMenu({
       <button
         type="button"
         ref={trigger}
-        aria-label="新增提供商"
+        aria-label={i18n.t("models:presets.add")}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => (open ? menu.current?.hidePopover() : show())}
@@ -82,7 +83,7 @@ export function ProviderPresetMenu({
         onToggle={(event) => setOpen(event.newState === "open")}
         className="provider-preset-menu"
         role="menu"
-        aria-label="提供商预设"
+        aria-label={i18n.t("models:presets.menu")}
       >
         {PROVIDER_PRESETS.map((preset) => (
           <button
@@ -95,7 +96,7 @@ export function ProviderPresetMenu({
               onSelect(preset);
             }}
           >
-            <strong>{preset.label}</strong>
+            <strong>{tx(preset.label)}</strong>
             <small>{preset.protocol}</small>
           </button>
         ))}

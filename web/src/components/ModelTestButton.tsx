@@ -1,6 +1,7 @@
 import { LoadingBar } from "./LoadingBar";
 import { useRef, useState } from "react";
 import type { Action } from "../pages/common";
+import i18n from "../i18n";
 
 export function ModelTestButton({
   test,
@@ -18,7 +19,7 @@ export function ModelTestButton({
     running.current = true;
     setTesting(true);
     try {
-      await act(test, "测试请求已完成");
+      await act(test, i18n.t("modelTest.done"));
     } finally {
       running.current = false;
       setTesting(false);
@@ -31,7 +32,11 @@ export function ModelTestButton({
       aria-busy={testing}
       onClick={() => void run()}
     >
-      {testing ? <LoadingBar compact label="测试中…" /> : "测试当前配置"}
+      {testing ? (
+        <LoadingBar compact label={i18n.t("modelTest.testing")} />
+      ) : (
+        i18n.t("modelTest.run")
+      )}
     </button>
   );
 }

@@ -1,7 +1,8 @@
 import type { ModelConfig } from "../api/types";
+import i18n from "../i18n";
 
 export function modelName(provider: string, model: string) {
-  return `${provider || "未知提供商"}/${model || "未知模型"}`;
+  return `${provider || i18n.t("unknownProvider")}/${model || i18n.t("unknownModel")}`;
 }
 
 export function configuredModelName(model: ModelConfig) {

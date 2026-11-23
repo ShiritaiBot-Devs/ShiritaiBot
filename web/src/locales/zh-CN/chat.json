@@ -1,0 +1,84 @@
+{
+  "shell": {
+    "diffOutput": "差异输出",
+    "editedFiles": "已编辑的文件",
+    "returned": "已返回",
+    "success": "成功",
+    "failure": "失败",
+    "exitCode": "退出码 {code}",
+    "executing": "执行中",
+    "outputTruncated": "输出已截断",
+    "copyAll": "复制命令和输出",
+    "record": "运行记录",
+    "ran": "已运行",
+    "failed": "运行失败",
+    "running": "正在运行",
+    "diffTruncated": "差异预览已截断",
+    "copyDiff": "复制 {path} 的差异",
+    "copied": "已复制",
+    "copyFailed": "复制失败，可选中文本后复制。"
+  },
+  "actions": {
+    "deleteConfirm": "删除「{title}」及其聊天记录？此操作无法撤销。",
+    "save": "保存",
+    "delete": "删除",
+    "cancel": "取消",
+    "name": "对话名称",
+    "deleteTitle": "删除对话",
+    "renameTitle": "重命名对话",
+    "pin": "置顶",
+    "unpin": "取消置顶",
+    "rename": "重命名",
+    "menu": "对话操作",
+    "more": "{title}的更多操作"
+  },
+  "webOnly": "这里只发送 WebUI 会话。其他会话请返回原平台对话。",
+  "workspace": {
+    "waiting": "等待助手回复",
+    "replying": "助手正在回复",
+    "greeting": "今天想做些什么？⭐",
+    "historyFailed": "读取会话失败：{error}",
+    "loading": "正在读取会话…",
+    "webChatsFailed": "读取网页会话失败：{error}",
+    "settings": "设置",
+    "newChat": "新对话",
+    "sessions": "会话列表",
+    "denied": "已拒绝",
+    "allowed": "已允许"
+  },
+  "sidebar": {
+    "pending": "待审批",
+    "running": "运行中",
+    "pinned": "已置顶",
+    "list": "会话列表",
+    "new": "新对话",
+    "title": "对话"
+  },
+  "page": {
+    "empty": "从一句话开始。请先在「模型与服务」里配置模型路由。",
+    "historyFailed": "读取会话失败：{error}",
+    "history": "会话记录",
+    "new": "新会话",
+    "session": "会话"
+  },
+  "tools": {
+    "done": "已完成",
+    "failed": "失败",
+    "running": "执行中",
+    "result": "返回结果",
+    "args": "参数",
+    "noArgs": "无参数",
+    "calls": "工具调用"
+  },
+  "approval": {
+    "needsYou": "需要你确认 · {id}",
+    "deny": "拒绝",
+    "allowOnce": "允许这一次",
+    "validUntil": "{time} 前有效"
+  },
+  "timeline": {
+    "elapsed": "用时 {time}",
+    "sendFailed": "发送失败",
+    "failed": "本轮失败"
+  }
+}

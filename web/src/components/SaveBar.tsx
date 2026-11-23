@@ -1,4 +1,5 @@
 import { Save } from "lucide-react";
+import i18n from "../i18n";
 
 export function SaveBar({
   busy,
@@ -10,10 +11,14 @@ export function SaveBar({
   onDiscard: () => void;
 }) {
   return (
-    <div className="save-bar" role="region" aria-label="未保存的配置">
-      <span>配置有未保存的修改</span>
+    <div
+      className="save-bar"
+      role="region"
+      aria-label={i18n.t("saveBar.region")}
+    >
+      <span>{i18n.t("saveBar.message")}</span>
       <button type="button" onClick={onDiscard}>
-        放弃修改
+        {i18n.t("saveBar.discard")}
       </button>
       <button
         type="button"
@@ -22,7 +27,7 @@ export function SaveBar({
         onClick={onSave}
       >
         <Save size={15} />
-        保存并应用
+        {i18n.t("saveBar.save")}
       </button>
     </div>
   );

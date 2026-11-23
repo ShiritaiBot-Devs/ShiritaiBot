@@ -1,0 +1,854 @@
+{
+  "provider": {
+    "id": {
+      "label": "Provider name",
+      "help": "Used to refer to this provider in models and routes. Letters, numbers, dots, underscores, and hyphens only."
+    },
+    "enabled": {
+      "label": "Enable provider",
+      "help": "Allow calls to the enabled models under this provider."
+    },
+    "protocol": {
+      "label": "API protocol",
+      "help": "systemone is for decision models such as TypeSafe Jev. They only classify and don't generate text, so they can only be used to split Work and Chat, triage proactive events, and route memory. To set one up: name it typesafe, choose the systemone protocol, set the Base URL to https://api.typesafe.ai/v1, and enter your TypeSafe key. Use jev-1.14.0 as the model name, then add it to the router / light / memory / approval routes. If your network can't reach TypeSafe, give this provider a proxy (for example http://127.0.0.1:7890)."
+    },
+    "base_url": {
+      "help": "The API prefix. OpenAI and Anthropic usually end in /v1, and Gemini in /v1beta. TypeSafe Jev is https://api.typesafe.ai/v1, and Jev through OpenRouter is https://openrouter.ai/api/v1."
+    },
+    "timeout": {
+      "label": "Timeout (seconds)"
+    },
+    "max_retries": {
+      "label": "Max retries",
+      "help": "Extra attempts after a timeout, rate limit, or temporary server error. 0 means no retries. The default of 2 sends at most 3 requests."
+    },
+    "proxy": {
+      "label": "Network proxy",
+      "help": "HTTP, HTTPS, or SOCKS5. Used for model discovery, tests, and real calls. Leave empty to use the service process's default network."
+    }
+  },
+  "price": {
+    "currency": {
+      "label": "Currency",
+      "options": {
+        "USD": "US dollar (USD)",
+        "CNY": "Chinese yuan (CNY)"
+      },
+      "help": "Used to estimate spending on the overview. Fetch prices from the provider below, or enter them from the provider's website."
+    },
+    "price_input": {
+      "label": "Input price (per million tokens)",
+      "help": "If all three prices are 0, pricing is treated as unset and the overview doesn't estimate spending."
+    },
+    "price_cached": {
+      "label": "Cached input price (per million tokens)",
+      "help": "0 means cached tokens are charged at the input price."
+    },
+    "price_output": {
+      "label": "Output price (per million tokens)"
+    }
+  },
+  "model": {
+    "id": {
+      "label": "Model ID"
+    },
+    "model": {
+      "label": "Provider's model name"
+    },
+    "max_output": {
+      "label": "Max output tokens",
+      "help": "The most tokens one reply can generate. Chat models commonly use 4096–8192. Too large can cut off long replies; too small can't finish them. Start with 4096."
+    },
+    "enabled": {
+      "label": "Enabled",
+      "help": "Allow routes to send requests to this model."
+    },
+    "max_context": {
+      "label": "Max context tokens",
+      "help": "Input plus output; must be larger than max output. 0 means unspecified (recommended). Tokens are estimated from characters, and when a request is too long the next candidate model is tried. Long-context models such as DeepSeek can use 64000, ordinary models 128000, or just leave it at 0."
+    },
+    "modalities": {
+      "label": "Supported inputs",
+      "options": {
+        "text": "Text",
+        "image": "Image",
+        "audio": "Audio",
+        "video": "Video"
+      },
+      "help": "Choose at least one. With Image selected, images received on QQ are sent to this model directly; otherwise they're described in text or replaced with an [image] placeholder, depending on the image description settings. Audio and video aren't supported yet."
+    },
+    "extra_body": {
+      "label": "Custom request body (JSON)",
+      "help": "A JSON object in the API's native format; nested objects are merged recursively. Gemini example: {\"generationConfig\":{\"temperature\":0.7}}. Text models stream by default to collect performance metrics; set {\"stream\":false} to turn that off. The model, conversation, and tool definitions are provided by the system."
+    }
+  },
+  "embeddingModel": {
+    "id": {
+      "label": "Model ID"
+    },
+    "model": {
+      "label": "Provider's model name"
+    },
+    "enabled": {
+      "label": "Enabled",
+      "help": "Allow this model to generate memory vectors."
+    },
+    "dims": {
+      "label": "Vector dimensions",
+      "help": "0 uses the model's default size. Models that support smaller vectors (such as OpenAI text-embedding-3 and Gemini) can use a smaller value. Changing this recomputes every memory vector."
+    },
+    "extra_body": {
+      "label": "Custom request body (JSON)",
+      "help": "For OpenAI-compatible APIs, merged into the /embeddings request body in its native format. Not used by Gemini APIs."
+    }
+  },
+  "adapterCommon": {
+    "id": {
+      "label": "Instance ID"
+    },
+    "type": {
+      "label": "Adapter type",
+      "options": {
+        "qq_official": "Official QQ bot",
+        "feishu": "Feishu app bot"
+      }
+    },
+    "enabled": {
+      "label": "Enable connection",
+      "help": "After saving, connect to this protocol client to receive messages and send replies."
+    }
+  },
+  "onebot": {
+    "url": {
+      "label": "WebSocket URL",
+      "help": "NapCat's Universal WebSocket address. Only ws:// and wss:// are supported."
+    },
+    "token": {
+      "label": "Access token"
+    },
+    "self_id": {
+      "label": "Bot QQ number"
+    },
+    "owner_id": {
+      "label": "Owner QQ number",
+      "help": "The owner's private chat gets full Agent access. Everyone else, and all group chats, can only use Chat mode."
+    },
+    "groups": {
+      "label": "Enabled groups",
+      "help": "One group number per line. Only groups on this list get replies."
+    },
+    "friends": {
+      "label": "Enabled friends",
+      "help": "One QQ number per line. Friends other than the owner must be listed here to use Chat mode."
+    },
+    "ignore_users": {
+      "label": "Ignored accounts",
+      "help": "One QQ number per line. Takes priority over the allow lists."
+    },
+    "auto_start": {
+      "label": "Auto-start protocol client",
+      "help": "Try to start the protocol client when its process disappears and connecting keeps failing. One argument per line, for example C:\\Apps\\NapCat\\Shell\\launcher.bat. Leave empty to turn this off. If the launcher needs administrator rights, a UAC prompt may appear, or the start may fail when no one is around (this is logged)."
+    },
+    "auto_start_after": {
+      "label": "Start after failing for (seconds)",
+      "help": "Avoids starting the client during a brief reconnect. Automatic starts are at least 5 minutes apart."
+    }
+  },
+  "adapter": {
+    "app_id": {
+      "help": "The numeric App ID from the QQ Open Platform."
+    },
+    "app_secret": {
+      "placeholder": "Saved · leave empty to keep it",
+      "placeholder2": "Enter the bot secret",
+      "placeholder3": "Enter the app secret"
+    },
+    "qq_sandbox": {
+      "label": "Use the sandbox API"
+    },
+    "owner_id": {
+      "label": "Owner OpenID",
+      "help": "Your one-on-one chat OpenID under this App.",
+      "label2": "Owner Open ID",
+      "help2": "In private chats, the Feishu bot only replies to the owner, who can use Agent tools."
+    },
+    "groups": {
+      "label": "Allowed group OpenIDs",
+      "label2": "Allowed group chats",
+      "help": "One group chat ID per item, starting with oc_."
+    },
+    "friends": {
+      "label": "Allowed one-on-one chat OpenIDs"
+    },
+    "ignore_users": {
+      "label": "Ignored member OpenIDs"
+    },
+    "domain": {
+      "label": "Platform",
+      "options": {
+        "feishu": "Feishu"
+      }
+    },
+    "memory_profile": {
+      "label": "Memory store",
+      "options": {
+        "feishu": "Separate Feishu memory",
+        "default": "Existing default memory"
+      },
+      "help": "Used for the owner's private Feishu chat."
+    },
+    "wake_keywords": {
+      "label": "Group wake words",
+      "help": "The bot replies when a message starts with any of these words."
+    },
+    "feishu_group_context": {
+      "label": "Record Feishu group context",
+      "help": "When on, replies take the group's recent messages into account."
+    }
+  },
+  "subagentCommon": {
+    "id": {
+      "label": "Instance ID"
+    },
+    "enabled": {
+      "label": "Enable instance",
+      "help": "Allow the assistant to hand tasks to this subagent."
+    },
+    "kind": {
+      "label": "Type",
+      "options": {
+        "shiritaibot": "ShiritaiBot built-in subagent",
+        "generic": "Custom CLI"
+      }
+    },
+    "command": {
+      "label": "Start command",
+      "help": "The executable on the first line (such as codex, claude, dsh, or agy), then one argument per line."
+    },
+    "timeout": {
+      "label": "Timeout (seconds)"
+    },
+    "proxy": {
+      "label": "Network proxy",
+      "help": "Applies to this instance only. Leave empty to inherit the environment. HTTP, HTTPS, or SOCKS5; which protocols work depends on the CLI."
+    },
+    "model": {
+      "label": "Model",
+      "help": "Leave empty to use the CLI's default model."
+    }
+  },
+  "addDirs": {
+    "add_dirs": {
+      "label": "Extra directories",
+      "help": "One absolute path per line. Subagents only work inside their own task directory by default; list other directories they may access here."
+    }
+  },
+  "codex": {
+    "sandbox": {
+      "label": "Sandbox mode",
+      "options": {
+        "read_only": "Read only (read-only)",
+        "workspace_write": "Writable workspace (workspace-write)",
+        "danger_full_access": "Full access, no sandbox (danger-full-access)"
+      },
+      "help": "Codex's sandbox_mode. Background runs never ask for approval, so anything outside the sandbox simply fails."
+    },
+    "network_access": {
+      "label": "Allow network access",
+      "help": "sandbox_workspace_write.network_access; only applies in writable workspace mode. Full access mode can always use the network."
+    },
+    "add_dirs": {
+      "help": "One absolute path per line: extra writable directories in workspace-write mode (writable_roots)."
+    }
+  },
+  "claude": {
+    "permission_mode": {
+      "label": "Permission mode",
+      "options": {
+        "acceptEdits": "Accept file edits automatically (acceptEdits)",
+        "default": "Default (default)",
+        "dontAsk": "Only tools on the allow list (dontAsk)",
+        "auto": "Decide automatically (auto)",
+        "plan": "Plan only, don't execute (plan)",
+        "bypassPermissions": "Skip all permission checks (bypassPermissions)"
+      },
+      "help": "permissions.defaultMode. No one answers permission prompts in the background, so anything the mode or allow list doesn't permit is denied."
+    },
+    "tools": {
+      "label": "Available tools",
+      "help": "One built-in tool name per line (such as Read, Edit, Bash). Leave empty for the CLI's default set."
+    },
+    "allowed_tools": {
+      "label": "Allowed tools",
+      "help": "permissions.allow: used without asking. One per line, such as Bash, WebFetch, Bash(git *)."
+    },
+    "disallowed_tools": {
+      "label": "Blocked tools",
+      "help": "permissions.deny: takes priority over the allow list. One per line, such as Bash(rm *)."
+    }
+  },
+  "dsh": {
+    "permission_preset": {
+      "label": "Permission preset",
+      "help": "--permission-mode: the name of a permission preset configured in dsh. Built in: workspace-write (only the workspace is writable) and danger-full-access (no sandbox). auto requires turning on Auto review in dsh first."
+    },
+    "approval_policy": {
+      "label": "Approval policy",
+      "options": {
+        "never": "Deny anything that needs approval (never)",
+        "ask": "Ask for approval (ask)"
+      },
+      "help": "--approval-policy. Nobody answers in headless mode, so ask is also denied for lack of an answer; never tells the model up front not to ask for extra permissions."
+    },
+    "add_dirs": {
+      "help": "One absolute path per line, passed as --add-dir: extra writable directories in workspace-write mode."
+    }
+  },
+  "subagent": {
+    "model": {
+      "label": "Model",
+      "options": {
+        "none": "Follow the Agent Work route"
+      }
+    },
+    "instructions": {
+      "label": "Instructions",
+      "help": "The main agent sees this when choosing an instance, and the subagent follows it."
+    },
+    "native_tools": {
+      "label": "Allowed tools",
+      "help": "Granted by tool name. Every call still has to pass the originating session's permission checks."
+    },
+    "native_skills": {
+      "label": "Allowed Skills",
+      "help": "Selected Skills can be used through skill_list and skill_read. Any other tools a Skill needs must be selected separately."
+    },
+    "native_manual_approval": {
+      "label": "Require manual approval for tool calls",
+      "help": "When off, the originating session's approval policy applies."
+    },
+    "antigravity_mode": {
+      "label": "Execution mode",
+      "options": {
+        "none": "Use the CLI's setting",
+        "plan": "Plan (plan)",
+        "accept_edits": "Accept file edits (accept-edits)",
+        "auto": "Automatic (auto)"
+      }
+    }
+  },
+  "subagentSummary": {
+    "text": " · network access"
+  },
+  "policy": {
+    "shell_command": {
+      "label": "Shell start arguments",
+      "help": "One argument per line. Default: bash --noprofile --norc -c."
+    },
+    "approval_timeout": {
+      "label": "Approval validity (seconds)"
+    },
+    "approval_allow_threshold": {
+      "label": "Jev approval threshold",
+      "help": "Jev's approval probability must reach this value for the call to go ahead directly; otherwise it's handled as \"not confident\"."
+    },
+    "approval_deny_threshold": {
+      "label": "Jev denial threshold",
+      "help": "Jev's denial probability must reach this value to count as a clear denial; otherwise it's treated as not confident."
+    },
+    "approval_on_deny": {
+      "label": "When Jev clearly denies",
+      "options": {
+        "fallback": "Let a text model review it",
+        "deny": "Deny"
+      }
+    },
+    "approval_on_unsure": {
+      "label": "When Jev isn't confident",
+      "options": {
+        "fallback": "Let a text model review it",
+        "deny": "Deny"
+      }
+    },
+    "max_steps": {
+      "label": "Max steps per turn"
+    },
+    "max_turn_seconds": {
+      "label": "Time limit per turn (seconds)"
+    },
+    "max_context_chars": {
+      "label": "Context character limit"
+    },
+    "dynamic_subagent": {
+      "label": "Allow dynamic built-in subagents",
+      "help": "When on, the main agent can create temporary built-in subagents with subagent_spawn. They inherit the current session's permissions and approval policy."
+    },
+    "dynamic_subagent_model_override": {
+      "label": "Let dynamic subagents choose a model",
+      "help": "Allow the main agent to pick any enabled text model in subagent_spawn. When off, the Agent route is always used."
+    }
+  },
+  "messageMerge": {
+    "debounce_enabled": {
+      "label": "Merge consecutive messages",
+      "help": "When on, consecutive messages from the same sender in a QQ private or group chat are handled as one turn."
+    },
+    "debounce_seconds": {
+      "label": "Merge wait (seconds)",
+      "help": "Consecutive messages from one sender within this time become one turn. 0 turns merging off."
+    },
+    "debounce_max_seconds": {
+      "label": "Longest merge wait (seconds)",
+      "help": "If new messages keep arriving, the turn waits at most this long."
+    },
+    "debounce_suffixes": {
+      "label": "Endings that start right away",
+      "help": "One per line. A message ending with any of these doesn't wait. Leave empty to always wait the full time."
+    }
+  },
+  "proactive": {
+    "enabled": {
+      "label": "Enable the proactive engine",
+      "help": "Handle external events, and contact the owner on its own, following Do Not Disturb and notification rules."
+    },
+    "timezone": {
+      "label": "Time zone"
+    },
+    "quiet_start": {
+      "label": "Do Not Disturb starts"
+    },
+    "quiet_end": {
+      "label": "Do Not Disturb ends"
+    },
+    "throttle_seconds": {
+      "label": "Gap between notifications from one source (seconds)"
+    }
+  },
+  "basicSettings": {
+    "persona": {
+      "label": "Base persona",
+      "help": "Used when no named persona is selected. The full prompt can only be edited here; slash commands only show persona IDs and names."
+    },
+    "concurrency": {
+      "label": "LLM concurrency",
+      "help": "Takes effect after restarting the process."
+    }
+  },
+  "identity": {
+    "assistant_name": {
+      "label": "Assistant's name",
+      "help": "Used in conversations, memory summaries, and context management."
+    },
+    "owner_name": {
+      "label": "What to call the owner"
+    },
+    "wake_keywords": {
+      "label": "Wake words",
+      "help": "One per line. Used for QQ messages and Feishu private chats. Wake words for Feishu groups are set on the adapter."
+    },
+    "wake_keyword_mode": {
+      "label": "Wake word matching",
+      "options": {
+        "contains": "Anywhere in the message (contains)",
+        "prefix": "Only at the start (prefix)"
+      },
+      "help": "With start matching, the wake word must begin the message. The full message, wake word included, is passed to the model."
+    },
+    "group_command_require_wake": {
+      "label": "Group / commands need waking",
+      "help": "By default, built-in and plugin / commands can be sent directly. When on, both need an @mention or a group wake word."
+    },
+    "private_require_keyword": {
+      "label": "Private chats need a wake word",
+      "help": "By default the bot answers private chats directly. When on, ordinary private messages on QQ and Feishu must contain a wake word above. Slash commands, stop, and approval replies always work."
+    }
+  },
+  "outboundMessage": {
+    "help_menu_style": {
+      "label": "/help menu style",
+      "options": {
+        "text": "Text",
+        "light": "Light image",
+        "dark": "Dark image"
+      },
+      "help": "The image groups commands into built-in and plugin sections, showing only commands available in the current session."
+    },
+    "onebot_forward_long_messages": {
+      "label": "Fold long OneBot messages",
+      "help": "In OneBot group and private chats, send long replies as one merged forward message. The protocol client must support merged forwards."
+    },
+    "onebot_forward_threshold": {
+      "label": "Fold replies longer than (characters)",
+      "help": "With folding on, replies longer than this are folded."
+    }
+  },
+  "persona": {
+    "id": {
+      "label": "Persona ID",
+      "help": "Used to switch with /persona <ID>. Letters, numbers, underscores, and hyphens only; can't be default."
+    },
+    "name": {
+      "label": "Persona name"
+    },
+    "enabled": {
+      "label": "Enable persona",
+      "help": "Allow this persona to be the default or to be switched to in a session."
+    },
+    "prompt": {
+      "label": "Persona prompt",
+      "help": "Only editable here. Command lists and switch replies never show the full prompt."
+    }
+  },
+  "context": {
+    "compression_tool_chars": {
+      "label": "Character limit per tool result in summaries",
+      "help": "Long results keep their beginning and end. 0 turns off truncation."
+    },
+    "compression_failure": {
+      "label": "If every compression model fails",
+      "options": {
+        "discard": "Drop old turns and continue",
+        "error": "Show an error and keep compression progress"
+      }
+    },
+    "max_turns": {
+      "label": "Max turns kept in context",
+      "help": "Includes the turn about to start. Tool calls and steering messages in a turn count as part of it."
+    },
+    "keep_recent_turns": {
+      "label": "Recent turns kept when compressing",
+      "help": "Less than the max turns. More old turns may be compressed if characters run short."
+    }
+  },
+  "memory": {
+    "inject": {
+      "label": "Add relevant memories to each turn",
+      "help": "In the owner's private chat and the Proactive Loop, when a message mentions a known person or thing, or a search finds closely related memories, they're added to the end of the turn's message. Otherwise nothing is added."
+    },
+    "inject_chars": {
+      "label": "Memory character budget",
+      "help": "The most characters of memory added per turn. Memories already in the context aren't added again."
+    },
+    "extract": {
+      "label": "Organize memories automatically",
+      "help": "The memory model extracts people, facts, and events from the owner's private chat and handled external events. Each needs evidence from the original text, and nothing the assistant itself said is remembered. When it isn't sure about a conflict, the agent asks you later in a conversation."
+    },
+    "extract_messages": {
+      "label": "Organize after this many private messages"
+    },
+    "extract_idle_minutes": {
+      "label": "Organize after the private chat is idle for (minutes)",
+      "help": "If the message count isn't reached, memories are also organized once the conversation has paused this long."
+    }
+  },
+  "groupContext": {
+    "enabled": {
+      "label": "Enable group chat awareness",
+      "help": "Record everything said in allowed groups, including messages that don't @ the bot. The latest 2000 messages are kept per group."
+    },
+    "inject_messages": {
+      "label": "Messages added per turn",
+      "help": "How many recent group messages come with a wake-up, not counting the triggering message. 0 adds none directly."
+    },
+    "inject_chars": {
+      "label": "Character budget",
+      "help": "The most characters of group history added. The newest messages are kept first, and this counts toward the context character limit."
+    },
+    "query_tool": {
+      "label": "Provide the group_context_query tool",
+      "help": "Let the bot search the group's history by keyword or page back through it, and remind it in the prompt to do so when needed. Tool permissions still apply."
+    },
+    "interject_mode": {
+      "label": "Joining group conversations",
+      "options": {
+        "off": "Off",
+        "simple": "Simple",
+        "heartflow": "Heartflow"
+      },
+      "help": "Works when group chat awareness is on. Simple mode samples group messages at random; Heartflow mode lets a light model decide when to join in. For OneBot 11 group chats."
+    }
+  },
+  "simpleInterject": {
+    "interject_probability": {
+      "label": "Chance per group message",
+      "help": "0 never joins in; 1 may look at every message. Keep it very low, for example 0.02."
+    },
+    "interject_cooldown": {
+      "label": "Cooldown (seconds)",
+      "help": "The shortest gap between two looks in the same group."
+    }
+  },
+  "interjectLimit": {
+    "interject_max_per_hour": {
+      "label": "Max per group per hour",
+      "help": "Simple mode counts samples; Heartflow mode counts messages actually sent."
+    }
+  },
+  "heartflow": {
+    "activity": {
+      "label": "Eagerness to join in"
+    },
+    "focus_seconds": {
+      "label": "Follow-up window (seconds)",
+      "help": "After the bot speaks, it pays extra attention to follow-up questions for this long. 0 turns this off."
+    },
+    "max_streak": {
+      "label": "Max unprompted messages in a row"
+    }
+  },
+  "heartflowAdvanced": {
+    "rest_seconds": {
+      "label": "Rest time (seconds)"
+    },
+    "energy_curve": {
+      "label": "Energy use curve",
+      "options": {
+        "flat": "Flat",
+        "linear": "Linear increase",
+        "exponential": "Exponential increase"
+      }
+    },
+    "energy_recovery_minutes": {
+      "label": "Minutes to fully recover energy"
+    },
+    "debounce_seconds": {
+      "label": "Wait for members to finish (seconds)"
+    },
+    "min_judge_interval": {
+      "label": "Shortest gap between looks while quiet (seconds)"
+    },
+    "developer": {
+      "label": "Write Heartflow debug logs"
+    }
+  },
+  "vision": {
+    "caption": {
+      "label": "Describe images",
+      "help": "When the main model can't take images, an image description model turns each image into text once and caches it. When off, or with no description model configured, images become an [image] placeholder."
+    },
+    "max_images": {
+      "label": "Max images sent directly per request",
+      "help": "Models that accept images only get this many of the most recent images in the context. Older ones are described or replaced with a placeholder, so the same images aren't sent every turn."
+    }
+  },
+  "knowledge": {
+    "enabled": {
+      "label": "Enable knowledge base tools",
+      "help": "When on, search is available according to each session's bindings and tool permissions. Owner sessions can import and delete documents."
+    },
+    "chat": {
+      "label": "Unbound Chat sessions can search the default library",
+      "help": "When on, unbound Chat private and group chats can search the default library. Sessions with an explicit binding search what they're bound to."
+    },
+    "chunk_chars": {
+      "label": "Chunk length (characters)",
+      "help": "Only affects documents imported afterwards."
+    },
+    "chunk_overlap": {
+      "label": "Chunk overlap (characters)",
+      "help": "How much neighboring chunks repeat; at most half the chunk length. Tables are split by row without overlap."
+    },
+    "max_file_mb": {
+      "label": "Max file size (MiB)",
+      "help": "Applies to WebUI uploads and files sent in private chats."
+    }
+  },
+  "meme": {
+    "enabled": {
+      "label": "Enable the sticker manager",
+      "help": "When on, sticker tools are available, and replies in QQ sessions can send stickers with <meme>category</meme>."
+    },
+    "capacity": {
+      "label": "Sticker storage limit",
+      "help": "Auto-collection and meme_save stop at the limit. Manual uploads in the WebUI aren't limited."
+    },
+    "inject": {
+      "label": "Explain stickers to the model",
+      "help": "Describe the categories and markup at the end of the system prompt in QQ sessions. The text only changes with the settings, so it doesn't affect prompt caching."
+    },
+    "max_per_reply": {
+      "label": "Max stickers per reply",
+      "help": "Extra <meme> tags are ignored."
+    },
+    "collect": {
+      "label": "Collect from group chats",
+      "help": "When others post stickers in allowed groups, some are collected at random and added after description, persona, and category checks."
+    },
+    "collect_rate": {
+      "label": "Base collection chance",
+      "help": "Actual chance = base chance × (1 − stored / limit), so collection slows as the library fills up."
+    },
+    "stickers_only": {
+      "label": "Only collect stickers",
+      "help": "Only collect images QQ marks as stickers (animated or store stickers). When off, ordinary images can be collected too."
+    },
+    "persona_check": {
+      "label": "Check persona fit before collecting",
+      "help": "The sticker route's decision model (or a text model if there isn't one) judges whether the default persona would send this sticker."
+    },
+    "fit_threshold": {
+      "label": "Persona fit threshold",
+      "help": "Stickers that fit less than this aren't collected."
+    }
+  },
+  "emotion": {
+    "enabled": {
+      "label": "Enable emotion tracking",
+      "help": "Pick up on how the user feels and how they're doing, and adjust the tone of replies. When off, no model is called and prompts don't change."
+    },
+    "sensitivity": {
+      "label": "Sensitivity",
+      "help": "How small a signal updates the emotion score. Higher triggers more easily."
+    },
+    "tone": {
+      "label": "Tone range",
+      "help": "How much emotion changes the tone. The highest setting allows a sincere word of care."
+    },
+    "initiative": {
+      "label": "Initiative",
+      "help": "How much replies reach out with care. Only at 0.8 or higher, and when the owner is doing badly, may the bot send a caring message on its own."
+    },
+    "persistence": {
+      "label": "Persistence",
+      "help": "How fast the score fades: at 0 it halves in about 6 hours, at 1 in about 7 days."
+    },
+    "judge_weight": {
+      "label": "Judge model weight",
+      "help": "The weight of the decision model's emotion score in the combined value. Ignored when no judge model is available."
+    },
+    "rules_weight": {
+      "label": "Rule signal weight",
+      "help": "The weight of local rules (being blocked, rushing, repetition, failure, describing difficulty) in the combined value."
+    },
+    "sentiment_weight": {
+      "label": "Negative wording weight",
+      "help": "The weight of negative wording. The three weights are normalized, so they don't need to add up to 1. If all are 0, the score stops updating."
+    },
+    "developer": {
+      "label": "Developer log",
+      "help": "Write the judgments and current values to the log. The interface never shows the score, and message text isn't recorded."
+    }
+  },
+  "createPersona": {
+    "name": "New persona",
+    "prompt": "You are a reliable personal assistant."
+  },
+  "webSearch": {
+    "enabled": {
+      "label": "Enable web search",
+      "help": "Once on, with a key for the chosen provider, the assistant can search the web."
+    },
+    "provider": {
+      "label": "Search provider"
+    },
+    "max_results": {
+      "label": "Default number of results",
+      "help": "The assistant can change this per search, up to 10 results."
+    },
+    "timeout": {
+      "label": "Search timeout (seconds)"
+    }
+  },
+  "webSearchProvider": {
+    "search_depth": {
+      "label": "Search depth",
+      "options": {
+        "basic": "Basic",
+        "advanced": "Advanced",
+        "fast": "Fast",
+        "ultra_fast": "Ultra fast"
+      }
+    },
+    "topic": {
+      "label": "Topic",
+      "options": {
+        "general": "General",
+        "news": "News",
+        "finance": "Finance"
+      }
+    },
+    "hl": {
+      "label": "Search language",
+      "help": "Google language code, such as en or zh-cn."
+    },
+    "gl": {
+      "label": "Search region",
+      "help": "Country or region code, such as us or cn."
+    },
+    "need_content": {
+      "label": "Return page content",
+      "help": "Fetch the source pages' text as well as titles and snippets."
+    },
+    "localization": {
+      "label": "Localization IP",
+      "help": "Optional IP address used to localize results. Leave empty for default results."
+    }
+  },
+  "mcpCommon": {
+    "id": {
+      "label": "Server name",
+      "help": "Tool names start with mcp_<name>_. Letters, numbers, underscores, and hyphens only."
+    },
+    "enabled": {
+      "label": "Enable server",
+      "help": "After saving, connect to the server and register its tools. Turning it off disconnects and removes the tools."
+    },
+    "transport": {
+      "label": "Transport",
+      "options": {
+        "stdio": "stdio (local process)",
+        "http": "Streamable HTTP (remote server)"
+      }
+    }
+  },
+  "mcpStdio": {
+    "command": {
+      "label": "Start command",
+      "help": "One argument (argv) per line, not run through a shell."
+    },
+    "env": {
+      "label": "Environment variables",
+      "help": "A JSON object. Values whose names contain KEY, TOKEN, SECRET, PASSWORD, and similar are encrypted when saved. You can also write env:VARIABLE_NAME."
+    },
+    "cwd": {
+      "label": "Working directory",
+      "placeholder": "Leave empty to use the current directory",
+      "help": "An absolute path."
+    }
+  },
+  "mcpHttp": {
+    "url": {
+      "label": "Server URL",
+      "help": "The Streamable HTTP endpoint. Don't put a username or password in the URL."
+    },
+    "headers": {
+      "label": "Request headers",
+      "help": "A JSON object. Every value is encrypted when saved. You can also write env:VARIABLE_NAME."
+    }
+  },
+  "mcpPolicy": {
+    "timeout": {
+      "label": "Call timeout (seconds)"
+    },
+    "risk": {
+      "label": "Tool safety level",
+      "options": {
+        "safe": "safe (read-only)"
+      },
+      "help": "The default level for all of this server's tools, which sets their default permissions. The server's own read-only hints aren't trusted."
+    },
+    "tool_risks": {
+      "label": "Per-tool safety levels",
+      "help": "Override the safety level by the MCP tool's original name."
+    },
+    "disabled_tools": {
+      "label": "Hidden tools",
+      "placeholder": "One original MCP tool name per line",
+      "help": "These tools aren't offered to the model."
+    }
+  },
+  "mcpSummary": {
+    "text": "No URL set",
+    "text2": "No command set"
+  }
+}

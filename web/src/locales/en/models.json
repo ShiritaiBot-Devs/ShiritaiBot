@@ -1,0 +1,137 @@
+{
+  "moveUpLabel": "Move {model} up",
+  "removeFromRoute": "Remove {model} from the route",
+  "addToRoute": "Add a model to the {route} route",
+  "modelCount_one": "{count} model",
+  "modelCount_other": "{count} models",
+  "addModelLabel": "Add model {model}",
+  "deleteModelLabel": "Delete model {model}",
+  "emptyProviders": "Add a provider on the left to get started.",
+  "fetchPricing": "Fetch prices from the provider",
+  "fetching": "Fetching…",
+  "pricingFetched": "Fetched prices from the provider.",
+  "subscriptionExtra": {
+    "help": "Extra parameters supported by the plan's Responses API. Requests always stream, with store set to false."
+  },
+  "subscriptionOutput": {
+    "help": "Used to estimate context locally. The actual output limit is set by the ChatGPT plan's API.",
+    "label": "Reserved output tokens"
+  },
+  "noRemote": "The provider returned no usable models. You can add them manually.",
+  "remotePrice": "{sep}${input} / ${output} per million tokens",
+  "searchPlaceholder": "Search model names",
+  "searchRemote": "Search remote models",
+  "fetchHint": "Fetches with the URL and key entered above, so there's no need to save first. Click ＋ on the right to add one, then save.",
+  "subscriptionHint": "Once the account is connected, you can fetch the models your plan includes. Click ＋ on the right to add one, then save.",
+  "addManually": "Add manually",
+  "fetchModels": "Fetch provider models",
+  "fetched": "Fetched the model list.",
+  "modelsTitle": "Models",
+  "remove": "Remove",
+  "removeProvider": "Remove provider",
+  "unnamedProvider": "Unnamed provider",
+  "addModel": "Add model",
+  "addSessionModel": "Add a session model",
+  "moveUp": "Move up",
+  "notConfigured": "Not configured",
+  "inherit": {
+    "global": "Follows the global default",
+    "light": "Uses the triage and summary route"
+  },
+  "handoff": {
+    "label": "Chat-to-Work handoff",
+    "help": "Private and web chats routed to Agent Chat only get the visible conversation and summary. When Chat decides it needs to run a task or check details, the turn is handed to Agent Work."
+  },
+  "split": {
+    "label": "Enable the Agent Work/Chat split",
+    "help": "When on, the split model decides whether each new message is Work or Chat. When off, Agent mode always uses the Agent Work model."
+  },
+  "vectorsLoading": "Loading memory vector status…",
+  "vectors": {
+    "none_one": "No embedding model: {count} memory is searched by name links and keywords only.",
+    "none_other": "No embedding model: {count} memories are searched by name links and keywords only.",
+    "indexed": "Current embedding model {model}: {indexed} indexed, {pending} pending"
+  },
+  "vectorStatus": "Memory vector status",
+  "chatsFailed": "Couldn't load web chats: {error}",
+  "sessionHint": "Routes you don't set follow the global default. A reply model chosen in the session with /model takes priority.",
+  "scopeSession": "A specific Main session",
+  "scopeGlobal": "Global default",
+  "scope": "Scope",
+  "routeList": {
+    "firstModel": " Your first model becomes the default for the Chat, Agent Work, and triage routes.",
+    "intro": "Each route tries its models from top to bottom. A route is the same setting on every tab.",
+    "title": "Model routes",
+    "subtitle": "What each route is for, and fallback order"
+  },
+  "emptyText": "Add a provider to connect your first model.",
+  "emptyDecision": "Add a provider that uses the systemone protocol (such as TypeSafe).",
+  "unnamed": "Unnamed",
+  "providers": "Providers",
+  "providerList": "Provider list",
+  "categoryGroup": "Model type",
+  "pricing": {
+    "summary": "Input {input} / cached {cached} / output {output} {currency} per million tokens",
+    "notPublished": "The provider doesn't publish prices for this model. Enter them from the provider's website.",
+    "notListed": "The provider's model list doesn't include {model}"
+  },
+  "intro": {
+    "embedding": "Models that compute vectors for long-term memory. Supports OpenAI-compatible /embeddings and Gemini APIs, and can reuse a language model's provider.",
+    "decision": "Decision models such as Jev (systemone protocol) only classify and score; they don't generate text. They can only be used in the split, triage, memory, auto-approval, and sticker category routes. When they fail, the text model in the same route takes over.",
+    "text": "Models that generate text and call tools."
+  },
+  "categories": {
+    "decision": "Decision models (Systemone)",
+    "text": "Language models"
+  },
+  "routes": {
+    "embedding": {
+      "help": "What it does: computes vectors for memories and queries, for semantic search. Good fit: embedding models that support the languages you use. Only the first available model is used. After changing it, everything is recomputed in the background, and only keyword search works in the meantime. When empty, memory search uses only name links and keywords.",
+      "label": "Embedding model"
+    },
+    "meme": {
+      "help": "What it does: writes a short description of each collected sticker (used for search, and for models that can't see images), and judges whether it fits the persona and which category it belongs to. Good fit: cheap, fast, lightweight multimodal models. Decision models such as Jev can go first to judge persona fit and category, but descriptions still come from the multimodal model after them. Only text models that accept images can be chosen.",
+      "label": "Sticker description and category model"
+    },
+    "vision": {
+      "help": "What it does: when the main model can't take images, describes the images in the context as text, cached per image. Good fit: cheap multimodal models that read images accurately and can transcribe text in them. Only models that accept images can be chosen.",
+      "label": "Image description model"
+    },
+    "approval": {
+      "help": "What it does: before a tool call whose permission is \"model auto-approval\", independently reviews the tool, its full arguments, and the user's request, then approves or denies it. It never calls tools. Good fit: careful text models that reliably output JSON. Decision models such as Jev can go before the text model; their answer is used only when they're confident enough, otherwise the text model decides. If everything fails, times out, or returns something invalid, the call is denied. When empty, the triage and summary model is used.",
+      "label": "Tool auto-approval model"
+    },
+    "memory": {
+      "help": "What it does: in the background, extracts people, facts, and events from private chats and external events, and judges whether the evidence supports them, whether two mentions are the same person, and how new facts relate to old ones. It never replies to the owner and doesn't hold up conversations. Good fit: moderately priced text models that understand your conversations well and reliably output JSON (mistakes stay in memory for a long time, so accuracy matters more than speed). Decision models such as Jev can go before the text model, which takes over when they fail. When empty, the triage and summary model is used.",
+      "label": "Memory model"
+    },
+    "light": {
+      "help": "What it does: rates how important external events are. Per-turn short-term memory summaries and context compression also use this route, and so does auto-approval when its own route is empty. Good fit: cheap, fast models. You can put Jev first for triage, but summaries need generated text, so add a text model too.",
+      "label": "Proactive triage and summary model"
+    },
+    "router": {
+      "help": "What it does: decides whether each new message in Agent mode is Work or Chat. Good fit: decision models such as Jev, or small models with high throughput.",
+      "label": "Work/Chat split model"
+    },
+    "agent_chat": {
+      "help": "What it does: everyday questions and conversation in Agent mode. Good fit: models with broad world knowledge that make good companions (such as Gemini or Grok).",
+      "label": "Agent Chat model"
+    },
+    "agent": {
+      "help": "What it does: long-running work in the Main Loop and Proactive Loop (multi-step tool calls). Good fit: models with reliable tool calling that handle long tasks well. When the Work/Chat split is off, Agent mode uses this model for everything.",
+      "label": "Agent Work model"
+    },
+    "chat": {
+      "help": "What it does: replies in Chat mode sessions, such as group chats. Good fit: fast, inexpensive models that sound natural in conversation.",
+      "label": "Chat default model"
+    }
+  },
+  "presets": {
+    "paratera": "Paratera",
+    "anthropic": "Anthropic-compatible",
+    "openaiResponses": "OpenAI-compatible (Responses)",
+    "openaiCompletions": "OpenAI-compatible (Completions)",
+    "menu": "Provider presets",
+    "add": "Add provider"
+  }
+}

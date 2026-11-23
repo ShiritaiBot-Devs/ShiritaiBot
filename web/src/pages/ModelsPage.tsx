@@ -34,59 +34,60 @@ import {
 } from "../config/schema";
 import { uniqueId } from "../lib/utils";
 import type { ConfigPageProps } from "./common";
+import i18n, { tx } from "../i18n";
 
 type Category = "text" | "decision" | "embedding";
 
 const ROUTES: { key: string; label: string; help: string }[] = [
   {
     key: "chat",
-    label: "Chat 默认模型",
-    help: "做什么：Chat 模式会话（如群聊）的回复。适合：响应快、价格低、中文对话自然的模型。",
+    label: "models:routes.chat.label",
+    help: "models:routes.chat.help",
   },
   {
     key: "agent",
-    label: "Agent Work 模型",
-    help: "做什么：执行 Main Loop 与 Proactive Loop 的长程工作任务（多步工具调用）。适合：工具调用稳定、长程任务能力强的模型。未启用分流时，Agent 模式全部使用此模型。",
+    label: "models:routes.agent.label",
+    help: "models:routes.agent.help",
   },
   {
     key: "agent_chat",
-    label: "Agent Chat 模型",
-    help: "做什么：Agent 模式下日常的询问与对话。适合：世界知识丰富、适合情感陪伴的模型（例如 Gemini、Grok）。",
+    label: "models:routes.agent_chat.label",
+    help: "models:routes.agent_chat.help",
   },
   {
     key: "router",
-    label: "工作/对话分流模型",
-    help: "做什么：Agent 模式下新消息进入时判断属于 Work 还是 Chat。适合：Jev 等判断模型，或 RPS 高的小模型。",
+    label: "models:routes.router.label",
+    help: "models:routes.router.help",
   },
   {
     key: "light",
-    label: "主动事件分诊与摘要模型",
-    help: "做什么：为外部事件评估重要性；每轮短期记忆摘要和上下文压缩也使用此路由，自动审批路由留空时同样使用。适合：便宜快速的模型；可把 Jev 放在最前面做分诊，但摘要等需要生成文本，请再添加一个文本模型。",
+    label: "models:routes.light.label",
+    help: "models:routes.light.help",
   },
   {
     key: "memory",
-    label: "记忆模型",
-    help: "做什么：后台从私聊和外部事件中抽取人物、事实、事件，判断证据是否支持、是否同一人、新旧事实关系。不直接回复主人，不阻塞对话。适合：中文理解好、能稳定输出 JSON、价格适中的文本模型（抽错会长期留在记忆里，准确比快重要）；Jev 等判断模型可放在文本模型之前，失败时自动改用文本模型。留空时使用分诊与摘要模型。",
+    label: "models:routes.memory.label",
+    help: "models:routes.memory.help",
   },
   {
     key: "approval",
-    label: "工具自动审批模型",
-    help: "做什么：权限为“模型自动审批”的工具调用前，独立审查工具、完整参数与用户请求，决定批准或拒绝。不调用工具。适合：判断严谨、能稳定输出 JSON 的文本模型；Jev 等判断模型可放在文本模型之前，只有把握足够时直接采用，否则改用后面的文本模型。全部失败、超时或返回无效时拒绝执行。留空时使用分诊与摘要模型。",
+    label: "models:routes.approval.label",
+    help: "models:routes.approval.help",
   },
   {
     key: "vision",
-    label: "图像转述模型",
-    help: "做什么：主模型不支持图像输入时，把上下文中的图片描述成文字，结果按图片缓存。适合：便宜、看图准确、能转录图中文字的多模态模型。只能选择模态包含图像的模型。",
+    label: "models:routes.vision.label",
+    help: "models:routes.vision.help",
   },
   {
     key: "meme",
-    label: "表情转述与分类模型",
-    help: "做什么：表情管理器为收录的表情包写简短文字描述（用于检索，也给看不到图的模型看），并判断表情是否贴合人设、属于哪个分类。适合：便宜快速的多模态轻量模型；Jev 等判断模型可放在前面负责人设与分类判断，转述仍由后面的多模态模型完成。文本模型只能选择模态包含图像的模型。",
+    label: "models:routes.meme.label",
+    help: "models:routes.meme.help",
   },
   {
     key: "embedding",
-    label: "Embedding 模型",
-    help: "做什么：为记忆条目和查询计算向量，用于语义检索。适合：支持中文的 Embedding 模型。只使用第一个可用模型；更换后后台全量重算，期间只用关键词检索。留空时记忆检索只用名称链接和关键词。",
+    label: "models:routes.embedding.label",
+    help: "models:routes.embedding.help",
   },
 ];
 
@@ -113,7 +114,7 @@ const CATEGORIES: {
 }[] = [
   {
     key: "text",
-    label: "语言模型",
+    label: "models:categories.text",
     routes: [
       "chat",
       "agent",
@@ -129,7 +130,7 @@ const CATEGORIES: {
   },
   {
     key: "decision",
-    label: "决策模型（Systemone）",
+    label: "models:categories.decision",
     routes: DECISION_ROUTES,
     protocols: ["systemone"],
   },
@@ -141,11 +142,9 @@ const CATEGORIES: {
   },
 ];
 const INTRO: Record<Category, string> = {
-  text: "生成文本、调用工具的模型。",
-  decision:
-    "Jev 等判断模型（systemone 协议）只做分类和打分，不生成文本，只能用于分流、分诊、记忆、自动审批和表情分类路由；判断失败时改用同一路由里的文本模型。",
-  embedding:
-    "为长期记忆计算向量的模型，支持 OpenAI 兼容 /embeddings 与 Gemini 接口；可以复用语言模型的提供商。",
+  text: "models:intro.text",
+  decision: "models:intro.decision",
+  embedding: "models:intro.embedding",
 };
 
 function modelFits(model: ModelConfig, category: Category) {
@@ -329,10 +328,13 @@ export function ModelsPage({
     }
     const found = rows.find((row) => row.id === model.model);
     if (!found)
-      throw new Error(`提供商的模型列表中没有 ${configuredModelName(model)}`);
+      throw new Error(
+        i18n.t("models:pricing.notListed", {
+          model: configuredModelName(model),
+        }),
+      );
     const price = found.pricing;
-    if (!price)
-      throw new Error("提供商没有公开此模型的单价，请按官网价格手动填写");
+    if (!price) throw new Error(i18n.t("models:pricing.notPublished"));
     const current = latest.current;
     setConfig({
       ...current,
@@ -340,12 +342,21 @@ export function ModelsPage({
         item.id === model.id ? { ...item, ...price } : item,
       ),
     });
-    return `输入 ${price.price_input} / 缓存 ${price.price_cached} / 输出 ${price.price_output} ${price.currency} 每百万 tokens`;
+    return i18n.t("models:pricing.summary", {
+      input: price.price_input,
+      cached: price.price_cached,
+      output: price.price_output,
+      currency: price.currency,
+    });
   }
 
   return (
     <>
-      <div className="range-tabs model-tabs" role="group" aria-label="模型类型">
+      <div
+        className="range-tabs model-tabs"
+        role="group"
+        aria-label={i18n.t("models:categoryGroup")}
+      >
         {CATEGORIES.map(({ key, label }) => (
           <button
             type="button"
@@ -358,15 +369,18 @@ export function ModelsPage({
               setQuery("");
             }}
           >
-            {label}
+            {tx(label)}
           </button>
         ))}
       </div>
-      <p className="muted model-intro">{INTRO[category]}</p>
+      <p className="muted model-intro">{tx(INTRO[category])}</p>
       <div className="config-workspace">
-        <section className="config-sidebar" aria-label="提供商列表">
+        <section
+          className="config-sidebar"
+          aria-label={i18n.t("models:providerList")}
+        >
           <div className="panel-head">
-            <h2>提供商</h2>
+            <h2>{i18n.t("models:providers")}</h2>
             <ProviderPresetMenu
               onSelect={(preset) => {
                 const created = createProvider(config.providers, preset);
@@ -401,7 +415,7 @@ export function ModelsPage({
             >
               <span className={"dot " + (item.enabled ? "on" : "")} />
               <span>
-                <strong>{item.id || "未命名"}</strong>
+                <strong>{item.id || i18n.t("models:unnamed")}</strong>
                 <small>{item.base_url}</small>
               </span>
             </button>
@@ -409,8 +423,8 @@ export function ModelsPage({
           {visible.length === 0 && (
             <p className="muted sidebar-hint">
               {category === "decision"
-                ? "添加 systemone 协议的提供商（如 TypeSafe）。"
-                : "添加提供商，连接你的第一个模型。"}
+                ? i18n.t("models:emptyDecision")
+                : i18n.t("models:emptyText")}
             </p>
           )}
           <button
@@ -421,31 +435,35 @@ export function ModelsPage({
             onClick={() => setTab("routes")}
           >
             <span>
-              <strong>模型路由</strong>
-              <small>用途说明与备用顺序</small>
+              <strong>{i18n.t("models:routeList.title")}</strong>
+              <small>{i18n.t("models:routeList.subtitle")}</small>
             </span>
           </button>
         </section>
         <section className="config-editor">
           {tab === "routes" ? (
             <>
-              <h2>模型路由</h2>
+              <h2>{i18n.t("models:routeList.title")}</h2>
               <p className="muted">
-                每条路由从上到下依次尝试；同一条路由在各标签页中是同一份配置。
+                {i18n.t("models:routeList.intro")}
                 {category === "text" &&
                   !perSession &&
-                  "添加首个模型时，会自动设为 Chat、Agent Work 和分诊路由的默认模型。"}
+                  i18n.t("models:routeList.firstModel")}
               </p>
               {category !== "embedding" && (
                 <div className="field-grid">
                   <label className="field">
-                    <span className="field-name">配置范围</span>
+                    <span className="field-name">{i18n.t("models:scope")}</span>
                     <select
                       value={scope}
                       onChange={(event) => setScope(event.target.value)}
                     >
-                      <option value="global">全局默认</option>
-                      <option value="session">指定 Main 会话</option>
+                      <option value="global">
+                        {i18n.t("models:scopeGlobal")}
+                      </option>
+                      <option value="session">
+                        {i18n.t("models:scopeSession")}
+                      </option>
                     </select>
                   </label>
                   {perSession && (
@@ -473,26 +491,34 @@ export function ModelsPage({
                 </div>
               )}
               {perSession && (
-                <p className="muted">
-                  未设置的路由跟随全局默认。会话内通过 /model
-                  选择的回复模型优先。
-                </p>
+                <p className="muted">{i18n.t("models:sessionHint")}</p>
               )}
               {perSession && chats.error && (
                 <QueryErrorNotice
-                  message={`读取网页会话失败：${chats.error.message}`}
+                  message={i18n.t("models:chatsFailed", {
+                    error: chats.error.message,
+                  })}
                 />
               )}
               {category === "embedding" && (
-                <p className="muted" aria-label="记忆向量状态">
+                <p className="muted" aria-label={i18n.t("models:vectorStatus")}>
                   {status.data ? (
                     status.data.model ? (
-                      `当前向量模型 ${status.data.model.replace(":", "/")}：已索引 ${status.data.indexed} 条，待计算 ${status.data.pending} 条`
+                      i18n.t("models:vectors.indexed", {
+                        model: status.data.model.replace(":", "/"),
+                        indexed: status.data.indexed,
+                        pending: status.data.pending,
+                      })
                     ) : (
-                      `未配置 Embedding：${status.data.pending} 条记忆只用名称链接和关键词检索`
+                      i18n.t("models:vectors.none", {
+                        count: status.data.pending,
+                      })
                     )
                   ) : (
-                    <LoadingBar compact label="正在读取记忆向量状态…" />
+                    <LoadingBar
+                      compact
+                      label={i18n.t("models:vectorsLoading")}
+                    />
                   )}
                 </p>
               )}
@@ -500,15 +526,14 @@ export function ModelsPage({
                 <div className="field field-toggle route-split">
                   <div>
                     <span className="field-name">
-                      启用 Agent Work/Chat 分流
+                      {i18n.t("models:split.label")}
                     </span>
                     <small className="field-help">
-                      开启后由分流模型判断每条新消息属于 Work 还是 Chat；关闭时
-                      Agent 模式统一使用 Agent Work 模型。
+                      {i18n.t("models:split.help")}
                     </small>
                   </div>
                   <input
-                    aria-label="启用 Agent Work/Chat 分流"
+                    aria-label={i18n.t("models:split.label")}
                     type="checkbox"
                     checked={Boolean(config.agent_split)}
                     onChange={(event) =>
@@ -523,14 +548,15 @@ export function ModelsPage({
               {category === "text" && !perSession && (
                 <div className="field field-toggle route-split">
                   <div>
-                    <span className="field-name">Chat 转 Work 判断</span>
+                    <span className="field-name">
+                      {i18n.t("models:handoff.label")}
+                    </span>
                     <small className="field-help">
-                      私聊和网页对话分到 Agent Chat 后，只带可见对话与摘要。
-                      Chat 判断需要执行任务或核查细节时，本轮转给 Agent Work。
+                      {i18n.t("models:handoff.help")}
                     </small>
                   </div>
                   <input
-                    aria-label="Chat 转 Work 判断"
+                    aria-label={i18n.t("models:handoff.label")}
                     type="checkbox"
                     disabled={!config.agent_split}
                     checked={Boolean(config.agent_chat_handoff)}
@@ -563,14 +589,17 @@ export function ModelsPage({
                       className={"route-block" + (inactive ? " inactive" : "")}
                       key={key}
                     >
-                      <h3>{label}</h3>
-                      {help && <p className="muted route-help">{help}</p>}
+                      <h3>{tx(label)}</h3>
+                      {help && <p className="muted route-help">{tx(help)}</p>}
                       {perSession && !route.length && (
                         <p className="muted route-help">
-                          {usesLight ? "使用分诊与摘要路由" : "跟随全局默认"} ·{" "}
+                          {usesLight
+                            ? i18n.t("models:inherit.light")
+                            : i18n.t("models:inherit.global")}{" "}
+                          ·{" "}
                           {inherited
                             .map((id) => modelNameById(config.models, id))
-                            .join(" → ") || "未配置"}
+                            .join(" → ") || i18n.t("models:notConfigured")}
                         </p>
                       )}
                       {route.map((id, position) => (
@@ -580,9 +609,9 @@ export function ModelsPage({
                           </span>
                           <button
                             type="button"
-                            aria-label={
-                              "上移 " + modelNameById(config.models, id)
-                            }
+                            aria-label={i18n.t("models:moveUpLabel", {
+                              model: modelNameById(config.models, id),
+                            })}
                             disabled={position === 0}
                             onClick={() => {
                               const next = [...route];
@@ -593,13 +622,13 @@ export function ModelsPage({
                               updateRoute(key, next);
                             }}
                           >
-                            上移
+                            {i18n.t("models:moveUp")}
                           </button>
                           <button
                             type="button"
-                            aria-label={
-                              "移除路由 " + modelNameById(config.models, id)
-                            }
+                            aria-label={i18n.t("models:removeFromRoute", {
+                              model: modelNameById(config.models, id),
+                            })}
                             onClick={() =>
                               updateRoute(
                                 key,
@@ -612,7 +641,7 @@ export function ModelsPage({
                         </div>
                       ))}
                       <select
-                        aria-label={"添加 " + key + " 路由模型"}
+                        aria-label={i18n.t("models:addToRoute", { route: key })}
                         value=""
                         onChange={(event) => {
                           if (!event.target.value) return;
@@ -622,8 +651,8 @@ export function ModelsPage({
                         <option value="">
                           ＋{" "}
                           {perSession && !route.length
-                            ? "添加会话模型"
-                            : "添加模型"}
+                            ? i18n.t("models:addSessionModel")
+                            : i18n.t("models:addModel")}
                         </option>
                         <ModelOptions
                           models={config.models.filter(
@@ -651,7 +680,7 @@ export function ModelsPage({
             <>
               <div className="panel-head">
                 <div>
-                  <h2>{provider.id || "未命名提供商"}</h2>
+                  <h2>{provider.id || i18n.t("models:unnamedProvider")}</h2>
                   <p className="muted">
                     {subscription ? "OpenAI Subscription" : provider.protocol}
                   </p>
@@ -659,7 +688,7 @@ export function ModelsPage({
                 <button
                   type="button"
                   className="danger"
-                  aria-label="移除提供商"
+                  aria-label={i18n.t("models:removeProvider")}
                   onClick={() => {
                     const ids = config.models
                       .filter((model) => model.provider === provider.id)
@@ -679,7 +708,7 @@ export function ModelsPage({
                   }}
                 >
                   <Trash2 size={16} />
-                  移除
+                  {i18n.t("models:remove")}
                 </button>
               </div>
               {subscription && (
@@ -724,7 +753,7 @@ export function ModelsPage({
               </div>
               <section className="model-section">
                 <div className="panel-head">
-                  <h3>模型</h3>
+                  <h3>{i18n.t("models:modelsTitle")}</h3>
                   <div className="inline">
                     <button
                       type="button"
@@ -735,38 +764,40 @@ export function ModelsPage({
                           try {
                             const rows = await client.discoverModels(provider);
                             setRemote({ source, rows });
-                            return rows.length + " 个模型";
+                            return i18n.t("models:modelCount", {
+                              count: rows.length,
+                            });
                           } finally {
                             setFetching(false);
                           }
-                        }, "已获取模型列表");
+                        }, i18n.t("models:fetched"));
                       }}
                     >
                       <Download size={15} />
                       {fetching ? (
-                        <LoadingBar compact label="获取中…" />
+                        <LoadingBar compact label={i18n.t("models:fetching")} />
                       ) : (
-                        "获取提供商模型"
+                        i18n.t("models:fetchModels")
                       )}
                     </button>
                     <button type="button" onClick={() => addModel()}>
                       <Plus size={15} />
-                      手动添加
+                      {i18n.t("models:addManually")}
                     </button>
                   </div>
                 </div>
                 <p className="muted">
                   {subscription
-                    ? "连接账号后可获取套餐可用的模型。点击右侧 ＋ 添加，再保存配置。"
-                    : "使用当前填写的地址和密钥获取，无需先保存。点击右侧 ＋ 添加，再保存配置。"}
+                    ? i18n.t("models:subscriptionHint")
+                    : i18n.t("models:fetchHint")}
                 </p>
                 {results && (
                   <div className="remote-models">
                     <label className="inline">
                       <Search size={16} aria-hidden="true" />
                       <input
-                        aria-label="搜索远程模型"
-                        placeholder="搜索模型名称"
+                        aria-label={i18n.t("models:searchRemote")}
+                        placeholder={i18n.t("models:searchPlaceholder")}
                         value={query}
                         onChange={(event) => setQuery(event.target.value)}
                       />
@@ -793,15 +824,19 @@ export function ModelsPage({
                                 <small>
                                   {row.name !== row.id ? row.name : ""}
                                   {row.pricing &&
-                                    `${row.name !== row.id ? " · " : ""}$${row.pricing.price_input} / $${row.pricing.price_output} 每百万 tokens`}
+                                    i18n.t("models:remotePrice", {
+                                      sep: row.name !== row.id ? " · " : "",
+                                      input: row.pricing.price_input,
+                                      output: row.pricing.price_output,
+                                    })}
                                 </small>
                               </div>
                               <button
                                 type="button"
                                 disabled={added}
-                                aria-label={
-                                  "添加模型 " + modelName(provider.id, row.id)
-                                }
+                                aria-label={i18n.t("models:addModelLabel", {
+                                  model: modelName(provider.id, row.id),
+                                })}
                                 onClick={() => addModel(row)}
                               >
                                 {added ? (
@@ -814,9 +849,7 @@ export function ModelsPage({
                           );
                         })}
                       {results.length === 0 && (
-                        <p className="muted">
-                          提供商没有返回可用模型，可手动添加。
-                        </p>
+                        <p className="muted">{i18n.t("models:noRemote")}</p>
                       )}
                     </div>
                   </div>
@@ -829,7 +862,9 @@ export function ModelsPage({
                         <h3>{configuredModelName(model)}</h3>
                         <button
                           type="button"
-                          aria-label={"删除模型 " + configuredModelName(model)}
+                          aria-label={i18n.t("models:deleteModelLabel", {
+                            model: configuredModelName(model),
+                          })}
                           onClick={() =>
                             setConfig({
                               ...config,
@@ -867,15 +902,21 @@ export function ModelsPage({
                                 subscription && spec.key === "max_output"
                                   ? {
                                       ...spec,
-                                      label: "预留输出 tokens",
-                                      help: "用于本地上下文估算。实际输出上限由 ChatGPT 套餐接口决定。",
+                                      label: i18n.t(
+                                        "models:subscriptionOutput.label",
+                                      ),
+                                      help: i18n.t(
+                                        "models:subscriptionOutput.help",
+                                      ),
                                     }
                                   : subscription && spec.key === "extra_body"
                                     ? {
                                         ...spec,
                                         placeholder:
                                           '{"reasoning":{"effort":"medium"}}',
-                                        help: "填写套餐 Responses 接口支持的附加参数。请求始终使用流式响应，且 store 为 false。",
+                                        help: i18n.t(
+                                          "models:subscriptionExtra.help",
+                                        ),
                                       }
                                     : spec
                               }
@@ -905,14 +946,17 @@ export function ModelsPage({
                                 } finally {
                                   setPricing(null);
                                 }
-                              }, "已从提供商获取单价");
+                              }, i18n.t("models:pricingFetched"));
                             }}
                           >
                             <BadgeDollarSign size={15} aria-hidden="true" />
                             {pricing === position ? (
-                              <LoadingBar compact label="获取中…" />
+                              <LoadingBar
+                                compact
+                                label={i18n.t("models:fetching")}
+                              />
                             ) : (
-                              "从提供商获取单价"
+                              i18n.t("models:fetchPricing")
                             )}
                           </button>
                         )}
@@ -923,7 +967,7 @@ export function ModelsPage({
               </section>
             </>
           ) : (
-            <EmptyState text="从左侧添加一个提供商开始配置。" />
+            <EmptyState text={i18n.t("models:emptyProviders")} />
           )}
         </section>
       </div>

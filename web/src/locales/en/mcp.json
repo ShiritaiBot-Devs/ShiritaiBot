@@ -1,0 +1,18 @@
+{
+  "empty": "No MCP servers configured yet.",
+  "readOnly": "Server says read-only",
+  "hidden": "Hidden",
+  "loadFailed": "Couldn't load MCP status: {error}",
+  "statusHint": "MCP tools are registered as mcp_<server>_<tool> and follow each session's tool permissions and approvals. The status reflects the saved settings.",
+  "statusTitle": "Connection status",
+  "reconnect": "Reconnect",
+  "reconnected": "Reconnected. Check the connection status.",
+  "hint": "Add a local stdio process or a remote Streamable HTTP MCP server. After saving, manage its permissions under Tools.",
+  "servers": "MCP servers",
+  "status": {
+    "disabled": "Disabled",
+    "error": "Connection failed",
+    "connecting": "Connecting",
+    "connected": "Connected"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "risk": {
+    "safe": {
+      "label": "Safe",
+      "description": "Read-only queries, searches, and status checks with no side effects"
+    },
+    "normal": {
+      "label": "Normal",
+      "description": "Limited, reversible writes, such as saving memories, creating to-dos, or writing to the knowledge base"
+    },
+    "sensitive": {
+      "label": "Sensitive",
+      "description": "Sending messages or files out, installing Skills, and external MCP tools by default"
+    },
+    "dangerous": {
+      "label": "Dangerous",
+      "description": "High-risk or irreversible actions, such as the shell, subagents, deleting data, or removing group members"
+    }
+  },
+  "permission": {
+    "deny": "Blocked",
+    "manual": "Needs manual approval",
+    "auto": "Model auto-approval",
+    "allow": "No approval needed"
+  },
+  "preset": {
+    "strict": {
+      "label": "Conservative: only Safe tools run without approval; everything else needs manual approval",
+      "shortLabel": "Conservative",
+      "hint": "Safe needs no approval; Normal, Sensitive, and Dangerous need manual approval"
+    },
+    "balanced": {
+      "label": "Balanced: Safe and Normal need no approval, Sensitive is auto-approved, Dangerous is manual",
+      "shortLabel": "Balanced",
+      "hint": "Safe and Normal need no approval; a model auto-approves Sensitive; Dangerous needs manual approval"
+    },
+    "autonomous": {
+      "label": "Autonomous: Safe and Normal need no approval; Sensitive and Dangerous are auto-approved",
+      "shortLabel": "Autonomous",
+      "hint": "Safe and Normal need no approval; a model auto-approves Sensitive and Dangerous"
+    },
+    "full_access": {
+      "label": "Full access: no approval at any level",
+      "shortLabel": "Full access",
+      "hint": "Tools at every risk level run without approval"
+    }
+  }
+}
