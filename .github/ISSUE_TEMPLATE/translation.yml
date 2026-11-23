@@ -1,0 +1,42 @@
+name: 翻译问题 / Translation issue
+description: 文字缺失、翻译错误或不自然 / Missing, wrong, or awkward text in either language
+title: "[i18n] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ShiritaiBot 支持简体中文（默认）和英文。新增或修改文字的规则见 [docs/I18N.md](https://github.com/ShiritaiBot-Devs/ShiritaiBot/blob/main/docs/I18N.md)。
+        ShiritaiBot supports Simplified Chinese (the default) and English. The rules for adding or changing text are in [docs/I18N.md](https://github.com/ShiritaiBot-Devs/ShiritaiBot/blob/main/docs/I18N.md).
+  - type: dropdown
+    id: language
+    attributes:
+      label: 语言 / Language
+      options:
+        - 英文 / English
+        - 简体中文 / Simplified Chinese
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: 出现位置 / Where
+      options:
+        - WebUI
+        - 机器人回复或指令 / Bot replies or commands
+        - 日志 / Logs
+        - 文档 / Docs
+        - 插件或技能 / Plugin or Skill
+        - 其他 / Other
+    validations:
+      required: true
+  - type: textarea
+    id: text
+    attributes:
+      label: 现在的文字 / Current text
+      description: 原样粘贴，并说明所在页面或指令。也可以附截图。 / Paste it as is and say which page or command shows it. A screenshot helps too.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: 建议的文字 / Suggested text

@@ -17,6 +17,8 @@ Windows PowerShell：
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1
 ```
 
+`install.sh` 的提示语跟随终端语言：`LC_ALL` / `LANG` 为英文时显示英文，其余情况显示中文。`install.ps1` 的提示语为英文。
+
 ## 选项
 
 | 用途 | macOS / Linux | Windows |

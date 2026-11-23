@@ -16,6 +16,8 @@ Windows PowerShell:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1
 ```
 
+`install.sh` messages follow the terminal's language: English when `LC_ALL` / `LANG` is English (for example `en_US.UTF-8`), Chinese otherwise. `install.ps1` messages are in English.
+
 ## Options
 
 | Purpose | macOS / Linux | Windows |
