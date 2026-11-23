@@ -10,7 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { applyInstanceLocale } from "./i18n";
 import { setOwnerTimeZone } from "./lib/utils";
-import { createClient } from "./api/client";
+import { ApiError, createClient } from "./api/client";
 import type { ApiClient } from "./api/client";
 import { AppShell } from "./components/AppShell";
 import { PageTabs } from "./components/PageTabs";
@@ -188,7 +188,8 @@ function ConsoleApp() {
     (client && health.isError ? new Error("无法连接后端服务") : null);
   useEffect(() => {
     if (!queryError || restarting) return;
-    if (queryError.message.includes("管理令牌")) {
+    // By status, not message text: the message follows the interface language.
+    if (queryError instanceof ApiError && queryError.status === 401) {
       sessionStorage.removeItem(TOKEN_KEY);
       setToken(null);
     }
