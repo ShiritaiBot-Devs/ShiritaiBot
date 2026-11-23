@@ -39,6 +39,7 @@ from shiritaibot.api import (
     PublicError,
     brief,
 )
+from shiritaibot.i18n import Text, t
 
 Security = Literal["ssl", "starttls", "none"]
 
@@ -181,7 +182,7 @@ def describe(raw: bytes, max_chars: int) -> dict:
         "message_id": str(message.get("Message-ID", "")),
         "from": str(message.get("From", "")),
         "to": str(message.get("To", "")),
-        "subject": str(message.get("Subject", "")) or "(无主题)",
+        "subject": str(message.get("Subject", "")) or t("emailPlugin.noSubject"),
         "date": str(message.get("Date", "")),
         "snippet": text[:max_chars],
         "attachments": [p.get_filename() for p in message.iter_attachments() if p.get_filename()][
@@ -219,7 +220,7 @@ class EmailPlugin(Plugin):
             fields = ", ".join(
                 ".".join(map(str, e["loc"])) or "time_filter / filter_before" for e in exc.errors()
             )
-            raise PublicError(f"邮件插件配置无效：{fields}") from None
+            raise PublicError("emailPlugin.configInvalid", fields=fields) from None
         self.state_path = self.context.data_dir / "imap_state.json"
         self.started_at = datetime.now(UTC)
         self.lock = asyncio.Lock()
@@ -257,9 +258,9 @@ class EmailPlugin(Plugin):
                         kind="email.received",
                         dedup_key="batch:" + hashlib.sha256(batch.encode()).hexdigest(),
                         title=(
-                            f"新邮件：{mails[0][1]['subject']}"
+                            t("emailPlugin.event.single", subject=mails[0][1]['subject'])
                             if len(mails) == 1
-                            else f"收到 {len(mails)} 封新邮件："
+                            else t("emailPlugin.event.many", count=len(mails))
                             + "、".join(mail["subject"] for _, mail in mails)
                         )[:1000],
                         payload={
@@ -291,12 +292,12 @@ class EmailPlugin(Plugin):
             await asyncio.to_thread(save)
             if mails:
                 self.logger.log(
-                    f"收到 {len(mails)} 封新邮件："
-                    + "、".join(brief(mail["subject"] or "（无主题）", 40) for _, mail in mails[:3])
-                    + (" 等" if len(mails) > 3 else "")
+                    t("emailPlugin.event.many", count=len(mails))
+                    + "、".join(brief(mail["subject"] or t("emailPlugin.noSubject"), 40) for _, mail in mails[:3])
+                    + (t("emailPlugin.andMore") if len(mails) > 3 else "")
                 )
             else:
-                self.logger.debug("收件完成，没有新邮件")
+                self.logger.debug("emailPlugin.log.noNew")
             return len(mails)
 
     def cutoff(self, state: dict | None) -> datetime | None:
@@ -384,13 +385,13 @@ class EmailPlugin(Plugin):
                 await self.sync_once()
             except Exception as exc:
                 # Server replies (e.g. "[AUTHENTICATIONFAILED] ...") carry no credentials.
-                self.logger.warning(f"收件失败（{type(exc).__name__}：{brief(str(exc), 300)}）")
+                self.logger.warning(Text("emailPlugin.log.failed", name=type(exc).__name__, brief=brief(str(exc), 300)))
                 await self.context.emit(
                     ExternalEvent(
                         source="email",
                         kind="email.sync.failed",
                         dedup_key=f"sync:{type(exc).__name__}:{date.today().isoformat()}",
-                        title="邮箱收件失败",
+                        title=t("emailPlugin.event.failed"),
                         payload={"error": type(exc).__name__},
                     )
                 )
@@ -406,9 +407,9 @@ class EmailPlugin(Plugin):
         message["To"] = ", ".join(cfg.notify_to)
         message["Date"] = formatdate(localtime=True)
         message["Message-ID"] = make_msgid(domain=cfg.smtp_host)
-        message.set_content(f"{text}\n\n-- \n来源：{source}\n")
+        message.set_content(t("emailPlugin.footer", text=text, source=source))
         await asyncio.to_thread(self.deliver, message, password)
-        self.logger.log(f"已通过邮件转发通知给 {len(cfg.notify_to)} 个收件人：{headline[:60]}")
+        self.logger.log(Text("emailPlugin.log.forwarded", count=len(cfg.notify_to), value=headline[:60]))
 
     def deliver(self, message: EmailMessage, password: str) -> None:
         cfg = self.settings

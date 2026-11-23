@@ -112,5 +112,37 @@
     },
     "notReady": "QQ 官方机器人尚未配置 App Secret 或连接未就绪",
     "tokenFailed": "QQ 官方机器人访问凭证获取失败（HTTP {status_code}）"
+  },
+  "qr": {
+    "log": {
+      "source": "飞书",
+      "failed": "扫码创建失败（{phase}，{reason}）"
+    },
+    "phase": {
+      "fetching": "获取二维码",
+      "waiting": "等待扫码结果"
+    },
+    "reason": {
+      "platform": "注册平台不匹配",
+      "registration": "飞书返回注册错误",
+      "network": "飞书网络请求失败",
+      "format": "注册结果格式异常",
+      "credentials": "应用凭据校验失败",
+      "other": "注册响应或校验异常"
+    },
+    "cancelled": "扫码会话已取消。",
+    "saved": "此扫码会话已保存。",
+    "denied": "手机端已拒绝创建飞书应用。",
+    "expiredScan": "二维码已过期，请重新扫码。",
+    "expired": "二维码已过期，请重新生成。",
+    "fetchTimeout": "获取二维码超时，请检查网络后重试。",
+    "ended": "扫码会话已结束，请重新获取二维码。",
+    "fetchFailed": "未能获取飞书二维码，请检查网络后重试。",
+    "appName": "ShiritaiBot 飞书应用机器人",
+    "notDone": "扫码会话尚未完成或已过期，请重新扫码。",
+    "tooMany": "有过多未结束的扫码会话，请取消已有会话后再试。",
+    "configFailed": "应用配置未能完成，请在协议连接页检查实例状态。",
+    "saveExpired": "本地保存窗口已过期。若应用已在飞书创建，请用手动配置。",
+    "noCredentials": "未能获取飞书应用凭据。若已在手机上创建，请在飞书开放平台查看 App ID 和 App Secret，再手动配置。"
   }
 }

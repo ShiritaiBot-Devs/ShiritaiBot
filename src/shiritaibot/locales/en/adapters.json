@@ -112,5 +112,37 @@
     },
     "notReady": "The official QQ bot has no App Secret yet, or the connection isn't ready",
     "tokenFailed": "Couldn't get the official QQ bot's access token (HTTP {status_code})"
+  },
+  "qr": {
+    "log": {
+      "source": "Feishu",
+      "failed": "QR creation failed ({phase}, {reason})"
+    },
+    "phase": {
+      "fetching": "getting the QR code",
+      "waiting": "waiting for the scan result"
+    },
+    "reason": {
+      "platform": "Registration platform mismatch",
+      "registration": "Feishu returned a registration error",
+      "network": "Feishu network request failed",
+      "format": "Unexpected registration result format",
+      "credentials": "App credential check failed",
+      "other": "Registration response or check error"
+    },
+    "cancelled": "QR session cancelled.",
+    "saved": "This QR session was saved.",
+    "denied": "Creating the Feishu app was declined on the phone.",
+    "expiredScan": "The QR code expired. Scan again.",
+    "expired": "The QR code expired. Generate a new one.",
+    "fetchTimeout": "Getting the QR code timed out. Check the network and try again.",
+    "ended": "The QR session ended. Get a new QR code.",
+    "fetchFailed": "Couldn't get the Feishu QR code. Check the network and try again.",
+    "appName": "ShiritaiBot Feishu app bot",
+    "notDone": "The QR session isn't finished or has expired. Scan again.",
+    "tooMany": "Too many unfinished QR sessions. Cancel an existing one and try again.",
+    "configFailed": "The app setup didn't finish. Check the instance's status on the Connections page.",
+    "saveExpired": "The local save window expired. If the app was created in Feishu, configure it by hand.",
+    "noCredentials": "Couldn't get the Feishu app credentials. If you already created it on your phone, look up the App ID and App Secret on the Feishu Open Platform and configure it by hand."
   }
 }

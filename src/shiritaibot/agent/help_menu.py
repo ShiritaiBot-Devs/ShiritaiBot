@@ -10,6 +10,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from shiritaibot.i18n import t
+
 type HelpSection = tuple[str, list[tuple[str, str]]]
 WRAP_TOKENS = re.compile(r"[A-Za-z0-9_./:-]+|.")
 BUNDLED_CJK_FONT = Path(__file__).parent / "fonts" / "NotoSansSC-Regular.otf"
@@ -113,7 +115,7 @@ def render_help_menu(name: str, sections: list[HelpSection], style: str) -> byte
     draw = ImageDraw.Draw(image)
     x, right = margin + 28, width - margin
     draw.rounded_rectangle((margin, margin, right, margin + header_height), 30, fill=theme.header)
-    draw.text((x, margin + 26), "命令帮助", font=title_font, fill=theme.title, anchor="lt")
+    draw.text((x, margin + 26), t("commands.help.imageTitle"), font=title_font, fill=theme.title, anchor="lt")
     draw.rounded_rectangle((right - 128, margin + 31, right - 28, margin + 77), 23, fill=theme.card)
     draw.text((right - 78, margin + 54), "/help", font=body_font, fill=theme.command, anchor="mm")
     for index, line in enumerate(name_lines):

@@ -19,7 +19,7 @@ from shiritaibot.config import PluginConfig
 from shiritaibot.core import PublicError, uid
 from shiritaibot.core.logs import get_logger
 from shiritaibot.dependencies import RuntimeEnvironment
-from shiritaibot.i18n import Text, t
+from shiritaibot.i18n import Text, join_list, t
 from shiritaibot.plugin_api import PluginContext
 
 from .hooks import HOOK_TIMEOUT, Handler, HookBus, collect
@@ -383,7 +383,7 @@ class PluginManager:
                 fields = sorted(
                     {".".join(map(str, error.absolute_path)) or "settings" for error in invalid}
                 )
-                raise PublicError(t("plugins.settingsInvalid") + "、".join(fields))
+                raise PublicError(t("plugins.settingsInvalid") + join_list(fields))
             directory = Path(metadata["path"])
             module_name = f"shiritaibot_plugin_{key}_{uid()}"
 
@@ -426,6 +426,7 @@ class PluginManager:
                 context._resolve_interaction = self.resolve_interaction
                 context.get_event = self.get_event
                 context.workspaces = self.home / "workspaces"
+                context.directory = directory
                 if isinstance(context, Context):
                     plugin = self._instantiate(module, context)
                     handlers = collect(key, plugin, self.hooks.counter)
@@ -435,7 +436,7 @@ class PluginManager:
                     await plugin.initialize()
                     clashes = self.hooks.command_conflicts(key, handlers)
                     if clashes:
-                        raise PublicError(t("plugins.commandConflict") + "、".join(clashes))
+                        raise PublicError(t("plugins.commandConflict") + join_list(clashes))
                 else:
                     plugin = module.Entry(context)
                     await plugin.start()

@@ -1,26 +1,143 @@
 {
-  "imap_host": { "type": "string", "description": "IMAP 服务器", "default": "" },
-  "imap_port": { "type": "int", "description": "IMAP 端口", "minimum": 1, "maximum": 65535, "default": 993 },
+  "imap_host": {
+    "type": "string",
+    "description": {
+      "zh-CN": "IMAP 服务器",
+      "en": "IMAP server"
+    },
+    "default": ""
+  },
+  "imap_port": {
+    "type": "int",
+    "description": {
+      "zh-CN": "IMAP 端口",
+      "en": "IMAP port"
+    },
+    "minimum": 1,
+    "maximum": 65535,
+    "default": 993
+  },
   "imap_security": {
     "type": "string",
-    "description": "IMAP 加密方式",
-    "options": ["ssl", "starttls", "none"],
-    "labels": ["SSL/TLS", "STARTTLS", "不加密（仅本机）"],
+    "description": {
+      "zh-CN": "IMAP 加密方式",
+      "en": "IMAP encryption"
+    },
+    "options": [
+      "ssl",
+      "starttls",
+      "none"
+    ],
+    "labels": {
+      "zh-CN": [
+        "SSL/TLS",
+        "STARTTLS",
+        "不加密（仅本机）"
+      ],
+      "en": [
+        "SSL/TLS",
+        "STARTTLS",
+        "None (local only)"
+      ]
+    },
     "default": "ssl"
   },
-  "username": { "type": "string", "description": "邮箱账号", "default": "" },
-  "password": { "type": "string", "description": "邮箱密码或授权码", "secret": true, "default": "" },
-  "mailbox": { "type": "string", "description": "收件文件夹", "default": "INBOX" },
-  "poll": { "type": "bool", "description": "自动检查新邮件", "default": true },
-  "poll_seconds": { "type": "int", "description": "轮询间隔（秒）", "minimum": 60, "maximum": 86400, "default": 300 },
-  "max_per_poll": { "type": "int", "description": "每次最多读取邮件数", "slider": { "min": 1, "max": 200, "step": 1 }, "default": 20 },
-  "max_body_chars": { "type": "int", "description": "正文摘要字符上限", "minimum": 200, "maximum": 20000, "default": 2000 },
+  "username": {
+    "type": "string",
+    "description": {
+      "zh-CN": "邮箱账号",
+      "en": "Email account"
+    },
+    "default": ""
+  },
+  "password": {
+    "type": "string",
+    "description": {
+      "zh-CN": "邮箱密码或授权码",
+      "en": "Email password or app password"
+    },
+    "secret": true,
+    "default": ""
+  },
+  "mailbox": {
+    "type": "string",
+    "description": {
+      "zh-CN": "收件文件夹",
+      "en": "Inbox folder"
+    },
+    "default": "INBOX"
+  },
+  "poll": {
+    "type": "bool",
+    "description": {
+      "zh-CN": "自动检查新邮件",
+      "en": "Check for new mail automatically"
+    },
+    "default": true
+  },
+  "poll_seconds": {
+    "type": "int",
+    "description": {
+      "zh-CN": "轮询间隔（秒）",
+      "en": "Polling interval (seconds)"
+    },
+    "minimum": 60,
+    "maximum": 86400,
+    "default": 300
+  },
+  "max_per_poll": {
+    "type": "int",
+    "description": {
+      "zh-CN": "每次最多读取邮件数",
+      "en": "Max messages read per check"
+    },
+    "slider": {
+      "min": 1,
+      "max": 200,
+      "step": 1
+    },
+    "default": 20
+  },
+  "max_body_chars": {
+    "type": "int",
+    "description": {
+      "zh-CN": "正文摘要字符上限",
+      "en": "Body summary character limit"
+    },
+    "minimum": 200,
+    "maximum": 20000,
+    "default": 2000
+  },
   "time_filter": {
     "type": "string",
-    "description": "收件时间过滤",
-    "hint": "按服务器收件时间判断，已处理 UID 不重复读取。",
-    "options": ["startup", "last_poll", "none", "custom"],
-    "labels": ["过滤本次启动前", "过滤上次成功轮询前", "不按时间过滤", "自定义时间"],
+    "description": {
+      "zh-CN": "收件时间过滤",
+      "en": "Filter by received time"
+    },
+    "hint": {
+      "zh-CN": "按服务器收件时间判断，已处理 UID 不重复读取。",
+      "en": "Uses the server's received time; UIDs already handled aren't read again."
+    },
+    "options": [
+      "startup",
+      "last_poll",
+      "none",
+      "custom"
+    ],
+    "labels": {
+      "zh-CN": [
+        "过滤本次启动前",
+        "过滤上次成功轮询前",
+        "不按时间过滤",
+        "自定义时间"
+      ],
+      "en": [
+        "Skip mail from before this start",
+        "Skip mail from before the last successful check",
+        "Don't filter by time",
+        "Custom time"
+      ]
+    },
     "subtitles": [
       "插件启动或重载之前的邮件不处理",
       "首次无记录时使用本次启动时间",
@@ -31,28 +148,112 @@
   },
   "filter_before": {
     "type": "string",
-    "description": "自定义过滤时间",
-    "hint": "仅 custom 模式必填；过滤此时间之前的邮件。请使用带时区的 ISO 8601，例如 2026-10-28T09:00:00+08:00。",
+    "description": {
+      "zh-CN": "自定义过滤时间",
+      "en": "Custom filter time"
+    },
+    "hint": {
+      "zh-CN": "仅 custom 模式必填；过滤此时间之前的邮件。请使用带时区的 ISO 8601，例如 2026-10-28T09:00:00+08:00。",
+      "en": "Required only in custom mode; mail before this time is skipped. Use ISO 8601 with a time zone, such as 2026-10-28T09:00:00+08:00."
+    },
     "format": "date-time",
     "default": ""
   },
-  "smtp_enabled": { "type": "bool", "description": "启用 SMTP 发件", "hint": "通过邮件发送主动通知。需填写 SMTP 服务器和通知收件人。", "default": true },
-  "smtp_host": { "type": "string", "description": "SMTP 服务器（可选）", "default": "" },
-  "smtp_port": { "type": "int", "description": "SMTP 端口", "minimum": 1, "maximum": 65535, "default": 465 },
+  "smtp_enabled": {
+    "type": "bool",
+    "description": {
+      "zh-CN": "启用 SMTP 发件",
+      "en": "Enable SMTP sending"
+    },
+    "hint": {
+      "zh-CN": "通过邮件发送主动通知。需填写 SMTP 服务器和通知收件人。",
+      "en": "Send proactive notifications by email. Needs an SMTP server and notification recipients."
+    },
+    "default": true
+  },
+  "smtp_host": {
+    "type": "string",
+    "description": {
+      "zh-CN": "SMTP 服务器（可选）",
+      "en": "SMTP server (optional)"
+    },
+    "default": ""
+  },
+  "smtp_port": {
+    "type": "int",
+    "description": {
+      "zh-CN": "SMTP 端口",
+      "en": "SMTP port"
+    },
+    "minimum": 1,
+    "maximum": 65535,
+    "default": 465
+  },
   "smtp_security": {
     "type": "string",
-    "description": "SMTP 加密方式",
-    "options": ["ssl", "starttls", "none"],
-    "labels": ["SSL/TLS", "STARTTLS", "不加密（仅本机）"],
+    "description": {
+      "zh-CN": "SMTP 加密方式",
+      "en": "SMTP encryption"
+    },
+    "options": [
+      "ssl",
+      "starttls",
+      "none"
+    ],
+    "labels": {
+      "zh-CN": [
+        "SSL/TLS",
+        "STARTTLS",
+        "不加密（仅本机）"
+      ],
+      "en": [
+        "SSL/TLS",
+        "STARTTLS",
+        "None (local only)"
+      ]
+    },
     "default": "ssl"
   },
-  "sender": { "type": "string", "description": "发件地址", "hint": "留空则使用邮箱账号。", "default": "" },
+  "sender": {
+    "type": "string",
+    "description": {
+      "zh-CN": "发件地址",
+      "en": "Sender address"
+    },
+    "hint": {
+      "zh-CN": "留空则使用邮箱账号。",
+      "en": "Leave empty to use the email account."
+    },
+    "default": ""
+  },
   "notify_to": {
     "type": "list",
-    "description": "通知收件人",
-    "hint": "每行一个邮箱；启用 SMTP 发件并填写服务器后生效。",
+    "description": {
+      "zh-CN": "通知收件人",
+      "en": "Notification recipients"
+    },
+    "hint": {
+      "zh-CN": "每行一个邮箱；启用 SMTP 发件并填写服务器后生效。",
+      "en": "One address per line; takes effect once SMTP sending is on and a server is set."
+    },
     "default": []
   },
-  "subject_prefix": { "type": "string", "description": "邮件主题前缀", "default": "[ShiritaiBot]" },
-  "timeout": { "type": "int", "description": "连接超时（秒）", "minimum": 5, "maximum": 120, "default": 30 }
+  "subject_prefix": {
+    "type": "string",
+    "description": {
+      "zh-CN": "邮件主题前缀",
+      "en": "Subject prefix"
+    },
+    "default": "[ShiritaiBot]"
+  },
+  "timeout": {
+    "type": "int",
+    "description": {
+      "zh-CN": "连接超时（秒）",
+      "en": "Connection timeout (seconds)"
+    },
+    "minimum": 5,
+    "maximum": 120,
+    "default": 30
+  }
 }

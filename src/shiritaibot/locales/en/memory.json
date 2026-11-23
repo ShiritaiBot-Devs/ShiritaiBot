@@ -13,5 +13,33 @@
     "forget": "Forget a memory (archive it so it's no longer searched and won't be learned again automatically). Use only when the owner asks, or confirms it's wrong.",
     "resolve": "Resolve a pending memory conflict (IDs start with c) according to the owner's answer. decision: keep:<ID> keeps one of them, both_valid means both hold, neither means neither holds, same_entity confirms they're the same person or thing and merges them, different_entity confirms they're different. owner_quote must be quoted exactly from the owner's answer this turn. If the owner only replied with a very short confirmation, owner_quote can be that word, quoted as is.",
     "save": "Write or correct long-term memory. kind=entity creates or updates a person or thing (name, aliases, summary; merge combines duplicate entities); entity_kind is required when creating an entity (person/thing) and may be omitted when only updating one. kind=fact records a fact about an entity (states that change are fine, such as school year or job title). kind=event records something that happened or is planned; time must be absolute, converting words like \"yesterday\" using the date in the conversation, and if truly unsure, keep the original wording in time_text. Write content in the third person, without relative time words. participants must be entities already in memory (a name, alias, or e ID); create people who appear in an event for the first time with kind=entity before referring to them, or the write is rejected. evidence must be quoted exactly from this turn's owner message or a tool result; a quote from the owner's message counts as the owner's confirmation. Only record what the owner or the people involved explicitly said, never your own inferences. replaces corrects an existing entry."
+  },
+  "log": {
+    "source": "Memory",
+    "summarized": "Short-term memory created: {brief}",
+    "loopError": "Short-term memory loop failed ({name})",
+    "summaryFailed": "Short-term memory summary failed ({name}); retrying in 60 seconds",
+    "maintenanceSource": "Memory",
+    "maintenanceError": "Memory upkeep failed ({name})",
+    "maintenance": "Memory upkeep: archived {archived} new names not seen for a long time; collected {conflicts} questions to confirm",
+    "vectorsSource": "Memory",
+    "noEmbedding": "Embedding unavailable; this {table} search uses keywords only"
+  },
+  "transcript": {
+    "owner": "Owner",
+    "user": "User"
+  },
+  "summaryInvalid": "Invalid short-term memory summary",
+  "maintenance": {
+    "questions_one": "Memory has {count} question for the owner to confirm",
+    "questions_other": "Memory has {count} questions for the owner to confirm",
+    "howTo": "Ask the owner in passing in a message; after they answer, record it with memory_resolve"
+  },
+  "vectors": {
+    "tables": {
+      "mem": "memory",
+      "meme": "sticker",
+      "kb": "knowledge base"
+    }
   }
 }

@@ -17,7 +17,7 @@ from datetime import date, datetime, time
 from pathlib import Path
 
 from shiritaibot.core import PublicError
-from shiritaibot.i18n import t
+from shiritaibot.i18n import join_list, t
 
 TEXT_FORMATS = frozenset({"txt", "md", "markdown", "rst", "log", "json", "yaml", "yml", "xml"})
 TABLE_TEXT_FORMATS = frozenset({"csv", "tsv"})
@@ -487,7 +487,7 @@ def extract(data: bytes, filename: str) -> tuple[str, list[Section]]:
     """(format, sections) of a file; raises PublicError when nothing usable comes out."""
     name = extension(filename)
     if name not in FORMATS:
-        raise PublicError(t("knowledge.extract.unsupported") + "、".join(sorted(FORMATS)))
+        raise PublicError(t("knowledge.extract.unsupported") + join_list(sorted(FORMATS)))
     try:
         sections = sections_of(data, name)
     except PublicError:

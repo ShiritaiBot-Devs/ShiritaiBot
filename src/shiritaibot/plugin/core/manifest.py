@@ -35,7 +35,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from shiritaibot import __version__
-from shiritaibot.i18n import t
+from shiritaibot.i18n import DEFAULT_LOCALE, is_locale_map, pick, t
 
 TYPES = {
     "string": "string",
@@ -68,6 +68,15 @@ class ManifestError(ValueError):
     pass
 
 
+def localized(target: dict, field: str, value: Any) -> Any:
+    """Plain default text for ``field``; a per-language map (``{"zh-CN": ..., "en": ...}``)
+    is also kept under ``x-l10n`` so the API can show the viewer's language."""
+    if is_locale_map(value):
+        target.setdefault("x-l10n", {})[field] = dict(value)
+        value = pick(value, DEFAULT_LOCALE)
+    return [str(item) for item in value] if isinstance(value, list) else str(value)
+
+
 def convert_field(name: str, spec: Any, path: str = "") -> dict:
     where = f"{path}{name}"
     if not isinstance(spec, dict):
@@ -77,9 +86,9 @@ def convert_field(name: str, spec: Any, path: str = "") -> dict:
         raise ManifestError(t("plugins.manifest.typeUnsupported", where=where, kind=kind))
     result: dict[str, Any] = {"type": TYPES[kind]}
     if spec.get("description"):
-        result["title"] = str(spec["description"])
+        result["title"] = localized(result, "title", spec["description"])
     if spec.get("hint"):
-        result["description"] = str(spec["hint"])
+        result["description"] = localized(result, "description", spec["hint"])
     if spec.get("obvious_hint"):
         result["x-obvious-hint"] = True
     if spec.get("invisible"):
@@ -116,8 +125,9 @@ def convert_field(name: str, spec: Any, path: str = "") -> dict:
             target = result["items"]
         target["enum"] = list(options)
         for key, extension in (("labels", "x-labels"), ("subtitles", "x-subtitles")):
-            if isinstance(spec.get(key), list):
-                result[extension] = [str(item) for item in spec[key]]
+            value = spec.get(key)
+            if isinstance(value, list) or (is_locale_map(value) and isinstance(pick(value), list)):
+                result[extension] = localized(result, extension, value)
     if spec.get("secret"):
         if kind == "string":
             result["writeOnly"] = True
@@ -242,18 +252,22 @@ def read_v2(directory: Path) -> dict:
     conf_path = directory / "_conf_schema.json"
     conf = json.loads(conf_path.read_text(encoding="utf-8")) if conf_path.is_file() else {}
     schema = convert_schema(conf)
-    return {
-        "api": 2,
-        "name": str(meta.get("display_name") or meta.get("name") or directory.name),
-        "description": str(meta.get("desc") or meta.get("short_desc") or ""),
-        "short_description": str(meta.get("short_desc") or ""),
-        "version": str(meta.get("version") or ""),
-        "author": str(meta.get("author") or ""),
-        "repo": str(meta.get("repo") or ""),
-        "support_platforms": [str(item) for item in platforms],
-        "settings_schema": schema,
-        "defaults": schema_defaults(schema),
-    }
+    result: dict[str, Any] = {}
+    result.update(
+        {
+            "api": 2,
+            "name": localized(result, "name", meta.get("display_name") or meta.get("name") or directory.name),
+            "description": localized(result, "description", meta.get("desc") or meta.get("short_desc") or ""),
+            "short_description": localized(result, "short_description", meta.get("short_desc") or ""),
+            "version": str(meta.get("version") or ""),
+            "author": str(meta.get("author") or ""),
+            "repo": str(meta.get("repo") or ""),
+            "support_platforms": [str(item) for item in platforms],
+            "settings_schema": schema,
+            "defaults": schema_defaults(schema),
+        }
+    )
+    return result
 
 
 def read_v1(directory: Path) -> dict:

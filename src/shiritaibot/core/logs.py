@@ -151,11 +151,13 @@ def _tail(path: Path, lines: int, factor: int = 1) -> list[str]:
 class Logger:
     """Component logger. Extra tags render as further ``[...]`` brackets after the source."""
 
-    def __init__(self, source: str, *tags: Any):
+    def __init__(self, source: str | Text, *tags: Any):
+        # The source may be a catalog key or Text; its display name is rendered per record.
         self.source = source
         # Tags and the source may be catalog keys or Text; they are rendered per record.
         self.tags = tuple(tag for tag in tags if tag not in (None, ""))
-        self._logger = logging.getLogger(f"{ROOT}.{source}")
+        name = source.key + "".join(f".{v}" for v in source.params.values()) if isinstance(source, Text) else source
+        self._logger = logging.getLogger(f"{ROOT}.{name}")
 
     def bind(self, *tags: Any) -> Logger:
         """A logger with the same source and additional fixed tags."""
@@ -206,7 +208,7 @@ def _render(value: Any, locale: Locale) -> str:
     return t(value, locale=locale) if isinstance(value, str) else str(value)
 
 
-def get_logger(source: str, *tags: Any) -> Logger:
+def get_logger(source: str | Text, *tags: Any) -> Logger:
     return Logger(source, *tags)
 
 

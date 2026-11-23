@@ -1,38 +1,116 @@
 {
   "url": {
     "type": "string",
-    "description": "公告接口地址",
-    "hint": "必须是 https://；仅本机调试时允许 http://127.0.0.1 或 localhost。",
+    "description": {
+      "zh-CN": "公告接口地址",
+      "en": "Announcement API URL"
+    },
+    "hint": {
+      "zh-CN": "必须是 https://；仅本机调试时允许 http://127.0.0.1 或 localhost。",
+      "en": "Must be https://; http://127.0.0.1 or localhost is allowed only for local debugging."
+    },
     "default": "https://notice.shiritaibot.dev/api"
   },
-  "poll": { "type": "bool", "description": "自动接收公告", "default": true },
+  "poll": {
+    "type": "bool",
+    "description": {
+      "zh-CN": "自动接收公告",
+      "en": "Receive announcements automatically"
+    },
+    "default": true
+  },
   "poll_seconds": {
     "type": "int",
-    "description": "轮询间隔（秒）",
-    "hint": "最短 600 秒。",
+    "description": {
+      "zh-CN": "轮询间隔（秒）",
+      "en": "Polling interval (seconds)"
+    },
+    "hint": {
+      "zh-CN": "最短 600 秒。",
+      "en": "At least 600 seconds."
+    },
     "minimum": 600,
     "maximum": 86400,
     "default": 1200
   },
   "categories": {
     "type": "list",
-    "description": "接收的公告类型",
-    "hint": "未勾选的类型会被跳过，不进入主动性引擎。",
-    "options": ["release", "security", "breaking", "maintenance", "plugin", "general"],
-    "labels": ["版本发布", "安全公告", "不兼容变更 / 迁移指引", "服务维护", "插件动态", "一般公告"],
-    "default": ["release", "security", "breaking", "maintenance", "plugin", "general"]
+    "description": {
+      "zh-CN": "接收的公告类型",
+      "en": "Announcement types to receive"
+    },
+    "hint": {
+      "zh-CN": "未勾选的类型会被跳过，不进入主动性引擎。",
+      "en": "Unchecked types are skipped and don't reach the proactive engine."
+    },
+    "options": [
+      "release",
+      "security",
+      "breaking",
+      "maintenance",
+      "plugin",
+      "general"
+    ],
+    "labels": {
+      "zh-CN": [
+        "版本发布",
+        "安全公告",
+        "不兼容变更 / 迁移指引",
+        "服务维护",
+        "插件动态",
+        "一般公告"
+      ],
+      "en": [
+        "Releases",
+        "Security advisories",
+        "Breaking changes / migration guides",
+        "Service maintenance",
+        "Plugin news",
+        "General announcements"
+      ]
+    },
+    "default": [
+      "release",
+      "security",
+      "breaking",
+      "maintenance",
+      "plugin",
+      "general"
+    ]
   },
   "notify_updates": {
     "type": "bool",
-    "description": "公告被修改时也通知",
+    "description": {
+      "zh-CN": "公告被修改时也通知",
+      "en": "Notify when an announcement is edited too"
+    },
     "default": true
   },
   "min_importance": {
     "type": "int",
-    "description": "最低重要性",
-    "hint": "分诊结果低于此值时提升到此值，保证公告进入 Proactive Loop。critical 级公告始终为 4。",
-    "slider": { "min": 1, "max": 4, "step": 1 },
+    "description": {
+      "zh-CN": "最低重要性",
+      "en": "Minimum importance"
+    },
+    "hint": {
+      "zh-CN": "分诊结果低于此值时提升到此值，保证公告进入 Proactive Loop。critical 级公告始终为 4。",
+      "en": "Triage results below this are raised to it, so announcements reach the Proactive Loop. Critical announcements are always 4."
+    },
+    "slider": {
+      "min": 1,
+      "max": 4,
+      "step": 1
+    },
     "default": 2
   },
-  "timeout": { "type": "int", "description": "请求超时（秒）", "minimum": 5, "maximum": 120, "default": 30 }
+  "timeout": {
+    "type": "int",
+    "description": {
+      "zh-CN": "请求超时（秒）",
+      "en": "Request timeout (seconds)"
+    },
+    "minimum": 5,
+    "maximum": 120,
+    "default": 30
+  }
 }

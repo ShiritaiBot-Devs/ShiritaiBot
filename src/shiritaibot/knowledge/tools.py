@@ -6,7 +6,7 @@ import asyncio
 from pathlib import Path
 
 from shiritaibot.core import PublicError, Tool
-from shiritaibot.i18n import Text, t
+from shiritaibot.i18n import ListParam, Text, t
 from shiritaibot.knowledge.core import REF_PATTERN
 from shiritaibot.knowledge.extract import FORMATS
 from shiritaibot.tools import schema
@@ -17,7 +17,7 @@ DOCUMENT = {
     "pattern": REF_PATTERN,
     "description": "knowledge.tools.param.document",
 }
-FORMAT_NAMES = "、".join(sorted(FORMATS))
+FORMAT_NAMES = ListParam(sorted(FORMATS))
 
 
 def knowledge_tools(app) -> list[Tool]:

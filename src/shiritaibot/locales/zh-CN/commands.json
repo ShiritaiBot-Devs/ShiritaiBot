@@ -57,7 +57,8 @@
   "help": {
     "description": "查看命令帮助",
     "empty": "当前会话没有可显示的命令。",
-    "title": "{assistant_name} 命令帮助\n\n{body}"
+    "title": "{assistant_name} 命令帮助\n\n{body}",
+    "imageTitle": "命令帮助"
   },
   "models": {
     "description": "列出可用模型",

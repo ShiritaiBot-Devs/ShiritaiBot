@@ -57,7 +57,8 @@
   "help": {
     "description": "Show command help",
     "empty": "No commands are available in this session.",
-    "title": "{assistant_name} command help\n\n{body}"
+    "title": "{assistant_name} command help\n\n{body}",
+    "imageTitle": "Command help"
   },
   "models": {
     "description": "List available models",

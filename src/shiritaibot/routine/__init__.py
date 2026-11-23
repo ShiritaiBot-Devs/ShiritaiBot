@@ -10,7 +10,7 @@ from pydantic import AwareDatetime, Field, model_validator
 
 from shiritaibot.core import EVENT_TITLE_LIMIT, ExternalEvent, Model, PublicError, now, uid
 from shiritaibot.core.logs import brief, get_logger
-from shiritaibot.i18n import Text, t
+from shiritaibot.i18n import Text, join_list, t
 
 log = get_logger("routine.log.source")
 
@@ -137,7 +137,7 @@ class RoutineManager:
             row.update(status="scheduled" if next_fire else "open", next_fire=next_fire)
         log.log(
             t("routine.updated", kind=Text(KINDS.get(row['kind'], row['kind'])), brief=brief(row['title'], 60))
-            + "、".join(sorted(changes))
+            + join_list(sorted(changes))
         )
 
     async def delete(self, key: str, *, session: str) -> dict:

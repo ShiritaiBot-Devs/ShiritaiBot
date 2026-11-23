@@ -35,7 +35,7 @@ from shiritaibot.config import (
 )
 from shiritaibot.core import Context, ExternalEvent, Model, PublicError, canonical, logs
 from shiritaibot.core.process import run_process
-from shiritaibot.i18n import Text, normalize, t, use_locale
+from shiritaibot.i18n import Text, localize, normalize, t, use_locale
 from shiritaibot.llm.subscription import LOGIN_SECONDS
 from shiritaibot.llm.subscription import PROTOCOL as SUBSCRIPTION_PROTOCOL
 from shiritaibot.meme.core import MAX_MEME_BYTES
@@ -880,7 +880,7 @@ def create_app(
 
     @api.get("/api/plugins", dependencies=protected)
     async def plugins():
-        return await runtime.plugins.listing()
+        return localize(await runtime.plugins.listing())
 
     @api.post("/api/plugins/reload", dependencies=protected)
     async def reload_plugins():
@@ -919,7 +919,7 @@ def create_app(
                 await runtime.plugins.reload(key)
             except Exception:
                 raise PublicError(runtime.plugins.errors.get(key, t("web.pluginLoadFailed"))) from None
-            return await runtime.plugins.listing()
+            return localize(await runtime.plugins.listing())
 
     @api.get("/api/skills", dependencies=protected)
     async def skills():

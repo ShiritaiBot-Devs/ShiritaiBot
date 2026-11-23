@@ -1,0 +1,16 @@
+{
+  "andMore": " 等",
+  "noSubject": "(无主题)",
+  "event": {
+    "failed": "邮箱收件失败",
+    "many_other": "收到 {count} 封新邮件：",
+    "single": "新邮件：{subject}"
+  },
+  "log": {
+    "noNew": "收件完成，没有新邮件",
+    "failed": "收件失败（{name}：{brief}）",
+    "forwarded": "已通过邮件转发通知给 {count} 个收件人：{value}"
+  },
+  "configInvalid": "邮件插件配置无效：{fields}",
+  "footer": "{text}\n\n-- \n来源：{source}\n"
+}

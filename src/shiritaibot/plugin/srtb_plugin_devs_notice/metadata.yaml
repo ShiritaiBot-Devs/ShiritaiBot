@@ -1,7 +1,13 @@
 name: srtb_plugin_devs_notice
-display_name: ShiritaiBot Devs 公告
-desc: 通过 HTTPS 轮询 ShiritaiBot Devs 的开发公告，按类型筛选后交给主动性引擎；首次读取只建立基线
-short_desc: 接收 ShiritaiBot Devs 开发公告
+display_name:
+  zh-CN: ShiritaiBot Devs 公告
+  en: ShiritaiBot Devs announcements
+desc:
+  zh-CN: 通过 HTTPS 轮询 ShiritaiBot Devs 的开发公告，按类型筛选后交给主动性引擎；首次读取只建立基线
+  en: Polls ShiritaiBot Devs development announcements over HTTPS, filters them by type, and passes them to the proactive engine; the first read only sets a baseline
+short_desc:
+  zh-CN: 接收 ShiritaiBot Devs 开发公告
+  en: Receive ShiritaiBot Devs development announcements
 version: 1.0.0
 author: ShiritaiBot Devs
 repo: https://github.com/XCM42-Orion/ShiritaiBot

@@ -1,0 +1,17 @@
+{
+  "andMore": " and more",
+  "noSubject": "(no subject)",
+  "event": {
+    "failed": "Checking the mailbox failed",
+    "many_one": "{count} new email:",
+    "many_other": "{count} new emails:",
+    "single": "New email: {subject}"
+  },
+  "log": {
+    "noNew": "Mail checked; nothing new",
+    "failed": "Checking mail failed ({name}: {brief})",
+    "forwarded": "Forwarded the notification by email to {count} recipients: {value}"
+  },
+  "configInvalid": "Invalid email plugin settings: {fields}",
+  "footer": "{text}\n\n-- \nSource: {source}\n"
+}

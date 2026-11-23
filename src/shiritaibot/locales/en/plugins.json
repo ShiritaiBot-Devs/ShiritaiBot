@@ -18,7 +18,8 @@
     "sendCancelled": "Plugin {plugin} cancelled a message to {session}",
     "intercepted": "Plugin {plugin} intercepted a message: {brief}",
     "handler": "Plugin {plugin}'s {kind} handler {name} {what}",
-    "command": "{value} ran plugin command {brief} ({plugin})"
+    "command": "{value} ran plugin command {brief} ({plugin})",
+    "pluginSource": "Plugin:{id}"
   },
   "again": "re",
   "missing": "The plugin doesn't exist",

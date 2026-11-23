@@ -307,3 +307,89 @@ def test_web_api_defaults_to_the_instance_language(tmp_path):
         )
         chinese = client.get("/api/session-locales", headers={"X-ShiritaiBot-Locale": "zh-CN"})
         assert chinese.json()["detail"] == "需要 WebUI 管理令牌"
+
+
+def test_logs_use_the_instance_language(caplog):
+    from shiritaibot.core.logs import get_logger
+    from shiritaibot.i18n import set_instance_locale
+
+    log = get_logger("chats.log.source")
+    set_instance_locale("en")
+    with use_locale("zh-CN"), caplog.at_level("INFO", logger="shiritaibot"):
+        # A Chinese chat's /lang never leaks into the log file.
+        log.log(Text("app.log.starting", home="/data"))
+    assert caplog.records[-1].getMessage() == "Starting with data folder /data"
+    assert caplog.records[-1].source == "Activity"
+
+
+def test_tool_descriptions_follow_the_session():
+    from shiritaibot.core import Tool
+
+    async def handler(ctx, args):
+        return None
+
+    tool = Tool(
+        "current_time",
+        "tools.current_time.description",
+        {
+            "type": "object",
+            "properties": {"x": {"type": "string", "description": "tools.qq.param.target"}},
+        },
+        handler,
+        risk="safe",
+    )
+    with use_locale("zh-CN"):
+        spec = tool.spec()["function"]
+        assert spec["description"] == "查询当前时间与时区"
+        assert spec["parameters"]["properties"]["x"]["description"] == "私聊为 QQ 号，群聊为群号"
+    with use_locale("en"):
+        assert tool.spec()["function"]["description"] == "Get the current time and time zone"
+    # Plugin tools may still pass plain text.
+    tool.description = "自定义说明"
+    with use_locale("en"):
+        assert tool.spec()["function"]["description"] == "自定义说明"
+
+
+def test_migrated_prompts_render_like_before():
+    # Chinese prompts moved into prompts/zh.py must send the exact bytes they used to.
+    assert prompt("APPROVAL_REVIEW", "zh-CN").endswith(
+        '仅输出 JSON：{"allow":true或false,"reason":"具体原因"}。'
+    )
+    assert prompt("SYSTEM_NOTE", "zh-CN", note="x") == "[系统备注] x"
+    assert prompt("SYSTEM_NOTE", "en", note="x") == "[System note] x"
+    observe = prompt("GROUP_OBSERVE", "zh-CN", speaker="甲", brief="你好")
+    assert observe.startswith("[群聊观察] 群里刚有人发言，这条没有 @ 你。\n最新一条来自 甲：你好")
+
+
+def test_plugins_translate_their_own_text(tmp_path):
+    from shiritaibot.i18n import localize, plugin_text
+    from shiritaibot.plugin.core.manifest import read_manifest
+
+    (tmp_path / "locales").mkdir()
+    (tmp_path / "locales" / "zh-CN.json").write_text('{"hello": "你好，{name}"}', encoding="utf-8")
+    (tmp_path / "locales" / "en.json").write_text('{"hello": "Hello, {name}"}', encoding="utf-8")
+    with use_locale("en"):
+        assert plugin_text(tmp_path, "hello", name="Sam") == "Hello, Sam"
+        assert plugin_text(tmp_path, "missing") == "missing"
+    with use_locale("zh-CN"):
+        assert plugin_text(tmp_path, "hello", name="小明") == "你好，小明"
+
+    email = read_manifest(ROOT / "src" / "shiritaibot" / "plugin" / "email")
+    # The stored default stays plain Chinese text for validators and older code.
+    assert email["description"].startswith("IMAP 收件")
+    with use_locale("en"):
+        shown = localize(email)
+        assert shown["description"].startswith("Incoming IMAP mail")
+        field = shown["settings_schema"]["properties"]["imap_security"]
+        assert field["title"] == "IMAP encryption"
+        assert field["x-labels"][-1] == "None (local only)"
+        assert "x-l10n" not in field
+
+
+def test_control_words_work_in_english():
+    from shiritaibot.adapters.onebot11 import ALLOW_WORDS, STOP_WORDS, approval_reply
+
+    assert approval_reply("approve")[1].lower() in ALLOW_WORDS
+    assert approval_reply("Deny 0123456789")[2] == "0123456789"
+    assert approval_reply("同意") and not approval_reply("maybe")
+    assert {"stop", "cancel", "停", "取消"} <= STOP_WORDS

@@ -1,0 +1,5 @@
+{
+  "noExecutable": "未配置可执行程序",
+  "executableMissing": "找不到配置的可执行程序",
+  "nativeOnly": "请配置原生可执行程序，或 [node, CLI入口.js]；不运行 shell 包装脚本"
+}

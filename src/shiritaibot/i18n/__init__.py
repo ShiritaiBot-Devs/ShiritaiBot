@@ -16,7 +16,7 @@ import json
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from functools import cache
+from functools import cache, lru_cache
 from pathlib import Path
 from typing import Any, Literal, get_args
 
@@ -124,6 +124,18 @@ def t(key: str | Text, /, *, locale: Locale | None = None, **params: Any) -> str
     return fill(text, **params)
 
 
+def join_list(items: Any) -> str:
+    """Joins items with the active language's list separator (、 or a comma)."""
+    return t("common.separator").join(str(item) for item in items)
+
+
+class ListParam(list):
+    """A list param that joins itself with the separator of the language it renders in."""
+
+    def __format__(self, spec: str) -> str:
+        return format(join_list(self), spec)
+
+
 def fill(template: str, /, **params: Any) -> str:
     """Formats a catalog or prompt template. Templates always go through this, so literal
     braces are written ``{{ }}``; an unknown ``{name}`` is left as it is."""
@@ -169,16 +181,84 @@ class Text:
         return f"Text({self.key!r})"
 
 
+def is_locale_map(value: Any) -> bool:
+    """``{"zh-CN": ..., "en": ...}``: text given per language, as plugin manifests allow."""
+    return (
+        isinstance(value, Mapping)
+        and bool(value)
+        and all(isinstance(key, str) and normalize(key) is not None for key in value)
+    )
+
+
+def pick(value: Any, locale: Locale | None = None) -> Any:
+    """The active language's entry of a locale map (then zh-CN, then the first one);
+    any other value is returned unchanged."""
+    if not is_locale_map(value):
+        return value
+    entries = {normalize(key): item for key, item in value.items()}
+    lang = locale or active_locale()
+    return entries.get(lang, entries.get(DEFAULT_LOCALE, next(iter(entries.values()))))
+
+
 def localize(value: Any) -> Any:
-    """Copy of a tool schema (or any JSON-like value) with ``description`` and ``title``
-    strings translated. Keys become text in the active locale; plain text is unchanged."""
+    """Copy of a tool schema, plugin manifest or other JSON-like value for the active locale:
+    ``description`` / ``title`` keys are translated, locale maps are picked, and fields named
+    in an ``x-l10n`` map are replaced by their per-language text. Plain text is unchanged."""
+    if is_locale_map(value):
+        return localize(pick(value))
     if isinstance(value, Mapping):
+        overrides = value.get("x-l10n") if isinstance(value.get("x-l10n"), Mapping) else {}
         return {
-            key: t(item) if key in ("description", "title") and isinstance(item, str) else localize(item)
+            key: (
+                localize(pick(overrides[key]))
+                if key in overrides
+                else t(item)
+                if key in ("description", "title") and isinstance(item, str)
+                else localize(item)
+            )
             for key, item in value.items()
+            if key != "x-l10n"
         }
     if isinstance(value, list):
         return [localize(item) for item in value]
     if isinstance(value, Text):
         return str(value)
     return value
+
+
+def plugin_catalog(directory: Path, locale: Locale) -> dict[str, str]:
+    """A plugin's own catalog, ``locales/<locale>.json`` next to its ``main.py``."""
+    file = directory / "locales" / f"{locale}.json"
+    try:
+        stamp = file.stat().st_mtime_ns
+    except OSError:
+        return {}
+    return _plugin_catalog(file, stamp)
+
+
+@lru_cache(maxsize=256)
+def _plugin_catalog(file: Path, stamp: int) -> dict[str, str]:
+    result: dict[str, str] = {}
+    data = json.loads(file.read_text(encoding="utf-8"))
+    for key, value in data.items():
+        if isinstance(value, Mapping):
+            _flatten(value, key, result)
+        else:
+            result[key] = str(value)
+    return result
+
+
+def plugin_text(directory: Path | None, key: str, /, **params: Any) -> str:
+    """Like ``t`` but from a plugin's catalog: active locale, then zh-CN, then the key."""
+    if directory is None:
+        return key
+    lang = active_locale()
+    text = None
+    for locale in dict.fromkeys((lang, DEFAULT_LOCALE)):
+        entries = plugin_catalog(directory, locale)
+        if "count" in params:
+            text = entries.get(f"{key}_{_plural(locale, params['count'])}")
+        text = text or entries.get(key)
+        if text is not None:
+            break
+    return key if text is None else fill(text, **params)

@@ -18,7 +18,8 @@
     "sendCancelled": "插件 {plugin} 取消了发往 {session} 的消息",
     "intercepted": "消息被插件 {plugin} 拦截：{brief}",
     "handler": "插件 {plugin} 的 {kind} 处理器 {name} {what}",
-    "command": "{value} 执行插件指令 {brief}（{plugin}）"
+    "command": "{value} 执行插件指令 {brief}（{plugin}）",
+    "pluginSource": "插件:{id}"
   },
   "again": "重新",
   "missing": "插件不存在",

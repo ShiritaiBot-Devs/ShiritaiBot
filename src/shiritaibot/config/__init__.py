@@ -22,7 +22,7 @@ from pydantic import (
 )
 
 from shiritaibot.core import Context, Model, PublicError
-from shiritaibot.i18n import DEFAULT_LOCALE, Locale, set_instance_locale, t
+from shiritaibot.i18n import DEFAULT_LOCALE, Locale, join_list, set_instance_locale, t
 from shiritaibot.prompts import prompt as prompt_text
 from shiritaibot.prompts import zh as zh_prompts
 
@@ -1318,7 +1318,7 @@ class ConfigService:
                 )
                 set_instance_locale(self.value.locale)
             except ValidationError as error:
-                fields = "、".join(
+                fields = join_list(
                     f"{'.'.join(map(str, row['loc']))}（{row['type']}）"
                     for row in error.errors(include_input=False, include_url=False)
                 )
