@@ -32,9 +32,6 @@
     "view": "View the image of a sticker in the library (id from meme_search). Only works for models that accept images; other models get an error, so read the text description from meme_search instead.",
     "save": "Save an image received in this session (the ref in [image ref=...]) to the sticker library. Leave category empty to choose one automatically, and description empty to let the description model write it."
   },
-  "hooker": {
-    "label": "Sticker"
-  },
   "defaultCategories": {
     "happy": "happy, proud, celebrating, laughing out loud",
     "sad": "sad, hurt, crying, heartbroken",

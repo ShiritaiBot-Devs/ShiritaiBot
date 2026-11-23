@@ -10,7 +10,7 @@ from shiritaibot.api.event import MessageEvent
 from shiritaibot.config import AdapterConfig, ConfigService
 from shiritaibot.core import ApprovalPort, Context, PublicError, RuntimePort, now
 from shiritaibot.core.logs import get_logger
-from shiritaibot.i18n import Text, t
+from shiritaibot.i18n import Text, t, use_locale
 
 # Control words work in either language.
 APPROVAL_REPLY = re.compile(r"(同意|拒绝|approve|deny)\s+([a-f0-9]{10})", re.I)  # i18n: ok
@@ -149,14 +149,23 @@ class Feishu:
             except Exception as exc:
                 self.log.warning(Text("adapters.feishu.log.messageFailed", name=type(exc).__name__))
 
+    def session_of(self, message: FeishuInbound) -> str:
+        cfg = self.config
+        if message.chat_type == "group":
+            return f"group:{cfg.id}:{cfg.feishu_binding}/{message.chat_id}"
+        return cfg.owner_session()
+
     async def receive(self, message: FeishuInbound) -> None:
+        # Replies sent before the agent runs (approvals, plugin commands) use the chat's
+        # /lang language, as the agent's own replies do.
+        locale, _ = await self.runtime.session_locale(self.session_of(message))
+        with use_locale(locale):
+            await self._receive(message)
+
+    async def _receive(self, message: FeishuInbound) -> None:
         cfg = self.config
         group = message.chat_type == "group"
-        session = (
-            f"group:{cfg.id}:{cfg.feishu_binding}/{message.chat_id}"
-            if group
-            else cfg.owner_session()
-        )
+        session = self.session_of(message)
         text = message.text.strip()
         prefix = self.wake_prefix(text) if group else ""
         mentioned_command = text.startswith("/") and self.self_id in message.mentions

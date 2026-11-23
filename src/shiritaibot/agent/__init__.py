@@ -35,10 +35,10 @@ from shiritaibot.memory.judge import recall_question
 from shiritaibot.memory.recall import MemoryRecall
 from shiritaibot.proactive import (
     PREPARE_SESSION,
-    REPORT_SPEC,
     REPORT_TOOL,
     LoopResult,
     parse_loop_result,
+    report_spec,
 )
 from shiritaibot.prompts import prompt as prompt_text
 from shiritaibot.store import owner_memory_scope
@@ -839,7 +839,7 @@ class AgentRuntime:
                     tools = [] if ctx.interject else self.registry.specs(ctx)
                     # Proactive turns report their conclusion through an internal tool.
                     if proactive:
-                        tools = [*tools, REPORT_SPEC]
+                        tools = [*tools, report_spec()]
                     if self.skills and any(t["function"]["name"] == "skill_read" for t in tools):
                         system += await self.skills.prompt()
                     # Group chat is supplied per turn and never archived into the session history.

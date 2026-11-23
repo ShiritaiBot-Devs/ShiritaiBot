@@ -38,7 +38,7 @@ from shiritaibot.core import (
 )
 from shiritaibot.core.logs import brief, get_logger
 from shiritaibot.core.text import clean_outbound, clip_image_text
-from shiritaibot.i18n import Text, t
+from shiritaibot.i18n import Text, t, use_locale
 from shiritaibot.meme.inject import MemeInjector
 from shiritaibot.prompts import prompt as prompt_text
 
@@ -344,6 +344,13 @@ class OneBot:
             )
 
 
+def onebot_session(adapter: str, event: dict) -> str:
+    """The session key of a OneBot message event: its group, or the private chat."""
+    if event.get("message_type") == "group":
+        return f"group:{adapter}:{event.get('group_id')}"
+    return f"private:{adapter}:{event.get('user_id', '')}"
+
+
 class AdapterHub:
     def __init__(self, config, vault, store):
         self.config, self.vault, self.store = config, vault, store
@@ -409,6 +416,15 @@ class AdapterHub:
         self.instances.clear()
 
     async def receive_qq_official(self, bot: QQOfficial, incoming: QQMessage) -> None:
+        assert self.runtime is not None
+        # Replies sent before the agent runs (approvals, plugin commands) use the chat's
+        # /lang language, as the agent's own replies do.
+        session = bot.config.session(incoming.target, group=incoming.group)
+        locale, _ = await self.runtime.session_locale(session)
+        with use_locale(locale):
+            await self._receive_qq_official(bot, incoming)
+
+    async def _receive_qq_official(self, bot: QQOfficial, incoming: QQMessage) -> None:
         assert self.runtime is not None and self.permissions is not None
         cfg, settings = bot.config, self.config.value
         group, target, user = incoming.group, incoming.target, incoming.user
@@ -496,6 +512,14 @@ class AdapterHub:
             current_reply.reset(token)
 
     async def receive(self, bot: OneBot, event: dict) -> None:
+        assert self.runtime is not None
+        # Replies sent before the agent runs (approvals, plugin commands) use the chat's
+        # /lang language, as the agent's own replies do.
+        locale, _ = await self.runtime.session_locale(onebot_session(bot.config.id, event))
+        with use_locale(locale):
+            await self._receive(bot, event)
+
+    async def _receive(self, bot: OneBot, event: dict) -> None:
         assert self.runtime is not None and self.permissions is not None
         cfg = bot.config
         if event.get("post_type") == "request":
@@ -521,7 +545,7 @@ class AdapterHub:
         ):
             bot.log.debug("adapters.log.ignoredStranger", speaker)
             return
-        session = f"{'group' if group else 'private'}:{cfg.id}:{target}"
+        session = onebot_session(cfg.id, event)
         parts = segments(event.get("message", []))
         text = "".join(
             str(s.get("data", {}).get("text", "")) for s in parts if s.get("type") == "text"
@@ -540,7 +564,7 @@ class AdapterHub:
         )
         message_id = f"{cfg.id}:{event.get('message_id')}"
         arrival = flow.arrival(session, wake=mentioned or keyword) if flow else None
-        where = t("adapters.where.group", target=target) if group else t("adapters.where.private")
+        where = Text("adapters.where.group", target=target) if group else Text("adapters.where.private")
         # Untriggered group chatter is only context, so it stays at debug level.
         (bot.log.log if not group or mentioned or keyword else bot.log.debug)(
             brief(describe(parts), 200) or t("markers.empty"), where, speaker

@@ -295,17 +295,19 @@ class ImageResolver:
                 if not native:
                     result.append({**message, "content": canonical({"error": t("llm.media.noVision")})})
                     continue
+                notes: dict[str, str] = {}
                 for key in dict.fromkeys(MEME_VIEW.findall(content)):
                     url = await self.meme(key) if key in recent_views else None
                     if url:
-                        note = t("markers.stickerAttached", key=key)
+                        notes[key] = t("markers.stickerAttached", key=key)
                         attached += [
                             {"type": "text", "text": t("markers.stickerViewed", key=key)},
                             image_part(url),
                         ]
                     else:
-                        note = t("markers.stickerDropped", key=key)
-                    content = content.replace(view_marker(key), note)
+                        notes[key] = t("markers.stickerDropped", key=key)
+                # Replace the stored marker in whichever language it was written.
+                content = MEME_VIEW.sub(lambda match: notes[match[1]], content)
                 result.append({**message, "content": content})
                 continue
             if (

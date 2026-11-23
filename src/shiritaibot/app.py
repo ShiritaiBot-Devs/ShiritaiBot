@@ -315,11 +315,11 @@ class Application:
         for route, refs, prefix in routes:
             if route == "test":
                 continue
-            label = prefix + ROUTE_LABELS.get(route, route)
+            label = prefix + t(ROUTE_LABELS.get(route, route))
             if route == "embedding" and not any(m.kind == "embedding" for m in models.values()):
                 continue
             if not refs:
-                warnings.append(t("app.routeEmpty", label=t(label)))
+                warnings.append(t("app.routeEmpty", label=label))
                 continue
             usable = [
                 model
@@ -329,7 +329,7 @@ class Application:
                 and provider_ok.get(cfg_model.provider, False)
             ]
             if not usable:
-                warnings.append(t("app.routeUnavailable", label=t(label)))
+                warnings.append(t("app.routeUnavailable", label=label))
         for provider_id, count in self.llm.failing().items():
             warnings.append(
                 t("app.providerFailing", provider_id=provider_id, count=count)

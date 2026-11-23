@@ -13,6 +13,18 @@ from webbrowser import open as open_browser
 TEXT = {"lang": "zh-CN", "title": "返回 ShiritaiBot", "intro": "复制下面的一次性回调地址，粘贴回 WebUI 的 ChatGPT 授权面板。", "label": "一次性回调地址", "copy": "复制回调地址", "copied": "已复制", "manual": "请使用键盘复制"}  # i18n: ok
 
 
+def script_text(value: str) -> str:
+    """A JavaScript string literal that is safe inside <script>. HTML entities are not
+    decoded there, so html.escape would break the script; escaping <, > and & keeps
+    "</script>" from ending it early."""
+    return (
+        json.dumps(value, ensure_ascii=False)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
+
+
 def main(authorization_url: str) -> None:
     params = parse_qs(urlsplit(authorization_url).query)
     state = params["state"][0]
@@ -66,10 +78,10 @@ document.querySelector("#copy").onclick = async (event) => {{
   const field = document.querySelector("#callback");
   try {{
     await navigator.clipboard.writeText(field.value);
-    event.target.textContent = {escape(json.dumps(TEXT['copied']))};
+    event.target.textContent = {script_text(TEXT['copied'])};
   }} catch {{
     field.select();
-    event.target.textContent = {escape(json.dumps(TEXT['manual']))};
+    event.target.textContent = {script_text(TEXT['manual'])};
   }}
 }};
 </script></html>""".encode("utf-8")

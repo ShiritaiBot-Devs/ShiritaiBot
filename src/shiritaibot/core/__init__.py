@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal, Protocol
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
-from shiritaibot.i18n import Text, localize, t
+from shiritaibot.i18n import Locale, Text, localize, t
 
 if TYPE_CHECKING:
     from shiritaibot.auth.menu import ApprovalMenu
@@ -179,6 +179,8 @@ class Provider(Protocol):
 
 class RuntimePort(Protocol):
     async def submit(self, ctx: Context, text: str) -> str: ...
+
+    async def session_locale(self, session: str) -> tuple[Locale, bool]: ...
 
     async def handoff(self, session: str, text: str, send) -> None: ...
 

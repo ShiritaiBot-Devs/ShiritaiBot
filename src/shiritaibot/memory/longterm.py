@@ -217,17 +217,24 @@ class MemoryManager:
             await self.store.execute(
                 "UPDATE mem_entity SET name=?,updated=? WHERE id=?", (name, stamp, owner[0]["id"])
             )
+        # Names first: the tokenizer keeps known names whole, and the reindex below must
+        # tokenize them the same way searches will.
+        await self.load_aliases()
         await self.migrate_legacy()
         await self.add_stems()
-        await self.load_aliases()
 
     async def add_stems(self) -> None:
         """One time: reindex entries written before English stems were indexed."""
         if await self.store.get("memory_migration", "stems"):
             return
-        refs = [row["id"] for row in await self.rows("SELECT id FROM mem_fts")]
+        # mem_fts.id is UNINDEXED, so deleting by id scans the table; delete by rowid.
+        rowids: dict[str, list[int]] = {}
+        for row in await self.rows("SELECT rowid AS rowid, id FROM mem_fts"):
+            rowids.setdefault(row["id"], []).append(row["rowid"])
+        refs = list(rowids)
         for start in range(0, len(refs), 200):
-            await self.index(refs[start : start + 200])
+            batch = refs[start : start + 200]
+            await self.index(batch, rowids={key: rowids[key] for key in batch})
         await self.store.put("memory_migration", "stems", {"rows": len(refs)})
 
     async def migrate_legacy(self) -> None:
@@ -420,13 +427,19 @@ class MemoryManager:
         ]
         return await self.load(refs)
 
-    async def index(self, refs: list[str]) -> None:
+    async def index(self, refs: list[str], *, rowids: dict[str, list[int]] | None = None) -> None:
+        """Reindex ``refs``. ``rowids`` (their current mem_fts rows) skips a table scan per ref."""
         items = await self.load(refs)
         texts = {key: self.plain(item) for key, item in items.items()}
         tokens = {key: " ".join(await self.tokens(text)) for key, text in texts.items()}
         async with self.tx() as db:
             for key in refs:
-                await db.execute("DELETE FROM mem_fts WHERE id=?", (key,))
+                if rowids is None:
+                    await db.execute("DELETE FROM mem_fts WHERE id=?", (key,))
+                else:
+                    await db.executemany(
+                        "DELETE FROM mem_fts WHERE rowid=?", [(rowid,) for rowid in rowids[key]]
+                    )
                 item = items.get(key)
                 if item and is_live(item):
                     await db.execute(

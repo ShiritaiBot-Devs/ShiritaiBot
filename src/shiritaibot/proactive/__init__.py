@@ -26,7 +26,7 @@ from shiritaibot.core import (
     record_usage_for,
 )
 from shiritaibot.core.logs import brief, get_logger
-from shiritaibot.i18n import Text, t
+from shiritaibot.i18n import Text, TranslatedDict, localize, t
 from shiritaibot.memory.judge import remember_question
 from shiritaibot.prompts import prompt as prompt_text
 
@@ -162,13 +162,21 @@ REPORT_SPEC = {
     },
 }
 
-_LEVELS = ("proactive.importance.0", "proactive.importance.1", "proactive.importance.2", "proactive.importance.3", "proactive.importance.4")
-_SUGGESTIONS = {
+# Catalog keys, translated when read.
+
+
+def report_spec() -> dict:
+    """REPORT_SPEC for the model, with its descriptions in the active language."""
+    return localize(REPORT_SPEC)
+
+
+_LEVELS = TranslatedDict(enumerate(f"proactive.importance.{level}" for level in range(5)))
+_SUGGESTIONS = TranslatedDict({
     "notify": "proactive.decision.notify",
     "digest": "proactive.decision.digest",
     "log": "proactive.decision.log",
     "ignore": "proactive.decision.ignore",
-}
+})
 _HIDDEN_FIELDS = {"id", "dedup_key", "uid", "message_id", "uidvalidity"}
 
 

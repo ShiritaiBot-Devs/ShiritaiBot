@@ -30,9 +30,7 @@ APPLY_LIFETIME = 300
 MAX_SESSIONS = 8
 
 log = get_logger("adapters.qr.log.source")
-RECOVERY_MESSAGE = (
-    "adapters.qr.noCredentials"
-)
+RECOVERY_MESSAGE = "adapters.qr.noCredentials"  # catalog key
 
 
 async def _register_app(**options):
@@ -143,7 +141,7 @@ class FeishuQrRegistration:
             log.warning(Text("adapters.qr.log.failed", phase=phase, reason=reason))
             session.finish(
                 "error",
-                RECOVERY_MESSAGE if waiting else t("adapters.qr.fetchFailed"),
+                t(RECOVERY_MESSAGE if waiting else "adapters.qr.fetchFailed"),
             )
 
         try:

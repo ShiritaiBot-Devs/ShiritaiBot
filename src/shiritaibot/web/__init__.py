@@ -661,8 +661,11 @@ def create_app(
             message_id=body.client_id or "",
             is_owner=True,
         )
-        if await runtime.plugins.hooks.dispatch(event):
-            return {"status": "plugin"}
+        # Plugin replies use the chat's language, not the browser's.
+        locale, _ = await runtime.runtime.session_locale(body.session)
+        with use_locale(locale):
+            if await runtime.plugins.hooks.dispatch(event):
+                return {"status": "plugin"}
         return {
             "status": await runtime.runtime.submit(
                 Context(

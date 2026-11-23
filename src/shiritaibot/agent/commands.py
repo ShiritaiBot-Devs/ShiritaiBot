@@ -366,7 +366,7 @@ async def command(runtime, ctx, text):
                     else t("commands.grants.title")
                     + "\n".join(
                         f"{row.get('scope', '')} · {row['tool']} · "
-                        f"{RISK_LABELS.get(row.get('risk'), row.get('risk', ''))} · "
+                        f"{t(RISK_LABELS.get(row.get('risk'), row.get('risk', '')))} · "
                         f"{datetime.fromtimestamp(row['created']):%Y-%m-%d} — "
                         f"{row.get('reason', '')}"
                         for row in rows

@@ -32,9 +32,6 @@
     "view": "查看表情库中某个表情的图片（id 来自 meme_search）。仅支持图像输入的模型可用，其他模型调用会返回错误，请改看 meme_search 的文字描述。",
     "save": "把当前会话收到的一张图片（[图片 ref=...] 中的 ref）收藏进表情库。category 留空时自动判断分类，description 留空时由表情转述模型描述。"
   },
-  "hooker": {
-    "label": "表情"
-  },
   "defaultCategories": {
     "happy": "开心、得意、庆祝、哈哈大笑",
     "sad": "难过、委屈、哭泣、心碎",

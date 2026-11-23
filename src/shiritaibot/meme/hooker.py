@@ -15,7 +15,7 @@ from collections import OrderedDict
 from shiritaibot.adapters.onebot11 import qq_download_url
 from shiritaibot.core import PublicError
 from shiritaibot.core.logs import brief, describe_session, get_logger
-from shiritaibot.i18n import Text, t
+from shiritaibot.i18n import Text
 from shiritaibot.meme.core import MemeCore, MemeRejected, download, meme_id
 
 log = get_logger("memes.log.hookerSource")
@@ -30,7 +30,8 @@ def sticker_url(part: dict, stickers_only: bool) -> str | None:
         accepted = True
     elif kind == "image":
         sub_type = str(data.get("sub_type", data.get("subType", 0)) or 0)
-        accepted = not stickers_only or sub_type != "0" or t("memes.hooker.label") in str(data.get("summary", ""))
+        # QQ writes the summary ("[动画表情]") in Chinese whatever the bot language.
+        accepted = not stickers_only or sub_type != "0" or "表情" in str(data.get("summary", ""))  # i18n: ok
     else:
         return None
     url = str(data.get("url") or "")

@@ -221,15 +221,17 @@ class SkillManager:
                 available = [f.relative_to(directory).as_posix() for f in tree_files(directory)]
                 raise PublicError("skills.fileMissingIn", path=path, files=', '.join(available))
             data = target.read_bytes()
+            # Report the file actually read (SKILL.en.md, say), so skill_update edits it.
+            shown = target.relative_to(directory).as_posix()
             if b"\0" in data[:4096]:
-                return {"binary": True, "bytes": len(data)}
-            return data.decode("utf-8", errors="replace")
+                return shown, {"binary": True, "bytes": len(data)}
+            return shown, data.decode("utf-8", errors="replace")
 
-        text = await asyncio.to_thread(load)
+        shown, text = await asyncio.to_thread(load)
         if isinstance(text, dict):
             return {
                 "name": name,
-                "path": path,
+                "path": shown,
                 **text,
                 "note": t("skills.binary"),
                 "directory": str(directory),
@@ -237,7 +239,7 @@ class SkillManager:
         end = offset + READ_CHUNK
         return {
             "name": name,
-            "path": rel.as_posix(),
+            "path": shown,
             "directory": str(directory),
             "content": text[offset:end],
             "total_chars": len(text),

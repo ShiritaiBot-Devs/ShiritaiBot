@@ -26,6 +26,8 @@ POOL = 50
 # Below this cosine a semantic hit is noise rather than a weak match.
 VECTOR_FLOOR = 0.3
 EMBED_PAGE = 256
+# Chunks reindexed per transaction by the one-time stem migration.
+STEM_BATCH = 500
 REF_PATTERN = r"^(?:([a-z][a-z0-9_-]{0,63}):)?d([1-9][0-9]*)$"
 DOCUMENT_REF = re.compile(REF_PATTERN)
 CJK_RUN = re.compile(r"[\u3400-\u9fff]{2,}")
@@ -44,6 +46,14 @@ def bigrams(text: str) -> list[str]:
 
 def index_tokens(text: str) -> str:
     return " ".join([*tokenize_sync(text), *bigrams(text)])
+
+
+def chunk_tokens(rows: list[dict]) -> list[tuple[int, str]]:
+    """(chunk id, FTS tokens) for kb_chunk rows joined with their document title."""
+    return [
+        (row["id"], index_tokens(searchable(row["title"], row["label"], row["text"])))
+        for row in rows
+    ]
 
 
 def clean_filename(filename: str) -> str:
@@ -65,31 +75,36 @@ class KnowledgeBase:
         await self.add_stems()
 
     async def add_stems(self) -> None:
-        """One time: reindex chunks written before English stems were indexed."""
+        """One time: reindex chunks written before English stems were indexed.
+
+        Works in batches, so memory stays flat however large the library is. Each batch
+        commits on its own; after an interruption the whole pass runs again, which is safe
+        because rewriting a chunk's row gives the same result."""
         if await self.store.get("knowledge_migration", "stems"):
             return
-        rows = await self.store.query(
-            "SELECT c.id, c.label, c.text, d.title FROM kb_chunk c "
-            "JOIN kb_document d ON d.id=c.document"
-        )
-        tokens = await asyncio.to_thread(
-            lambda: [
-                (row["id"], index_tokens(searchable(row["title"], row["label"], row["text"])))
-                for row in rows
-            ]
-        )
-        async with self.store.lock:
-            db = self.store.db
-            try:
-                await db.executemany(
-                    "DELETE FROM kb_fts WHERE rowid=?", [(key,) for key, _ in tokens]
-                )
-                await db.executemany("INSERT INTO kb_fts(rowid,tokens) VALUES(?,?)", tokens)
-                await db.commit()
-            except BaseException:
-                await db.rollback()
-                raise
-        await self.store.put("knowledge_migration", "stems", {"chunks": len(tokens)})
+        last, total = 0, 0
+        while True:
+            rows = await self.store.query(
+                "SELECT c.id, c.label, c.text, d.title FROM kb_chunk c "
+                "JOIN kb_document d ON d.id=c.document WHERE c.id>? ORDER BY c.id LIMIT ?",
+                (last, STEM_BATCH),
+            )
+            if not rows:
+                break
+            tokens = await asyncio.to_thread(chunk_tokens, rows)
+            async with self.store.lock:
+                db = self.store.db
+                try:
+                    await db.executemany(
+                        "DELETE FROM kb_fts WHERE rowid=?", [(key,) for key, _ in tokens]
+                    )
+                    await db.executemany("INSERT INTO kb_fts(rowid,tokens) VALUES(?,?)", tokens)
+                    await db.commit()
+                except BaseException:
+                    await db.rollback()
+                    raise
+            last, total = rows[-1]["id"], total + len(rows)
+        await self.store.put("knowledge_migration", "stems", {"chunks": total})
 
     def ref(self, key: int) -> str:
         return f"d{key}" if self.library == "default" else f"{self.library}:d{key}"

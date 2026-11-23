@@ -212,10 +212,11 @@ def pick(value: Any, locale: Locale | None = None) -> Any:
 
 def localize(value: Any) -> Any:
     """Copy of a tool schema, plugin manifest or other JSON-like value for the active locale:
-    ``description`` / ``title`` keys are translated, locale maps are picked, and fields named
-    in an ``x-l10n`` map are replaced by their per-language text. Plain text is unchanged."""
-    if is_locale_map(value):
-        return localize(pick(value))
+    ``description`` / ``title`` keys are translated, and fields named in an ``x-l10n`` map
+    are replaced by their per-language text. Plain text is unchanged.
+
+    Locale maps are only read from ``x-l10n``. Any other object is data, even when its keys
+    look like language tags: ``properties: {"en": ..., "zh": ...}`` is a valid schema."""
     if isinstance(value, Mapping):
         overrides = value.get("x-l10n") if isinstance(value.get("x-l10n"), Mapping) else {}
         return {
