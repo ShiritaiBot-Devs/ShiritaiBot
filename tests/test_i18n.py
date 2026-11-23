@@ -393,3 +393,32 @@ def test_control_words_work_in_english():
     assert approval_reply("Deny 0123456789")[2] == "0123456789"
     assert approval_reply("同意") and not approval_reply("maybe")
     assert {"stop", "cancel", "停", "取消"} <= STOP_WORDS
+
+
+def test_english_words_match_their_other_forms():
+    import sqlite3
+
+    from shiritaibot.knowledge.core import index_tokens
+    from shiritaibot.memory.longterm import keywords, stem, tokenize_sync
+
+    assert {stem(w) for w in ("meetings", "meeting", "meet")} == {"meet"}
+    assert stem("running") == "run" and stem("studies") == "study" and stem("boxes") == "box"
+    assert stem("status") == "status" and stem("会议") == "会议"
+    # Chinese tokens are unchanged; English ones gain their stems.
+    assert tokenize_sync("明天开会") == list(__import__("jieba").cut_for_search("明天开会"))
+
+    db = sqlite3.connect(":memory:")
+    db.execute("CREATE VIRTUAL TABLE fts USING fts5(tokens)")
+    db.execute(
+        "INSERT INTO fts(rowid, tokens) VALUES (1, ?)", (index_tokens("Weekly meetings agenda"),)
+    )
+    db.execute("INSERT INTO fts(rowid, tokens) VALUES (2, ?)", (index_tokens("周会议程"),))
+
+    def search(query):
+        words = keywords(tokenize_sync(query))
+        match = " OR ".join('"' + w + '"' for w in words)
+        return [row[0] for row in db.execute("SELECT rowid FROM fts WHERE fts MATCH ?", (match,))]
+
+    assert search("meeting") == [1]
+    assert search("Meet") == [1]
+    assert search("周会") == [2]

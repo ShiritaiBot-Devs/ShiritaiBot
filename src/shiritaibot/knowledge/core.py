@@ -62,6 +62,34 @@ class KnowledgeBase:
 
     async def open(self) -> None:
         await asyncio.to_thread(self.folder.mkdir, parents=True, exist_ok=True)
+        await self.add_stems()
+
+    async def add_stems(self) -> None:
+        """One time: reindex chunks written before English stems were indexed."""
+        if await self.store.get("knowledge_migration", "stems"):
+            return
+        rows = await self.store.query(
+            "SELECT c.id, c.label, c.text, d.title FROM kb_chunk c "
+            "JOIN kb_document d ON d.id=c.document"
+        )
+        tokens = await asyncio.to_thread(
+            lambda: [
+                (row["id"], index_tokens(searchable(row["title"], row["label"], row["text"])))
+                for row in rows
+            ]
+        )
+        async with self.store.lock:
+            db = self.store.db
+            try:
+                await db.executemany(
+                    "DELETE FROM kb_fts WHERE rowid=?", [(key,) for key, _ in tokens]
+                )
+                await db.executemany("INSERT INTO kb_fts(rowid,tokens) VALUES(?,?)", tokens)
+                await db.commit()
+            except BaseException:
+                await db.rollback()
+                raise
+        await self.store.put("knowledge_migration", "stems", {"chunks": len(tokens)})
 
     def ref(self, key: int) -> str:
         return f"d{key}" if self.library == "default" else f"{self.library}:d{key}"

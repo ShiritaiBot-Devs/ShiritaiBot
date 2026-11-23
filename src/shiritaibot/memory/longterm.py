@@ -124,8 +124,44 @@ def keywords(words: list[str]) -> list[str]:
     return list(seen)
 
 
+def stem(word: str) -> str:
+    """A light English stem ("meetings" / "meeting" -> "meet", "studies" -> "study"),
+    conservative on purpose; anything that isn't a plain ASCII word is returned folded."""
+    word = word.casefold()
+    if not (word.isascii() and word.isalpha()):
+        return word
+    while len(word) > 4:
+        for suffix, replacement in (
+            ("ies", "y"),
+            ("ied", "y"),
+            ("ing", ""),
+            ("ed", ""),
+            ("es", ""),
+            ("s", ""),
+        ):
+            if not word.endswith(suffix) or len(word) - len(suffix) < 3:
+                continue
+            if suffix == "s" and word.endswith(("ss", "us", "is")):
+                continue
+            base = word[: -len(suffix)] + replacement
+            if suffix == "es" and not base.endswith(("s", "x", "z", "ch", "sh")):
+                base = word[:-1]  # "notes" -> "note", but "boxes" -> "box"
+            if suffix in ("ing", "ed") and len(base) > 3 and base[-1] == base[-2] and base[-1] not in "lsz":
+                base = base[:-1]  # "running" -> "run", "stopped" -> "stop"
+            break
+        else:
+            return word
+        if base == word:
+            return word
+        word = base
+    return word
+
+
 def tokenize_sync(text: str, tokenizer: jieba.Tokenizer = jieba.dt) -> list[str]:
-    return list(tokenizer.cut_for_search(text))
+    words = list(tokenizer.cut_for_search(text))
+    # English words are indexed and searched with their stems too, so "meetings" finds
+    # "meeting"; Chinese tokens are unchanged.
+    return words + [base for word in words if (base := stem(word)) != word.casefold()]
 
 
 async def tokenize(text: str) -> list[str]:
@@ -182,7 +218,17 @@ class MemoryManager:
                 "UPDATE mem_entity SET name=?,updated=? WHERE id=?", (name, stamp, owner[0]["id"])
             )
         await self.migrate_legacy()
+        await self.add_stems()
         await self.load_aliases()
+
+    async def add_stems(self) -> None:
+        """One time: reindex entries written before English stems were indexed."""
+        if await self.store.get("memory_migration", "stems"):
+            return
+        refs = [row["id"] for row in await self.rows("SELECT id FROM mem_fts")]
+        for start in range(0, len(refs), 200):
+            await self.index(refs[start : start + 200])
+        await self.store.put("memory_migration", "stems", {"rows": len(refs)})
 
     async def migrate_legacy(self) -> None:
         """Carry explicit memories from the flat v1 table over once, as owner-stated facts."""
