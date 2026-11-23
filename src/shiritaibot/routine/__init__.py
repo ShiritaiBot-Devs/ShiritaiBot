@@ -65,7 +65,7 @@ class RoutineManager:
         self.pruned = 0.0
         self.retries: dict[tuple[str, float], tuple[float, float]] = {}
 
-    async def create(self, item: RoutineItem, *, session: str) -> dict:
+    async def create(self, item: RoutineItem, *, session: str, actor: str = "") -> dict:
         key = uid()
         next_fire = schedule(item)
         body = {
@@ -73,6 +73,8 @@ class RoutineManager:
             "status": "scheduled" if next_fire else "open",
             "next_fire": next_fire,
         }
+        if actor and session.startswith("group:"):
+            body["actor"] = actor
         result = await self.store.put("routine", key, body, session)
         log.log(
             f"新建{KINDS[item.kind]}「{brief(item.title, 60)}」"
@@ -201,7 +203,7 @@ class RoutineManager:
             changes = {"next_fire": next_fire}
         else:
             changes = {"status": "fired", "next_fire": None}
-        await self.emit(event)
+        await self.emit(event, routine_session=row["scope"], routine_actor=row.get("actor", ""))
         await self.store.put("routine", key, {**row, **changes}, row["scope"])
         log.log(
             f"{KINDS.get(row['kind'], row['kind'])}触发：{brief(row['title'], 80)}"

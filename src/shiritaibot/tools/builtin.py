@@ -169,7 +169,9 @@ async def register_builtin(app) -> None:
         return await app.store.with_status("routine", statuses, scope=ctx.session)
 
     async def routine_create(ctx, args):
-        return await app.routine.create(RoutineItem.model_validate(args), session=ctx.session)
+        return await app.routine.create(
+            RoutineItem.model_validate(args), session=ctx.session, actor=ctx.actor
+        )
 
     async def routine_update(ctx, args):
         changes = {k: v for k, v in args.items() if k not in {"id", "status"}}

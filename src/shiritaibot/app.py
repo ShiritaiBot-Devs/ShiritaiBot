@@ -13,6 +13,8 @@ from shiritaibot.config import (
     ConfigRevisionConflict,
     ConfigService,
     Settings,
+    is_feishu_session,
+    is_qq_official_session,
 )
 from shiritaibot.core import EventBus, PublicError
 from shiritaibot.core.logs import describe_session, get_logger
@@ -97,7 +99,12 @@ class Application:
         self.adapters = AdapterHub(self.config, self.vault, self.store)
         self.adapters.memes = self.memes
         self.proactive = ProactiveEngine(
-            self.config, self.store, self.llm, self.adapters.notify_owner, self.short_term
+            self.config,
+            self.store,
+            self.llm,
+            self.adapters.notify_owner,
+            self.short_term,
+            notify_session=self.notify_session,
         )
         self.emotion = EmotionManager(self.store, self.llm, self.config, self.proactive.emit)
         # Handled events feed long-term memory; the plugin that emitted them is not involved.
@@ -252,6 +259,13 @@ class Application:
             await self.adapters.notify_owner(text)
         else:
             await self.adapters.enqueue(session, text, image=image)
+
+    async def notify_session(self, session: str, text: str) -> None:
+        if is_qq_official_session(session):
+            raise PublicError("QQ 官方机器人当前仅支持回复入站消息")
+        if is_feishu_session(session) and not self.config.value.active_feishu_session(session):
+            raise PublicError("日程原飞书会话已解绑")
+        await self.runtime.handoff(session, text, self.adapters.enqueue)
 
     async def notify_approval(
         self, text: str, *, session: str | None = None, batch_id: str = ""

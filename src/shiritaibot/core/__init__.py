@@ -120,6 +120,7 @@ class Context:
     allowed_skills: tuple[str, ...] | None = None
     require_manual_approval: bool = False
     group_wake: str = ""
+    routine_event: str = ""
 
     @property
     def summary_eligible(self) -> bool:

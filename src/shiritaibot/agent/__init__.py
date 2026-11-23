@@ -55,11 +55,15 @@ WORK_HANDOFF_PROMPT = (
 
 
 def loop_logger(ctx: Context) -> Logger:
-    if ctx.session.startswith(PREPARE_SESSION):
+    if ctx.routine_event or ctx.session.startswith(PREPARE_SESSION):
         source = "Proactive Agent"
     else:
         source = "后台任务" if ctx.background else "主循环"
     return get_logger(source, describe_session(ctx.session))
+
+
+def runtime_session(ctx: Context) -> str:
+    return PREPARE_SESSION + ctx.routine_event if ctx.routine_event else ctx.session
 
 
 def tool_outcome(output: str) -> tuple[bool, str]:
@@ -239,6 +243,7 @@ class SessionActor:
         if (
             self.current is None
             and not ctx.background
+            and not ctx.routine_event
             and not ctx.interject
             and not ctx.session.startswith("web:")
             and self.queue.empty()
@@ -399,18 +404,19 @@ class AgentRuntime:
             )
 
     async def submit(self, ctx: Context, text: str) -> str:
-        async with self.submit_locks.setdefault(ctx.session, asyncio.Lock()):
-            return await self._submit(ctx, text)
+        session = runtime_session(ctx)
+        async with self.submit_locks.setdefault(session, asyncio.Lock()):
+            return await self._submit(ctx, text, actor_session=session)
 
-    async def _submit(self, ctx: Context, text: str) -> str:
+    async def _submit(self, ctx: Context, text: str, *, actor_session: str) -> str:
         if not self.config.value.adapter_context_valid(ctx):
             return "ignored"
 
         if not ctx.background:
             ctx = replace(ctx, memory_profile=self.config.value.session_memory(ctx.session))
         ctx = self.registry.permissions.context(ctx)
-        if not ctx.interject:
-            # An interject turn observes; it must not rewrite the session's mode/profile.
+        if not ctx.interject and not ctx.routine_event:
+            # Observation and scheduled runs leave the active session registration alone.
             await self.store.put(
                 "session",
                 ctx.session,
@@ -426,20 +432,20 @@ class AgentRuntime:
             )
             if not self.config.value.adapter_context_valid(ctx):
                 return "ignored"
-        if text.strip().startswith("/"):
+        if not ctx.routine_event and text.strip().startswith("/"):
             loop_logger(ctx).log(f"{'主人' if ctx.owner else ctx.actor} 执行指令 {brief(text, 80)}")
             with record_usage_for(ctx.session):
                 return await command(self, ctx, text)
-        if ctx.session not in self.actors or self.actors[ctx.session].task.done():
-            actor = SessionActor(self, ctx.session)
-            self.actors[ctx.session] = actor
+        if actor_session not in self.actors or self.actors[actor_session].task.done():
+            actor = SessionActor(self, actor_session)
+            self.actors[actor_session] = actor
 
             def cleanup(task):
-                if self.actors.get(ctx.session) is actor:
-                    self.actors.pop(ctx.session, None)
+                if self.actors.get(actor_session) is actor:
+                    self.actors.pop(actor_session, None)
 
             actor.task.add_done_callback(cleanup)
-        return await self.actors[ctx.session].submit(ctx, text)
+        return await self.actors[actor_session].submit(ctx, text)
 
     def busy(self, session: str) -> bool:
         actor = self.actors.get(session)
@@ -525,7 +531,12 @@ class AgentRuntime:
         """Pick the model route: Chat, Agent Work, or (when split) Agent Chat."""
         if ctx.mode != "agent":
             return "chat"
-        if ctx.background or not cfg.agent_split or not cfg.routes.get("agent_chat"):
+        if (
+            ctx.background
+            or ctx.routine_event
+            or not cfg.agent_split
+            or not cfg.routes.get("agent_chat")
+        ):
             return "agent"
         if not cfg.routes.get("router"):
             return "agent"
@@ -591,7 +602,7 @@ class AgentRuntime:
         return route
 
     async def turn(self, actor: SessionActor, ctx: Context, text: str) -> None:
-        async with self.context_locks.setdefault(ctx.session, asyncio.Lock()):
+        async with self.context_locks.setdefault(runtime_session(ctx), asyncio.Lock()):
             token = current_reply.set(ctx.reply_anchor)
             try:
                 with record_usage_for(ctx.session):
@@ -615,8 +626,10 @@ class AgentRuntime:
         ctx = replace(
             self.registry.permissions.context(ctx), turn=ctx.turn if actor is None else uid()
         )
+        execution_session = runtime_session(ctx)
+        proactive = execution_session.startswith(PREPARE_SESSION)
         append = partial(
-            self.store.append, ctx.session, ctx.turn, memory_profile=ctx.memory_profile
+            self.store.append, execution_session, ctx.turn, memory_profile=ctx.memory_profile
         )
         if ctx.interject:
             # A passing remark is one cheap chat turn: no tools, no policy upgrade.
@@ -651,7 +664,7 @@ class AgentRuntime:
         emotion_block = ""
         if self.emotion and ctx.memory_profile == "default":
             emotion_block = await self.emotion.context(ctx, cfg)
-            if not ctx.interject:
+            if not ctx.interject and not ctx.routine_event:
                 await self.emotion.observe(ctx, text)
         route = await self.route(ctx, cfg, text)
         selected = await self.store.get("session_model", ctx.session)
@@ -667,7 +680,7 @@ class AgentRuntime:
         # The ambient block only annotates group history, so the triggering message
         # itself must carry the speaker's identity for the model to know who is talking.
         name, prefix = "", ""
-        if ctx.group and not ctx.background and cfg.group_context.identify_sender:
+        if ctx.group and not proactive and cfg.group_context.identify_sender:
             if ctx.owner:
                 name = cfg.owner_name
             else:
@@ -681,27 +694,27 @@ class AgentRuntime:
             "actor": ctx.actor,
             "started": turn_started.isoformat(),
             "steps": 0,
-            "summary_eligible": ctx.summary_eligible,
+            "summary_eligible": ctx.summary_eligible and not ctx.routine_event,
             "memory_profile": ctx.memory_profile,
             "memory_scope": owner_memory_scope(ctx.memory_profile)
             if ctx.owner and ctx.mode == "agent" and not ctx.group
             else f"shared:{ctx.memory_profile}"
             if cfg.shared_memory(ctx.memory_profile)
             else ctx.session,
-            "loop": "proactive" if ctx.background else "main",
+            "loop": "proactive" if proactive or ctx.background else "main",
             "route": route,
             "assistant_name": cfg.assistant_name,
             "owner_name": cfg.owner_name,
         }
-        await self.store.put("turn", ctx.turn, body, ctx.session)
+        await self.store.put("turn", ctx.turn, body, execution_session)
         hooks = self.hooks
         info = Turn(
             ctx.turn,
-            ctx.session,
+            execution_session,
             ctx.actor,
             ctx.owner,
             ctx.group,
-            ctx.background,
+            ctx.background or bool(ctx.routine_event),
             ctx.mode,
             route,
             text,
@@ -816,7 +829,6 @@ class AgentRuntime:
 
                 tools: list[dict] = []
                 history: list[dict] = []
-                proactive = ctx.background and ctx.session.startswith(PREPARE_SESSION)
                 if chat_reply is None:
                     tools = [] if ctx.interject else self.registry.specs(ctx)
                     # Proactive turns report their conclusion through an internal tool.
@@ -827,8 +839,8 @@ class AgentRuntime:
                     # Group chat is supplied per turn and never archived into the session history.
                     ambient = await self.group_context(ctx, cfg, tools)
                     current = {**user, "content": ambient + user["content"]} if ambient else user
-                    if actor is None:
-                        # Observation can overlap a wake. Only read the existing conversation.
+                    if actor is None or ctx.routine_event:
+                        # Read the origin's history without altering its ongoing conversation.
                         history = repair_history(
                             await self.store.history(
                                 ctx.session,
@@ -912,12 +924,12 @@ class AgentRuntime:
                         if ctx.group_wake and self.deliver_group_reply:
                             await self.deliver_group_reply(ctx.session, final, ctx.group_wake)
                         else:
-                            await self.deliver(ctx.session, final)
+                            await self.deliver(execution_session, final)
                         body["status"] = "completed"
                         return
                     # Main-loop text is visible before tools run; proactive turns
                     # deliver only their final structured notification decision.
-                    if not ctx.background and reply.text.strip():
+                    if not proactive and not ctx.background and reply.text.strip():
                         log.log(f"回复：{brief(reply.text, 1000)}")
                         await self.deliver(ctx.session, reply.text)
                     report = None
@@ -995,15 +1007,14 @@ class AgentRuntime:
                         history.append(result)
                     if report is not None:
                         log.log(
-                            ("决定通知主人" if report.notify else "决定不打扰主人")
-                            + f"：{brief(report.reason, 120)}"
+                            f"通知决定：{'发送' if report.notify else '静默'}，{brief(report.reason, 120)}"
                         )
                         final = canonical(report.model_dump())
-                        await self.deliver(ctx.session, final)
+                        await self.deliver(execution_session, final)
                         body["status"] = "completed"
                         return
                     body["steps"] = step + 1
-                    await self.store.put("turn", ctx.turn, body, ctx.session)
+                    await self.store.put("turn", ctx.turn, body, execution_session)
                 raise PublicError(
                     f"已达到本轮步数限制（{body['steps']} 步）：已完成前面的步骤，"
                     "但任务还需要更多操作。可以让我接着做、把范围缩小后重试，"
@@ -1027,7 +1038,7 @@ class AgentRuntime:
                 return None
             await append({"role": "assistant", "content": error})
             final = error
-            await self.deliver(ctx.session, error)
+            await self.deliver(execution_session, error)
         except Exception as exc:
             body["status"] = "failed"
             error = (
@@ -1041,7 +1052,7 @@ class AgentRuntime:
                 return None
             await append({"role": "assistant", "content": error})
             final = error
-            await self.deliver(ctx.session, error)
+            await self.deliver(execution_session, error)
         finally:
             if hooks is not None and hooks.has("agent_done"):
                 result = AgentResult(body["status"], body["steps"] + 1, final)
@@ -1052,7 +1063,7 @@ class AgentRuntime:
                     f"本轮完成（{body['steps'] + 1} 步，用时 {time.monotonic() - started:.1f}s）"
                 )
             body["finished"] = now().isoformat()
-            await self.store.put("turn", ctx.turn, body, ctx.session)
+            await self.store.put("turn", ctx.turn, body, execution_session)
             if self.short_term and body["summary_eligible"]:
                 await self.short_term.enqueue(ctx, body["status"])
                 body["summary_enqueued"] = True

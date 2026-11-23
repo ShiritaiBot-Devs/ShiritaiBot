@@ -221,7 +221,7 @@ class Permissions:
         policy = self.config.value.policy
         if not ctx.background and self.session_policy(ctx).mode != "agent" and not tool.chat:
             return "deny"
-        if ctx.background and tool.interactive:
+        if (ctx.background or ctx.routine_event) and tool.interactive:
             return "deny"
         if tool.available and not tool.available(ctx):
             return "deny"
@@ -411,6 +411,8 @@ class Permissions:
         if self.quick_granted(ctx, tool, args):
             log.log(f"五分钟免问生效，直接放行 {tool.name}", describe_session(ctx.session))
             return
+        if ctx.routine_event and not ctx.owner:
+            raise PublicError("本次定时执行需要人工审批，工具未执行")
         key = uid()[:10]
         future = asyncio.get_running_loop().create_future()
         self.pending[key] = future

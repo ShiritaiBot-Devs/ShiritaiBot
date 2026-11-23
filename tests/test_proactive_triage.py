@@ -67,7 +67,10 @@ def test_scheduled_and_memory_events_skip_judge(tmp_path):
                     title="记忆里有 2 个问题需要主人确认",
                 ),
             ]
-            keys = [await engine.emit(ev) for ev in events]
+            keys = [
+                await engine.emit(ev, routine_session="owner" if ev.source == "routine" else None)
+                for ev in events
+            ]
             for key in keys:
                 row = await engine.get_event(key)
                 await engine.handle(row)
@@ -149,7 +152,8 @@ def test_reminder_bypasses_quiet_hours_while_job_respects_it(tmp_path, monkeypat
                     kind="routine.reminder",
                     dedup_key="rem:quiet",
                     title="提醒：喝水",
-                )
+                ),
+                routine_session="owner",
             )
             job_key = await engine.emit(
                 ExternalEvent(
@@ -157,7 +161,8 @@ def test_reminder_bypasses_quiet_hours_while_job_respects_it(tmp_path, monkeypat
                     kind="routine.job",
                     dedup_key="job:quiet",
                     title="定时巡检",
-                )
+                ),
+                routine_session="owner",
             )
 
             for key, msg in ((rem_key, "该喝水啦"), (job_key, "巡检完成")):
