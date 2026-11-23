@@ -28,9 +28,9 @@ SYSTEM_PATHS = (
 
 def isolated_shell(command: list[str], workspace: Path) -> list[str]:
     if sys.platform != "linux" or not (bwrap := shutil.which("bwrap")):
-        raise PublicError("Shell 工作区隔离需要 Linux 和 bubblewrap（bwrap）")
+        raise PublicError("tools.shell.needsBwrap")
     if any(workspace.is_relative_to(path) for path in SYSTEM_PATHS):
-        raise PublicError("工作区位于系统目录下，无法隔离执行")
+        raise PublicError("tools.shell.systemFolder")
 
     # Mount only system tooling and this workspace. In particular the host home,
     # other sessions, the bot's store and the parent's environment stay outside.

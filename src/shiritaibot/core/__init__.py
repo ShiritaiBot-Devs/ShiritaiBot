@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal, Protocol
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
-from shiritaibot.i18n import localize, t
+from shiritaibot.i18n import Text, localize, t
 
 if TYPE_CHECKING:
     from shiritaibot.auth.menu import ApprovalMenu
@@ -135,7 +135,7 @@ class Context:
 @dataclass(slots=True)
 class Tool:
     name: str
-    description: str
+    description: str | Text  # plain text, a catalog key, or lazy Text
     schema: dict[str, Any]
     handler: Callable[[Context, dict[str, Any]], Awaitable[Any]]
     risk: str

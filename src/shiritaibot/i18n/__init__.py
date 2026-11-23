@@ -105,12 +105,14 @@ def lookup(key: str, locale: Locale) -> str | None:
     return catalog(locale).get(key) or catalog(DEFAULT_LOCALE).get(key)
 
 
-def t(key: str, /, *, locale: Locale | None = None, **params: Any) -> str:
+def t(key: str | Text, /, *, locale: Locale | None = None, **params: Any) -> str:
     """Render ``key`` in ``locale`` (default: the active locale) with ``{name}`` params.
 
     With a ``count`` param, ``key_one`` / ``key_other`` are preferred, as in i18next.
     Text that is not a catalog key is returned unchanged and is never formatted.
     """
+    if isinstance(key, Text):  # stored lazy text, such as a tool description with params
+        return key.render(locale)
     lang = locale or active_locale()
     text = None
     if "count" in params:

@@ -25,13 +25,13 @@ async def search_web(config: WebSearchConfig, vault, args: dict) -> dict:
     label = LABELS[provider]
     token = await search_token(config, vault)
     if not token:
-        raise PublicError(f"网页搜索未启用或未配置 {label} API Key")
+        raise PublicError("tools.webSearch.notConfigured", label=label)
     query = str(args.get("query", "")).strip()
     if not query or len(query) > 128:
-        raise PublicError("搜索词须为 1–128 个字符")
+        raise PublicError("tools.webSearch.queryLength")
     count = args.get("max_results", config.max_results)
     if type(count) is not int or not 1 <= count <= 10:
-        raise PublicError("搜索结果数量须为 1–10")
+        raise PublicError("tools.webSearch.resultCount")
     try:
         async with httpx.AsyncClient(timeout=config.timeout) as client:
             if provider == "tavily":
@@ -70,7 +70,7 @@ async def search_web(config: WebSearchConfig, vault, args: dict) -> dict:
             response.raise_for_status()
             data = response.json()
         if data.get("error"):
-            raise PublicError(f"{label} 搜索失败，请检查配置或配额")
+            raise PublicError("tools.webSearch.failed", label=label)
         rows = data.get("organic_results" if provider == "serpapi" else "results", [])
         return {
             "provider": provider,
@@ -86,8 +86,8 @@ async def search_web(config: WebSearchConfig, vault, args: dict) -> dict:
         }
     except httpx.HTTPStatusError as exc:
         # SerpAPI's URL contains its API key; never expose the exception or response body.
-        raise PublicError(f"{label} 搜索失败（HTTP {exc.response.status_code}）") from None
+        raise PublicError("tools.webSearch.httpError", label=label, status_code=exc.response.status_code) from None
     except httpx.RequestError:
-        raise PublicError(f"无法连接 {label} 搜索服务，请稍后重试") from None
+        raise PublicError("tools.webSearch.offline", label=label) from None
     except (ValueError, TypeError, KeyError, AttributeError):
-        raise PublicError(f"{label} 搜索返回了无效数据") from None
+        raise PublicError("tools.webSearch.invalidData", label=label) from None
