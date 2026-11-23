@@ -65,7 +65,7 @@ def segments(value) -> list[dict]:
 
 def describe(parts: list[dict], images: dict[int, str] | None = None) -> str:
     """Readable plain text for group context, keeping placeholders for non-text segments."""
-    labels = {"image": "[图片]", "face": "[表情]", "record": "[语音]", "video": "[视频]"}
+    labels = {"image": t("markers.image"), "face": t("markers.face"), "record": t("markers.voice"), "video": t("markers.video")}
     out = []
     for index, part in enumerate(parts):
         data = part.get("data", {})
@@ -75,9 +75,9 @@ def describe(parts: list[dict], images: dict[int, str] | None = None) -> str:
         elif kind == "at":
             out.append(f"@{data.get('name') or data.get('qq', '')} ")
         elif kind == "file":
-            out.append(f"[文件 {data.get('name', '')}]")
+            out.append(t("markers.file", name=data.get("name", "")))
         elif kind == "forward":
-            out.append(f"[合并转发 {data.get('id', '')}]")
+            out.append(t("markers.forward", id=data.get("id", "")))
         elif images and index in images:
             out.append(images[index])
         elif kind in labels:
@@ -111,14 +111,14 @@ def qq_download_url(url: str) -> bool:
 
 
 # Control words work in either language.
-STOP_WORDS = {"停", "取消", "stop", "cancel"}
-ALLOW_WORDS = {"同意", "approve"}
+STOP_WORDS = {"停", "取消", "stop", "cancel"}  # i18n: ok
+ALLOW_WORDS = {"同意", "approve"}  # i18n: ok
 
 
 def approval_reply(text: str) -> re.Match | None:
     """Approve or deny (同意 / 拒绝) on its own handles the latest request; with a
     10-character ID it handles that one."""
-    return re.fullmatch(r"(同意|拒绝|approve|deny)\s*([a-f0-9]{10})?", text, re.I)
+    return re.fullmatch(r"(同意|拒绝|approve|deny)\s*([a-f0-9]{10})?", text, re.I)  # i18n: ok
 
 
 async def file_ref(store, adapter: str, group_id: str, data: dict, session: str) -> str:
@@ -141,7 +141,7 @@ class OneBotActionError(PublicError):
         reason = " ".join(str(result[key]) for key in ("wording", "message") if result.get(key))
         if "onMsgInfoListUpdate" in reason:
             detail += t("adapters.action.receiptTimeout")
-        elif "timeout" in reason.lower() or "超时" in reason:
+        elif "timeout" in reason.lower() or "超时" in reason:  # i18n: ok
             detail += t("adapters.action.timeout")
         elif reason:
             detail += t("adapters.action.error")
@@ -543,7 +543,7 @@ class AdapterHub:
         where = t("adapters.where.group", target=target) if group else t("adapters.where.private")
         # Untriggered group chatter is only context, so it stays at debug level.
         (bot.log.log if not group or mentioned or keyword else bot.log.debug)(
-            brief(describe(parts), 200) or "[空消息]", where, speaker
+            brief(describe(parts), 200) or t("markers.empty"), where, speaker
         )
         if group and self.memes is not None:
             self.memes.hooker.observe(session, parts)
@@ -552,9 +552,9 @@ class AdapterHub:
         async def image_reference(index: int, data: dict) -> str:
             if index not in images:
                 if not qq_download_url(str(data.get("url") or "")):
-                    return "[QQ 图片，协议端未提供可用的下载地址]"
+                    return t("markers.imageNoUrl")
                 ref = await file_ref(self.store, cfg.id, target if group else "", data, session)
-                images[index] = f"[QQ 图片引用 {ref}: 图片]"
+                images[index] = t("markers.imageRef", ref=ref)
             return images[index]
 
         if group and settings.group_context.enabled:
@@ -668,19 +668,19 @@ class AdapterHub:
             data = part.get("data", {})
             if part.get("type") == "file":
                 ref = await file_ref(self.store, cfg.id, target if group else "", data, session)
-                text += f"\n[QQ 文件引用 {ref}: {data.get('name') or data.get('file') or 'file'}]"
+                text += "\n" + t("markers.fileRef", ref=ref, name=data.get("name") or data.get("file") or "file")
             elif part.get("type") == "image":
                 text += "\n" + await image_reference(index, data)
             elif part.get("type") == "video":
                 if data.get("url"):
                     ref = await file_ref(self.store, cfg.id, target if group else "", data, session)
-                    text += f"\n[QQ 视频引用 {ref}: {data.get('file') or '视频'}]"
+                    text += "\n" + t("markers.videoRef", ref=ref, name=data.get("file") or t("markers.videoName"))
                 else:
-                    text += "\n[QQ 视频，协议端未提供下载地址]"
+                    text += "\n" + t("markers.videoNoUrl")
             elif part.get("type") == "forward" and data.get("id"):
-                text += f"\n[QQ 合并转发 {data['id']}]"
+                text += "\n" + t("markers.qqForward", id=data["id"])
             elif part.get("type") == "reply" and data.get("id"):
-                text = f"[引用 QQ 消息 {data['id']}] " + text
+                text = t("markers.quote", id=data["id"]) + text
         text = text.strip()
         if text:
             owner = user == cfg.owner_id
@@ -922,7 +922,7 @@ class AdapterHub:
                 "data": {
                     "file": "base64://" + base64.b64encode(data).decode(),
                     "sub_type": 1,
-                    "summary": "[动画表情]",
+                    "summary": t("markers.animatedSticker"),
                 },
             }
         ]

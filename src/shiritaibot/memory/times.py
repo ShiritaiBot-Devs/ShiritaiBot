@@ -12,9 +12,9 @@ from shiritaibot.prompts import prompt as prompt_text
 
 # Stored memory must never depend on when it is read.
 RELATIVE = re.compile(
-    r"大?[前昨今明后]天|[今昨明]早|[今昨明]晚|今晨|"
-    r"[上下本这]个?(?:周|星期|礼拜|月)|[今去明前]年|"
-    r"刚才|刚刚|最近|近期|前几天|过几天|前阵子|这几天|上次|下次|"
+    r"大?[前昨今明后]天|[今昨明]早|[今昨明]晚|今晨|"  # i18n: ok
+    r"[上下本这]个?(?:周|星期|礼拜|月)|[今去明前]年|"  # i18n: ok
+    r"刚才|刚刚|最近|近期|前几天|过几天|前阵子|这几天|上次|下次|"  # i18n: ok
     r"\b(?:yesterday|today|tomorrow|tonight|last (?:week|month|year)|next (?:week|month|year)|recently)\b",
     re.IGNORECASE,
 )

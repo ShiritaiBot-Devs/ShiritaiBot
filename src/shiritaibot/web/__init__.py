@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import hmac
+import json
 import os
+import re
 import secrets
 from collections.abc import Callable
 from contextlib import asynccontextmanager
@@ -282,6 +284,17 @@ def create_app(
             url = await runtime.llm.subscriptions.start(saved_subscription(provider_id))
         helper = Path(__file__).with_name("chatgpt_login_helper.py")
         source = await asyncio.to_thread(helper.read_text, encoding="utf-8")
+        text = {
+            key: t(f"web.chatgptHelper.{key}")
+            for key in ("lang", "title", "intro", "label", "copy", "copied", "manual")
+        }
+        source = re.sub(
+            r"^TEXT = .*$",
+            lambda _: "TEXT = " + json.dumps(text, ensure_ascii=False),
+            source,
+            count=1,
+            flags=re.M,
+        )
         return {
             "script": source + f"\nif __name__ == '__main__':\n    main({url!r})\n",
             "expires_in": LOGIN_SECONDS,

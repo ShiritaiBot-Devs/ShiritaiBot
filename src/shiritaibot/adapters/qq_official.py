@@ -112,7 +112,7 @@ class QQMessage:
         if kind == "GROUP_AT_MESSAGE_CREATE":
             text = re.sub(r"^(?:<@!?[A-Za-z0-9_-]+>\s*)+", "", text)
         if data.get("attachments"):
-            text = (text + " [附件]").strip()
+            text = (text + " " + t("markers.attachment")).strip()
         try:
             stamp = datetime.fromisoformat(data.get("timestamp", ""))
             at = min(received, stamp.timestamp()) if stamp.tzinfo is not None else received

@@ -188,7 +188,7 @@ class AdapterConfig(Instance):
     qq_sandbox: bool = False
     app_secret: str = Field(default="", max_length=10000, repr=False)
     domain: Literal["feishu", "lark"] = "feishu"
-    wake_keywords: list[str] = Field(default_factory=lambda: ["小知"])
+    wake_keywords: list[str] = Field(default_factory=lambda: ["小知"])  # i18n: ok
     feishu_group_context: bool = False
     memory_profile: ProfileId = "feishu"
 
@@ -447,8 +447,8 @@ class MemoryProfile(Model):
 
 
 BUILTIN_MEMORY_PROFILES = {
-    "default": MemoryProfile(name="默认记忆库"),
-    "feishu": MemoryProfile(name="飞书记忆库"),
+    "default": MemoryProfile(name="默认记忆库"),  # i18n: ok
+    "feishu": MemoryProfile(name="飞书记忆库"),  # i18n: ok
 }
 
 
@@ -483,20 +483,29 @@ class MemeCategory(Model):
     description: str = Field(default="", max_length=200)
 
 
+def meme_description(category: MemeCategory) -> str:
+    """A category's description for the model and WebUI; shipped defaults that were never
+    edited follow the bot language."""
+    defaults = {item.name: item.description for item in default_meme_categories()}
+    if category.description and category.description == defaults.get(category.name):
+        return t(f"memes.defaultCategories.{category.name}")
+    return category.description
+
+
 def default_meme_categories() -> list[MemeCategory]:
     return [
         MemeCategory(name=name, description=description)
         for name, description in (
-            ("happy", "开心、得意、庆祝、哈哈大笑"),
-            ("sad", "难过、委屈、哭泣、心碎"),
-            ("angry", "生气、不满、抓狂、怒了"),
-            ("think", "思考、疑惑、琢磨、让我想想"),
-            ("surprised", "震惊、意外、目瞪口呆"),
-            ("shy", "害羞、不好意思、脸红、捂脸"),
-            ("love", "喜欢、比心、贴贴、抱抱"),
-            ("tired", "累了、困、摆烂、无语、躺平"),
-            ("smug", "调皮、坏笑、嘲讽、阴阳怪气"),
-            ("greet", "打招呼、谢谢、好的、晚安等日常回应"),
+            ("happy", "开心、得意、庆祝、哈哈大笑"),  # i18n: ok
+            ("sad", "难过、委屈、哭泣、心碎"),  # i18n: ok
+            ("angry", "生气、不满、抓狂、怒了"),  # i18n: ok
+            ("think", "思考、疑惑、琢磨、让我想想"),  # i18n: ok
+            ("surprised", "震惊、意外、目瞪口呆"),  # i18n: ok
+            ("shy", "害羞、不好意思、脸红、捂脸"),  # i18n: ok
+            ("love", "喜欢、比心、贴贴、抱抱"),  # i18n: ok
+            ("tired", "累了、困、摆烂、无语、躺平"),  # i18n: ok
+            ("smug", "调皮、坏笑、嘲讽、阴阳怪气"),  # i18n: ok
+            ("greet", "打招呼、谢谢、好的、晚安等日常回应"),  # i18n: ok
         )
     ]
 

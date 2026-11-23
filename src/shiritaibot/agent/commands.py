@@ -352,7 +352,7 @@ async def command(runtime, ctx, text):
         elif name == "grants":
             permissions = runtime.registry.permissions
             # The subcommand word works in either language.
-            word = next((w for w in ("撤销", "revoke") if argument.startswith(w)), "")
+            word = next((w for w in ("撤销", "revoke") if argument.startswith(w)), "")  # i18n: ok
             if word:
                 parts = argument.removeprefix(word).split()
                 if not parts:

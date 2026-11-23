@@ -34,5 +34,14 @@
   "configChanged": "The settings were changed elsewhere. Review the latest settings before saving.",
   "restartUnsupported": "Restarting isn't supported in this launch mode. Start ShiritaiBot with shiritaibot run.",
   "subscriptionUnsaved": "Save the OpenAI Subscription provider first.",
-  "invalidSession": "Invalid session ID"
+  "invalidSession": "Invalid session ID",
+  "chatgptHelper": {
+    "lang": "en",
+    "title": "Back to ShiritaiBot",
+    "intro": "Copy the one-time callback URL below and paste it back into the ChatGPT authorization panel in the WebUI.",
+    "label": "One-time callback URL",
+    "copy": "Copy callback URL",
+    "copied": "Copied",
+    "manual": "Copy it with the keyboard"
+  }
 }

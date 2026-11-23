@@ -53,8 +53,18 @@ def docstring_lines(tree: ast.AST) -> set[int]:
     return lines
 
 
+# Text that must stay Chinese (language data such as word lists, bilingual control words,
+# internal IDs) is marked so the count stays honest: "i18n: ok" on the line, or
+# "i18n-check: language-data" anywhere in a file made of such data.
+LINE_OK = "i18n: ok"
+FILE_OK = "i18n-check: language-data"
+
+
 def python_lines(text: str) -> int:
-    skip = docstring_lines(ast.parse(text))
+    if FILE_OK in text:
+        return 0
+    marked = {n for n, line in enumerate(text.splitlines(), 1) if LINE_OK in line}
+    skip = docstring_lines(ast.parse(text)) | marked
     found: set[int] = set()
     string_tokens = {tokenize.STRING}
     if hasattr(tokenize, "FSTRING_MIDDLE"):
@@ -71,7 +81,7 @@ def typescript_lines(text: str) -> int:
     count = 0
     for line in text.splitlines():
         code = line.strip()
-        if code.startswith(("//", "/*", "*", "{/*")):
+        if code.startswith(("//", "/*", "*", "{/*")) or LINE_OK in line:
             continue
         if CJK.search(code.split(" // ", 1)[0]):
             count += 1

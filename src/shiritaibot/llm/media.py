@@ -26,7 +26,7 @@ from shiritaibot.prompts import prompt
 log = get_logger("llm.log.mediaSource")
 
 # meme_view results carry this marker; rendering attaches the image or reports an error.
-MEME_VIEW = re.compile(r"\[表情图片 meme=([0-9a-f]{16})\]")
+MEME_VIEW = re.compile(r"\[(?:表情图片|Sticker image) meme=([0-9a-f]{16})\]")  # i18n: ok
 # Base64 of this stays within the strictest provider per-image limit (5 MB).
 MAX_IMAGE_BYTES = 3_750_000
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
@@ -49,7 +49,7 @@ def image_part(url: str) -> dict:
 
 
 def view_marker(key: str) -> str:
-    return f"[表情图片 meme={key}]"
+    return t("markers.stickerImage", key=key)
 
 
 def prepare_image(data: bytes) -> bytes | None:
@@ -264,7 +264,7 @@ class ImageResolver:
                 ref = match[1]
                 text += content[end : match.start()]
                 end = match.end()
-                label = f"[图片 ref={ref}]"
+                label = t("markers.imageLabel", ref=ref)
                 if ref in rendered_refs:
                     text += label
                     continue
@@ -279,7 +279,7 @@ class ImageResolver:
                         text = ""
                     continue
                 caption = await self.caption(ref)
-                text += f"[图片 ref={ref}：{caption or t("llm.media.noImage")}]"
+                text += t("markers.imageCaption", ref=ref, caption=caption or t("llm.media.noImage"))
             text += content[end:]
             if not parts:
                 return text
@@ -298,13 +298,13 @@ class ImageResolver:
                 for key in dict.fromkeys(MEME_VIEW.findall(content)):
                     url = await self.meme(key) if key in recent_views else None
                     if url:
-                        note = f"[表情图片 meme={key}，图片附在随后的消息中]"
+                        note = t("markers.stickerAttached", key=key)
                         attached += [
-                            {"type": "text", "text": f"[meme_view 查看的表情 meme={key}]"},
+                            {"type": "text", "text": t("markers.stickerViewed", key=key)},
                             image_part(url),
                         ]
                     else:
-                        note = f"[表情图片 meme={key}，图片已不再附带]"
+                        note = t("markers.stickerDropped", key=key)
                     content = content.replace(view_marker(key), note)
                 result.append({**message, "content": content})
                 continue

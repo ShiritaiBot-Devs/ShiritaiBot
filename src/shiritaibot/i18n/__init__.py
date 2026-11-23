@@ -23,7 +23,7 @@ from typing import Any, Literal, get_args
 Locale = Literal["zh-CN", "en"]
 LOCALES: tuple[Locale, ...] = get_args(Locale)
 DEFAULT_LOCALE: Locale = "zh-CN"
-LOCALE_NAMES: dict[Locale, str] = {"zh-CN": "简体中文", "en": "English"}
+LOCALE_NAMES: dict[Locale, str] = {"zh-CN": "简体中文", "en": "English"}  # i18n: ok
 FOLDER = Path(__file__).resolve().parent.parent / "locales"
 
 # The locale of the current request or turn. Unset elsewhere (scheduled work, startup, logs),
@@ -49,12 +49,12 @@ _ALIASES: dict[str, Locale] = {
     "zh": "zh-CN",
     "cn": "zh-CN",
     "chinese": "zh-CN",
-    "中文": "zh-CN",
-    "简体中文": "zh-CN",
-    "汉语": "zh-CN",
+    "中文": "zh-CN",  # i18n: ok
+    "简体中文": "zh-CN",  # i18n: ok
+    "汉语": "zh-CN",  # i18n: ok
     "english": "en",
-    "英文": "en",
-    "英语": "en",
+    "英文": "en",  # i18n: ok
+    "英语": "en",  # i18n: ok
 }
 
 

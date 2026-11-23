@@ -206,7 +206,7 @@ class Heartflow:
         if group.phase in ("REST", "QUIET") or not any(c.isalnum() for c in text):
             return
         text = text.strip()
-        if text.startswith("/") or len(set(text)) == 1 and (len(text) > 1 or text in "嗯哦哈啊好"):
+        if text.startswith("/") or len(set(text)) == 1 and (len(text) > 1 or text in "嗯哦哈啊好"):  # i18n: ok
             return
         group.last = monotonic()
         if not group.batch:

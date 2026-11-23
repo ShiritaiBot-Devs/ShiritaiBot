@@ -311,3 +311,17 @@ EMOTION_SITUATION = (
     "根据用户最近的消息，用不超过 40 字概括对方眼下的近况或烦心事。只写概括，不抄原话，不写姓名、联系方式等隐私；没有值得记住的近况就输出空字符串。"
     "只输出概括本身。"
 )
+
+# emotion/prompt.py
+EMOTION_TONE_MILD = "语气收敛，少开玩笑。"
+EMOTION_USER_MOOD = "对方当前：{mood}。"
+EMOTION_GROUP_MOOD = "本群当前的气氛：{mood}。"
+EMOTION_TONE_STEADY = "语气放稳，先回应用户真正要处理的事。"
+EMOTION_ACKNOWLEDGE = "可以有一句简短的理解或确认，但不要展开安慰。"
+EMOTION_GROUP_LIGHT = "可以简短表达理解，但不要单独关心某个人，也不要追问隐私。"
+EMOTION_SITUATION_NOTE = "此前提到：{situation}（{age}）。可以自然接上，但不要主动追问细节。"
+EMOTION_CARE = "如果合适，可以说一句真诚的关心，最多一句；不要每轮都关心，也不要让话题偏离开用户的问题。"
+EMOTION_GROUP_TONE = "回复时整体语气放稳，先解决大家在问的事，少开玩笑。不要点名或评论任何人的状态，也不要公开表示关心。"
+
+# emotion/__init__.py
+EMOTION_PROACTIVE = "主人最近的情绪状态不好（强度 {value:.2f}），可以主动私聊简单关心一句，不要追问隐私。"

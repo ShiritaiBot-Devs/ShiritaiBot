@@ -38,7 +38,7 @@ LISTENER_TIMEOUT = 30
 PROACTIVE_TIMEOUT = 30
 COMMAND_TIMEOUT = 600
 # Control words in either language.
-CONTROL = re.compile(r"(停|取消|stop|cancel|(同意|拒绝|approve|deny)\s+[a-f0-9]{10})", re.I)
+CONTROL = re.compile(r"(停|取消|stop|cancel|(同意|拒绝|approve|deny)\s+[a-f0-9]{10})", re.I)  # i18n: ok
 
 
 class UsageError(ValueError):
@@ -83,9 +83,9 @@ def _hints(func: Callable) -> dict:
 def _convert(token: str, hint) -> Any:
     if hint is bool:
         lowered = token.lower()
-        if lowered in {"1", "true", "yes", "on", "是", "开"}:
+        if lowered in {"1", "true", "yes", "on", "是", "开"}:  # i18n: ok
             return True
-        if lowered in {"0", "false", "no", "off", "否", "关"}:
+        if lowered in {"0", "false", "no", "off", "否", "关"}:  # i18n: ok
             return False
         raise ValueError(token)
     if hint in (int, float):

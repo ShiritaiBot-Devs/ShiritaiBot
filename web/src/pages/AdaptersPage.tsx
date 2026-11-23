@@ -122,7 +122,7 @@ export function AdaptersPage({
     ...item,
     type: item.type ?? "onebot11",
     domain: item.domain ?? "feishu",
-    wake_keywords: item.wake_keywords ?? ["小知"],
+    wake_keywords: item.wake_keywords ?? ["小知"], // i18n: ok
     memory_profile: item.memory_profile ?? "feishu",
   }));
 

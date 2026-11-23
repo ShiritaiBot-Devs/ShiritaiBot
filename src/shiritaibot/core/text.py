@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from shiritaibot.i18n import t
+
 FENCE = re.compile(r"^[ \t]*```[^\n]*$", re.M)
 HEADING = re.compile(r"^[ \t]{0,3}#{1,6}[ \t]*", re.M)
 RULE = re.compile(r"^[ \t]{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$", re.M)
@@ -14,8 +16,8 @@ UNDERSCORE = re.compile(r"(?<!\w)__([^_\n]+?)__(?!\w)", re.S)
 STRIKE = re.compile(r"~~(.+?)~~", re.S)
 LINK = re.compile(r"\[([^\]\n]*)\]\((https?://[^)\s]+)\)")
 BLANKS = re.compile(r"\n{3,}")
-IMAGE_REF = re.compile(r"\[QQ 图片引用 ([0-9a-f]{32}): [^\]\n]*\]")
-REDACTED = "[已脱敏]"
+# Markers are written in the bot language; history may hold either language.
+IMAGE_REF = re.compile(r"\[(?:QQ 图片引用|QQ image ref) ([0-9a-f]{32}): [^\]\n]*\]")  # i18n: ok
 TOKEN_PATTERNS = (
     re.compile(r"\bsk-[A-Za-z0-9_-]{16,}"),
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"),
@@ -40,7 +42,7 @@ def clip_image_text(text: str, limit: int) -> str:
             break
         refs.append(marker)
         budget -= len(marker)
-    return IMAGE_REF.sub("[图片]", text)[: max(0, budget)] + "…" + "".join(refs)
+    return IMAGE_REF.sub(t("markers.image"), text)[: max(0, budget)] + "…" + "".join(refs)
 
 
 def clean_outbound(text: str) -> str:
@@ -69,7 +71,8 @@ def clean_outbound(text: str) -> str:
 def redact_secrets(text: str, secrets: list[str] | tuple[str, ...] = ()) -> str:
     """Hide known secret values and credential-looking tokens from tool output."""
     for secret in sorted((s for s in secrets if len(s) >= 6), key=len, reverse=True):
-        text = text.replace(secret, REDACTED)
+        text = text.replace(secret, t("markers.redacted"))
     for pattern in TOKEN_PATTERNS:
-        text = pattern.sub(lambda m: m[1] + REDACTED if m.groups() else REDACTED, text)
+        redacted = t("markers.redacted")
+        text = pattern.sub(lambda m: m[1] + redacted if m.groups() else redacted, text)
     return text

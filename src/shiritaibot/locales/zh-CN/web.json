@@ -34,5 +34,14 @@
   "configChanged": "配置已更新，请核对最新配置后再保存。",
   "restartUnsupported": "当前启动方式不支持重启，请使用 shiritaibot run 启动",
   "subscriptionUnsaved": "请先保存 OpenAI Subscription 提供商。",
-  "invalidSession": "会话标识无效"
+  "invalidSession": "会话标识无效",
+  "chatgptHelper": {
+    "lang": "zh-CN",
+    "title": "返回 ShiritaiBot",
+    "intro": "复制下面的一次性回调地址，粘贴回 WebUI 的 ChatGPT 授权面板。",
+    "label": "一次性回调地址",
+    "copy": "复制回调地址",
+    "copied": "已复制",
+    "manual": "请使用键盘复制"
+  }
 }

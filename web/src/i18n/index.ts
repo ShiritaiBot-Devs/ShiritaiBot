@@ -15,7 +15,7 @@ export const LOCALES = ["zh-CN", "en"] as const;
 export type Locale = (typeof LOCALES)[number];
 /** Each language is named in itself so people can find their own. */
 export const LOCALE_NAMES: Record<Locale, string> = {
-  "zh-CN": "简体中文",
+  "zh-CN": "简体中文", // i18n: ok
   en: "English",
 };
 export const DEFAULT_LOCALE: Locale = "zh-CN";

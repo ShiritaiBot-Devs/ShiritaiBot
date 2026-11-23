@@ -206,7 +206,7 @@ class SessionActor:
 
     async def submit(self, ctx: Context, text: str) -> str:
         # Only a whole message counts, so "stop" inside a sentence never cancels.
-        if text.strip().casefold() in {"/stop", "/cancel", "停", "取消", "stop", "cancel"}:
+        if text.strip().casefold() in {"/stop", "/cancel", "停", "取消", "stop", "cancel"}:  # i18n: ok
             if self.current and self.context and (ctx.owner or ctx.actor == self.context.actor):
                 loop_logger(ctx).log(Text("agent.log.cancelled", actor=ctx.actor))
                 self.current.cancel()

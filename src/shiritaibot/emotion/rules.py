@@ -10,8 +10,11 @@ and feed the weighted fusion:
 Anything below the trigger line is ignored, so ordinary chatter costs nothing.
 """
 
+# i18n-check: language-data (word lists per language; see docs/I18N.md)
+
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from shiritaibot.memory.longterm import keywords, tokenize
@@ -175,6 +178,133 @@ NEGATIVE = {
 NEGATORS = ("不", "没", "无", "未", "甭")
 VALENCE_TRIGGER = 0.4
 
+# English: whole words or phrases, matched case-insensitively at word boundaries, so "sad"
+# never matches inside "Sadie" and "hurt" never inside "shirt".
+BLOCKED_EN = (
+    "doesn't work",
+    "does not work",
+    "not working",
+    "still broken",
+    "broken again",
+    "failed again",
+    "fails again",
+    "keeps failing",
+    "keeps crashing",
+    "crashed again",
+    "still failing",
+    "won't work",
+    "can't get it to work",
+    "still stuck",
+    "same error",
+    "still wrong",
+    "still doesn't",
+    "still not",
+)
+DEADLINE_EN = (
+    "deadline",
+    "due today",
+    "due tomorrow",
+    "due tonight",
+    "asap",
+    "urgent",
+    "hurry",
+    "running out of time",
+    "last minute",
+    "overdue",
+    "by tonight",
+    "need it now",
+)
+CONSOLING_EN = ("no rush", "no hurry", "take your time", "not urgent", "don't worry")
+LOSS_EN = (
+    "passed away",
+    "died",
+    "broke up",
+    "breakup",
+    "got dumped",
+    "got fired",
+    "laid off",
+    "lost my job",
+    "failed the exam",
+    "failed my exam",
+    "in the hospital",
+    "hospitalized",
+    "funeral",
+    "divorce",
+    "miscarriage",
+)
+VENTING_EN = (
+    "ugh",
+    "argh",
+    "wtf",
+    "damn it",
+    "dammit",
+    "i give up",
+    "so annoying",
+    "fed up",
+    "sick of",
+    "had enough",
+    "i hate this",
+    "this sucks",
+    "fml",
+)
+NEGATIVE_EN = {
+    "hopeless": 1.0,
+    "can't take it": 1.0,
+    "falling apart": 1.0,
+    "want to die": 1.0,
+    "devastated": 0.9,
+    "heartbroken": 0.9,
+    "unemployed": 0.9,
+    "depressed": 0.9,
+    "miserable": 0.8,
+    "anxious": 0.8,
+    "upset": 0.8,
+    "sad": 0.8,
+    "insomnia": 0.8,
+    "angry": 0.8,
+    "furious": 0.8,
+    "sick": 0.6,
+    "exhausted": 0.8,
+    "overwhelmed": 0.8,
+    "stressed": 0.7,
+    "burned out": 0.7,
+    "burnt out": 0.7,
+    "frustrated": 0.7,
+    "lonely": 0.7,
+    "tired": 0.6,
+    "worried": 0.6,
+    "headache": 0.6,
+    "overtime": 0.6,
+    "annoyed": 0.5,
+    "ridiculous": 0.5,
+    "sigh": 0.3,
+}
+NEGATORS_EN = (
+    "not",
+    "no",
+    "never",
+    "hardly",
+    "don't",
+    "didn't",
+    "isn't",
+    "wasn't",
+    "aren't",
+    "not really",
+)
+WORD = re.compile(r"[a-z']+")
+
+
+def _pattern(words) -> re.Pattern[str]:
+    return re.compile(
+        r"\b(?:" + "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True)) + r")\b"
+    )
+
+
+BLOCKED_RE, DEADLINE_RE, CONSOLING_RE, LOSS_RE, VENTING_RE = map(
+    _pattern, (BLOCKED_EN, DEADLINE_EN, CONSOLING_EN, LOSS_EN, VENTING_EN)
+)
+NEGATIVE_RE = _pattern(NEGATIVE_EN)
+
 STRESSOR_AFFECT = {
     "blocked": "frustrated",
     "deadline": "anxious",
@@ -224,6 +354,11 @@ def valence(text: str) -> float:
                 taken.append((index, end))
                 total += weight
             start = end
+    lower = text.lower()
+    for match in NEGATIVE_RE.finditer(lower):
+        before = " ".join(WORD.findall(lower[: match.start()])[-3:])
+        if not any(re.search(rf"\b{re.escape(n)}\b", before) for n in NEGATORS_EN):
+            total += NEGATIVE_EN[match.group(0)]
     return min(1.0, total)
 
 
@@ -236,11 +371,14 @@ def expected_affect(hit: Screen) -> str:
 
 async def screen(text: str, recent: list[str], failed: bool) -> Screen:
     found: set[str] = set()
-    if _has(BLOCKED, text):
+    lower = text.lower()
+    if _has(BLOCKED, text) or BLOCKED_RE.search(lower):
         found.add("blocked")
-    if _has(DEADLINE, text) and not _has(CONSOLING, text):
+    if (_has(DEADLINE, text) or DEADLINE_RE.search(lower)) and not (
+        _has(CONSOLING, text) or CONSOLING_RE.search(lower)
+    ):
         found.add("deadline")
-    if text.count("!") + text.count("！") >= 2 or _has(VENTING, text):
+    if text.count("!") + text.count("！") >= 2 or _has(VENTING, text) or VENTING_RE.search(lower):
         found.add("venting")
     recent = recent[-3:]
     if recent:
@@ -251,9 +389,10 @@ async def screen(text: str, recent: list[str], failed: bool) -> Screen:
                 break
     if failed:
         found.add("failure")
-    if _has(LOSS, text):
+    if _has(LOSS, text) or LOSS_RE.search(lower):
         found.add("loss")
-    if len(text) >= 150 and text.count("我") >= 3:
+    first_person = text.count("我") + len(re.findall(r"\b(?:i|me|my)\b", lower))
+    if len(text) >= 150 and first_person >= 3:
         found.add("narrative")
     categories = tuple(name for name in CATEGORY_WEIGHTS if name in found)
     level = min(1.0, sum(CATEGORY_WEIGHTS[name] for name in categories))

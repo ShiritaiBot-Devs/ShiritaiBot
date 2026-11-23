@@ -16,6 +16,7 @@ import re
 import httpx
 
 from shiritaibot.adapters.onebot11 import qq_download_url
+from shiritaibot.config import meme_description
 from shiritaibot.core import PublicError, now
 from shiritaibot.core.logs import get_logger
 from shiritaibot.i18n import Text, t
@@ -93,7 +94,7 @@ class MemeCore:
 
     def categories(self, cfg=None) -> dict[str, str]:
         cfg = cfg or self.config.value
-        return {c.name: c.description or c.name for c in cfg.meme.categories}
+        return {c.name: meme_description(c) or c.name for c in cfg.meme.categories}
 
     def path(self, key: str):
         if not MEME_ID.fullmatch(key):

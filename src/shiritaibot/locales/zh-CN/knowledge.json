@@ -53,6 +53,8 @@
     "notPptx": "不是有效的 PowerPoint 文件",
     "wrongFamily": "文件内容不是 {family} 格式",
     "rtf": "这是 RTF 文件，请在 Word 中另存为 .docx 后再上传",
-    "parseFailed": "无法解析 {name} 文件（{name2}）"
+    "parseFailed": "无法解析 {name} 文件（{name2}）",
+    "yes": "是",
+    "no": "否"
   }
 }

@@ -460,3 +460,35 @@ EMOTION_SITUATION = (
     " If there's nothing worth remembering, output an empty string."
     " Output only the summary itself."
 )
+
+# emotion/prompt.py
+EMOTION_TONE_MILD = "Tone it down and joke less."
+EMOTION_USER_MOOD = "The user right now: {mood}."
+EMOTION_GROUP_MOOD = "The group's current mood: {mood}."
+EMOTION_TONE_STEADY = (
+    "Keep the tone steady, and respond first to what the user actually needs to deal with."
+)
+EMOTION_ACKNOWLEDGE = (
+    "One short line of understanding or acknowledgement is fine, but don't go on to comfort them."
+)
+EMOTION_GROUP_LIGHT = (
+    "You can briefly show understanding, but don't single anyone out for concern or ask about private matters."
+)
+EMOTION_SITUATION_NOTE = (
+    "Mentioned earlier: {situation} ({age})."
+    " You can pick it up naturally, but don't ask for details."
+)
+EMOTION_CARE = (
+    "If it fits, you can say one sincere line of care, at most one;"
+    " don't do it every turn, and don't let the topic drift away from the user's question."
+)
+EMOTION_GROUP_TONE = (
+    "Keep the overall tone steady, deal with what people are asking first, and joke less."
+    " Don't name or comment on anyone's state, and don't show concern publicly."
+)
+
+# emotion/__init__.py
+EMOTION_PROACTIVE = (
+    "The owner's mood has been poor lately (strength {value:.2f});"
+    " you could send a short private message of care, without asking about private matters."
+)

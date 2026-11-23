@@ -15,11 +15,13 @@ from shiritaibot.core.logs import brief, get_logger
 from shiritaibot.emotion import rules, state
 from shiritaibot.emotion.judge import SITUATION_FLOOR, EmotionJudge
 from shiritaibot.emotion.prompt import render
+from shiritaibot.i18n import Text
+from shiritaibot.prompts import prompt as prompt_text
 
 JUDGE_TIMEOUT = 30
 CARE_KIND = "emotion_care"
 
-log = get_logger("情绪")
+log = get_logger("emotion.log.source")
 
 
 class EmotionManager:
@@ -54,7 +56,7 @@ class EmotionManager:
         try:
             recent, failed = await self._signals(ctx)
         except Exception as exc:
-            log.debug("情绪信号读取失败", exc=exc)
+            log.debug("emotion.log.signalFailed", exc=exc)
             recent, failed = [], False
         task = asyncio.create_task(self.process(ctx, text, recent, failed))
         self.tasks.add(task)
@@ -83,7 +85,7 @@ class EmotionManager:
                     async with asyncio.timeout(JUDGE_TIMEOUT):
                         judgment = await judge.judge(cfg, text, recent, hit)
                 except Exception as exc:
-                    log.debug("情绪判定失败", exc=exc)
+                    log.debug("emotion.log.judgeFailed", exc=exc)
                     return
                 if judgment is None:
                     return
@@ -127,7 +129,7 @@ class EmotionManager:
                     async with asyncio.timeout(JUDGE_TIMEOUT):
                         situation = await judge.situation(cfg, text, recent)
                 except Exception as exc:
-                    log.debug("情绪近况概括失败", exc=exc)
+                    log.debug("emotion.log.situationFailed", exc=exc)
                     situation = ""
             for key in keys:
                 previous = previous_by_key[key]
@@ -148,12 +150,10 @@ class EmotionManager:
                     await self._care(cfg, updated, at)
                 if cfg.emotion.developer:
                     log.log(
-                        f"情绪判定 {key}: value={updated['value']:.2f} "
-                        f"source={updated['source']} affect={updated['affect']} "
-                        f"categories={brief(list(hit.categories))}"
+                        Text("emotion.log.judged", key=key, value=updated['value'], source=updated['source'], affect=updated['affect'], brief=brief(list(hit.categories)))
                     )
         except Exception as exc:
-            log.debug("情绪处理失败", exc=exc)
+            log.debug("emotion.log.failed", exc=exc)
 
     async def _care(self, cfg, updated: dict, at: float) -> None:
         if self.emit is None or cfg.emotion.initiative < 0.8 or updated["value"] < 0.75:
@@ -163,11 +163,10 @@ class EmotionManager:
             return
         await self.emit(
             ExternalEvent(
-                source="情绪",
+                source="情绪",  # i18n: ok
                 kind="care",
                 dedup_key=f"emotion:{int(at // 600)}",
-                title=f"主人最近的情绪状态不好（强度 {updated['value']:.2f}），"
-                "可以主动私聊简单关心一句，不要追问隐私。",
+                title=prompt_text("EMOTION_PROACTIVE", value=updated['value']),
                 payload={"scope": "owner"},
                 urgency="low",
             )
@@ -180,7 +179,7 @@ class EmotionManager:
         try:
             row = await self.store.get(state.KIND, state.read_key(ctx))
         except Exception as exc:
-            log.debug("情绪状态读取失败", exc=exc)
+            log.debug("emotion.log.stateFailed", exc=exc)
             return ""
         if not row:
             return ""

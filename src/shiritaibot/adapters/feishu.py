@@ -13,9 +13,9 @@ from shiritaibot.core.logs import get_logger
 from shiritaibot.i18n import Text, t
 
 # Control words work in either language.
-APPROVAL_REPLY = re.compile(r"(同意|拒绝|approve|deny)\s+([a-f0-9]{10})", re.I)
-STOP_WORDS = {"停", "取消", "stop", "cancel"}
-ALLOW_WORDS = {"同意", "approve"}
+APPROVAL_REPLY = re.compile(r"(同意|拒绝|approve|deny)\s+([a-f0-9]{10})", re.I)  # i18n: ok
+STOP_WORDS = {"停", "取消", "stop", "cancel"}  # i18n: ok
+ALLOW_WORDS = {"同意", "approve"}  # i18n: ok
 
 
 class Feishu:

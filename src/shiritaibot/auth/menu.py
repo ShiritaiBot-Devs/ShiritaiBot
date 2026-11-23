@@ -465,7 +465,7 @@ class _ChatMenu:
                 )
             lines = [line.strip() for line in reply.text.splitlines() if line.strip()]
             # The first line starts with "To do" in the active language.
-            if lines and lines[0].startswith(("要做", "To do")):
+            if lines and lines[0].startswith(("要做", "To do")):  # i18n: ok
                 return "\n".join(lines[:2])
         except Exception:
             pass
@@ -515,7 +515,7 @@ class _ChatMenu:
         lines = [t("approvals.menu.batch.title", count=len(ordered))]
         for index, req in enumerate(ordered, 1):
             summary = (req.reason or self._fallback(req)).splitlines()[0]
-            summary = summary.removeprefix("要做：").removeprefix("To do:").strip()
+            summary = summary.removeprefix("要做：").removeprefix("To do:").strip()  # i18n: ok
             lines.append(
                 f"{index}. {req.tool.name}（{t(RISK_LABELS.get(req.tool.risk, req.tool.risk))}）— {brief(summary, 30)}"
             )

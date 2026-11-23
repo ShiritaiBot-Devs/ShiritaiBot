@@ -117,7 +117,7 @@
     "adapterMissing": "OneBot instance {adapter} doesn't exist or isn't connected",
     "noDownload": "OneBot returned no usable QQ HTTPS download URL or file data",
     "fileUpload": "Upload a file from the session's working directory to a friend's private chat or a group's files (up to 30 MiB)",
-    "forwardGet": "Read the content of a merged forward (id from [合并转发 id] in a message)",
+    "forwardGet": "Read the content of a merged forward (id from [QQ merged forward id] in a message)",
     "groupMembers": "Page through group members (owner and admins first); can filter by QQ number, nickname, or group card",
     "requestList": "Show friend requests, join requests, and group invitations the bot received (while it was running)",
     "messageRecall": "Recall a QQ message (the bot's own messages within 2 minutes; recalling others' group messages needs admin rights)",

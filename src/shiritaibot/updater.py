@@ -539,11 +539,11 @@ class Updater:
             "    print(str(error), file=sys.stderr)\n"
             "    sys.exit(1)\n"
             "except ValidationError as error:\n"
-            "    print('配置校验失败：' + ', '.join('.'.join(map(str, e['loc'])) "
+            "    print('配置校验失败：' + ', '.join('.'.join(map(str, e['loc'])) "  # i18n: ok
             "for e in error.errors(include_input=False)), file=sys.stderr)\n"
             "    sys.exit(1)\n"
             "except TOMLDecodeError:\n"
-            "    print('配置文件 TOML 格式无效', file=sys.stderr)\n"
+            "    print('配置文件 TOML 格式无效', file=sys.stderr)\n"  # i18n: ok
             "    sys.exit(1)\n"
         )
         if not (self.home / "config.toml").exists():

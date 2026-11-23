@@ -1,0 +1,32 @@
+{
+  "moods": {
+    "frustrated": "frustrated",
+    "anxious": "anxious",
+    "sad": "low",
+    "angry": "angry",
+    "tired": "tired",
+    "unsettled": "unsettled"
+  },
+  "strength": {
+    "very": "very ",
+    "somewhat": "somewhat "
+  },
+  "age": {
+    "justNow": "just now",
+    "minutes_one": "{count} minute ago",
+    "minutes_other": "{count} minutes ago",
+    "hours_one": "{count} hour ago",
+    "hours_other": "{count} hours ago",
+    "days_one": "{count} day ago",
+    "days_other": "{count} days ago"
+  },
+  "log": {
+    "source": "Emotion",
+    "judgeFailed": "Emotion judgment failed",
+    "failed": "Emotion processing failed",
+    "signalFailed": "Couldn't read emotion signals",
+    "situationFailed": "Couldn't summarize the recent situation",
+    "stateFailed": "Couldn't read the emotion state",
+    "judged": "Emotion judgment {key}: value={value:.2f} source={source} affect={affect} categories={brief}"
+  }
+}

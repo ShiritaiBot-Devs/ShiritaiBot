@@ -30,7 +30,7 @@ OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 ZIP_MAGIC = b"PK\x03\x04"
 SENTENCE = re.compile(r"(?<=[。！？；!?;])|(?<=[.]\s)")
 MD_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
-DOCX_HEADING = re.compile(r"^(?:heading|标题)\s*(\d)$", re.IGNORECASE)
+DOCX_HEADING = re.compile(r"^(?:heading|标题)\s*(\d)$", re.IGNORECASE)  # i18n: ok
 
 
 @dataclass(slots=True)
@@ -73,7 +73,7 @@ def cell(value) -> str:
     if value is None:
         return ""
     if isinstance(value, bool):
-        return "是" if value else "否"
+        return t("knowledge.extract.yes") if value else t("knowledge.extract.no")
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     if isinstance(value, (datetime, date, time)):

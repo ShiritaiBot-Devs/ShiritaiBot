@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 
+from shiritaibot.config import meme_description
 from shiritaibot.prompts import prompt as prompt_text
 
 # Chat models sometimes drift on the tag name ("<mememe>"), so accept any run of
@@ -25,7 +26,7 @@ def meme_prompt(cfg, *, tool_guidance: bool = True) -> str:
     if not (meme.enabled and meme.inject):
         return ""
     categories = "\n".join(
-        f"- {c.name}：{c.description}" if c.description else f"- {c.name}" for c in meme.categories
+        f"- {c.name}：{meme_description(c)}" if c.description else f"- {c.name}" for c in meme.categories
     )
     return (
         prompt_text("MEME_INJECT_HEAD")

@@ -197,7 +197,7 @@ class MemoryExtractor:
     async def enqueue_event(self, row: dict) -> None:
         """Called by the Proactive Engine once an event is handled; reading happens later."""
         event = row["event"]
-        if event["source"] in {"memory", "情绪"} or (
+        if event["source"] in {"memory", "情绪"} or (  # i18n: ok
             event["source"] == "routine" and event["kind"] == "routine.reminder"
         ):
             return  # Internal prompts and owner reminders carry no new external facts.

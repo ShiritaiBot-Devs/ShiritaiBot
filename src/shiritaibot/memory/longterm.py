@@ -40,8 +40,8 @@ LIVE = ("active", "conflicted")
 CARD_FACTS = 6
 # Function words that never identify a memory on their own.
 STOPWORDS = set(
-    "一下 一个 什么 怎么 怎样 为什么 这个 那个 这些 那些 我们 你们 他们 她们 它们 就是 还是 "
-    "可以 没有 现在 帮我 帮忙 一起 已经 然后 因为 所以 但是 如果 知道 告诉 看看 关于 记得 记住 "
+    "一下 一个 什么 怎么 怎样 为什么 这个 那个 这些 那些 我们 你们 他们 她们 它们 就是 还是 "  # i18n: ok
+    "可以 没有 现在 帮我 帮忙 一起 已经 然后 因为 所以 但是 如果 知道 告诉 看看 关于 记得 记住 "  # i18n: ok
     "the and for with that this what how".split()
 )
 
