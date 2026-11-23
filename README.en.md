@@ -10,7 +10,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-20.19+-339933?logo=node.js&logoColor=white)
 ![OneBot](https://img.shields.io/badge/OneBot-V11-black)
-![Status](https://img.shields.io/badge/status-0.3.1-orange)
+![Status](https://img.shields.io/badge/status-0.3.2-orange)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
 [Website](https://shiritaibot.dev/) ·
@@ -144,25 +144,6 @@ Click **Check for updates** [检查更新] in the WebUI to update and restart. T
 
 Both methods rebuild the WebUI, sync Python dependencies, and check your current configuration against the new code before restarting. If the configuration isn't compatible, the restart is cancelled and ShiritaiBot tries to roll back to the previous version. The update log explains why.
 
-## Use your ChatGPT subscription
-
-You can power ShiritaiBot with an eligible ChatGPT Plus or Pro subscription instead of an API key.
-
-1. In the WebUI, go to **Models & Services → Add provider** [模型与服务 → 新增提供商], choose **OpenAI Subscription**, and save.
-2. Click **Continue with ChatGPT**. This downloads a small helper script.
-3. On the computer you're using to view the WebUI, run the helper:
-   - Windows: `py shiritaibot-chatgpt-login.py`
-   - macOS / Linux: `python3 shiritaibot-chatgpt-login.py`
-4. Sign in with your ChatGPT account to authorize it, then paste the callback URL the helper shows back into the WebUI.
-
-Good to know:
-
-- If the bot runs in Docker or on a remote server, still run the helper on the computer with the browser.
-- If your WebUI is publicly reachable, serve it over HTTPS.
-- Once connected, you can fetch the account's model list. Only requests routed to this provider use the subscription's quota.
-- The provider card shows this instance's request and token usage, and links to ChatGPT's usage settings for the official numbers.
-
-See OpenAI's [guide to self-hosted integrations](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms) for details.
 
 ## Message delivery and the `/help` menu
 
