@@ -11,7 +11,7 @@ import { Pagination } from "../components/Pagination";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
 import { KNOWLEDGE_FIELDS } from "../config/schema";
 import type { Action, SessionConfigPageProps } from "./common";
-import i18n, { tx } from "../i18n";
+import i18n, { currentLocale, tx } from "../i18n";
 
 const PAGE_SIZE = 20;
 const CHUNK_PAGE = 20;
@@ -356,7 +356,7 @@ function DocumentRow({
             <code>{row.id}</code> · {row.filename} · {formatBytes(row.bytes)} ·{" "}
             {i18n.t("knowledge:chunks", { count: row.chunks })} ·{" "}
             {tx(SOURCES[row.source] ?? row.source)} ·{" "}
-            {new Date(row.created * 1000).toLocaleDateString()}
+            {new Date(row.created * 1000).toLocaleDateString(currentLocale())}
           </span>
         </div>
         <div className="actions">
