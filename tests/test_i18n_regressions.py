@@ -233,3 +233,77 @@ def test_knowledge_reindex_works_in_batches(tmp_path, monkeypatch):
             await store.close()
 
     asyncio.run(run())
+
+
+def test_english_counts_have_singular_forms():
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    # "{count} tools", "{count} old memories": a plural noun right after the number.
+    plural = re.compile(r"\{count\}(?:-\w+)?\s+(?:[a-z]+\s+)?[a-z]+s\b")
+
+    def entries(folder):
+        for file in sorted(folder.glob("*.json")):
+            stack = [("", json.loads(file.read_text(encoding="utf-8")))]
+            while stack:
+                prefix, data = stack.pop()
+                for key, value in data.items():
+                    if isinstance(value, dict):
+                        stack.append((f"{prefix}{key}.", value))
+                    else:
+                        yield f"{file.stem}:{prefix}{key}", value
+
+    missing = []
+    for folder in (root / "src/shiritaibot/locales/en", root / "web/src/locales/en"):
+        catalog = dict(entries(folder))
+        for key, value in catalog.items():
+            if key.endswith("_one") or not plural.search(str(value)):
+                continue
+            base = key.removesuffix("_other")
+            if f"{base}_one" not in catalog:
+                missing.append(key)
+    assert missing == []
+
+
+def test_count_phrases_render_singular_and_keep_chinese():
+    from shiritaibot.i18n import Text
+
+    assert t("agent.log.turnDone", locale="en", count=1, value2=2.0) == (
+        "Turn complete (1 step, 2.0s)"
+    )
+    assert t("adapters.reconnect", locale="en", name="E", count=1).endswith("about 1 second")
+    started = Text(
+        "app.log.startedOn",
+        tools=Text("app.log.tools", count=1),
+        plugins=Text("app.log.plugins", count=2),
+        adapters=Text("app.log.connections", count=1),
+        mcp=Text("app.log.mcpServers", count=0),
+    )
+    assert started.render("en") == (
+        "Started: 1 tool, 2 plugins, 1 connection, 0 MCP servers; proactive engine on"
+    )
+    # Chinese text is the same as before the split into phrases.
+    assert started.render("zh-CN") == (
+        "启动完成：1 个工具，2 个插件，1 个协议端，0 个 MCP 服务；主动性引擎已启用"
+    )
+    upkeep = Text(
+        "memory.log.maintenance",
+        archived=Text("memory.log.staleNames", count=2),
+        conflicts=Text("memory.log.openQuestions", count=1),
+    )
+    assert upkeep.render("zh-CN") == "记忆整理：归档 2 个久未出现的新名字，汇总 1 个待确认问题"
+    assert upkeep.render("en") == (
+        "Memory upkeep: archived 2 new names not seen for a long time; "
+        "collected 1 question to confirm"
+    )
+    assert t("agent.context.log.compressed", locale="zh-CN", count=3, chars=120) == (
+        "上下文已压缩：3 轮旧对话合并为 120 字摘要"
+    )
+    with use_locale("zh-CN"):
+        done = t(
+            "memory.extract.log.done",
+            facts=t("memory.extract.log.facts", count=2),
+            events=t("memory.extract.log.events", count=1),
+        )
+    assert done == "记忆抽取完成：2 条事实，1 个事件"

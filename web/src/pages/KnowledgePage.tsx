@@ -123,8 +123,10 @@ function KnowledgeContent({
         {data && (
           <p className="muted">
             {i18n.t("knowledge:documents.summary", {
-              documents: data.documents,
-              chunks: data.chunks,
+              documents: i18n.t("knowledge:documents.count", {
+                count: data.documents,
+              }),
+              chunks: i18n.t("knowledge:chunks", { count: data.chunks }),
               size: formatBytes(data.bytes),
             })}{" "}
             {data.index.model

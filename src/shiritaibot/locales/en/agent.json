@@ -17,8 +17,10 @@
     "noReport": "The model didn't submit a conclusion with proactive_report; reminded it once",
     "repeatLimit": "Called {name} 5 times in a row; ending this turn",
     "handoff": "Agent Chat decided the task needs work or detail checks; handing to Agent Work",
-    "step": "Step {value}: calling the model ({count} messages in context)",
-    "agentChat": "Agent Chat calling the model ({count} visible messages)",
+    "step_one": "Step {value}: calling the model ({count} message in context)",
+    "step_other": "Step {value}: calling the model ({count} messages in context)",
+    "agentChat_one": "Agent Chat calling the model ({count} visible message)",
+    "agentChat_other": "Agent Chat calling the model ({count} visible messages)",
     "routerFailed": "Split model call failed ({name}); defaulting to Agent Work",
     "toolDone": "Tool {name} finished in {spent:.1f}s: {summary}",
     "toolFailed": "Tool {name} failed after {spent:.1f}s: {summary}",
@@ -26,8 +28,10 @@
     "routerAnswer": "Split model → {value} (model answered {brief})",
     "command": "{value} ran command {brief}",
     "routerDecision": "Split model (decision model) → {value} (chat probability {float:.2f})",
-    "turnCancelled": "Turn cancelled ({steps} steps, {value:.1f}s)",
-    "turnDone": "Turn complete ({value} steps, {value2:.1f}s)",
+    "turnCancelled_one": "Turn cancelled ({count} step, {value:.1f}s)",
+    "turnCancelled_other": "Turn cancelled ({count} steps, {value:.1f}s)",
+    "turnDone_one": "Turn complete ({count} step, {value2:.1f}s)",
+    "turnDone_other": "Turn complete ({count} steps, {value2:.1f}s)",
     "notify": "Notification decision: {value}, {brief}",
     "mergeWindow": "Message merge window: {count} cached, processing in {max:.1f} s",
     "start": "Starting ({route}, candidate models {models}): {brief}"
@@ -42,12 +46,14 @@
   "chatToolCall": "Agent Chat returned a tool call. Check the model settings and try again.",
   "turnFailed": "This turn failed ({name})",
   "stepLimit": "Reached this turn's step limit ({steps} steps): the earlier steps are done, but the task needs more. You can ask me to continue, narrow it down and retry, or raise max_steps in Settings → Policy.",
-  "timeLimit": "This turn reached its time limit ({max_turn_seconds} seconds, {steps} steps): the earlier steps are done, but the task needs more time. You can ask me to continue, split the task and retry, or raise max_turn_seconds in Settings → Policy.",
+  "timeLimit_one": "This turn reached its time limit ({max_turn_seconds} seconds, {count} step): the earlier steps are done, but the task needs more time. You can ask me to continue, split the task and retry, or raise max_turn_seconds in Settings → Policy.",
+  "timeLimit_other": "This turn reached its time limit ({max_turn_seconds} seconds, {count} steps): the earlier steps are done, but the task needs more time. You can ask me to continue, split the task and retry, or raise max_turn_seconds in Settings → Policy.",
   "context": {
     "log": {
       "source": "Context",
       "compressFailed": "Context compression failed; dropping old turns according to the policy",
-      "compressed": "Context compressed: {split} old turns merged into a {count}-character summary"
+      "compressed_one": "Context compressed: {count} old turn merged into a {chars}-character summary",
+      "compressed_other": "Context compressed: {count} old turns merged into a {chars}-character summary"
     },
     "compressFailed": "Context compression failed: no candidate model returned a valid summary.",
     "limit": "This turn's input hit the context character limit. Shorten the input or raise the limit."

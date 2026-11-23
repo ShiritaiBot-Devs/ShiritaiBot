@@ -35,7 +35,7 @@ class MemoryMaintenance:
         await self.store.put("memory_maintenance", "last", {"at": stamp, **result})
         if any(result.values()):
             log.log(
-                Text("memory.log.maintenance", archived=result['archived'], conflicts=result['conflicts'])
+                Text("memory.log.maintenance", archived=Text("memory.log.staleNames", count=result['archived']), conflicts=Text("memory.log.openQuestions", count=result['conflicts']))
             )
         return result
 

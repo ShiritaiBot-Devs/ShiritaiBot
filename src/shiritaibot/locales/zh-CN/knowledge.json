@@ -23,8 +23,8 @@
   "log": {
     "source": "知识库",
     "deleted": "已删除文档 {ref}",
-    "vectors": "已为 {done} 个分块计算向量",
-    "added": "已收录《{title}》：{count} 个分块",
+    "vectors_other": "已为 {count} 个分块计算向量",
+    "added_other": "已收录《{title}》：{count} 个分块",
     "vectorsError": "知识库向量循环出错（{name}）",
     "vectorsPaused": "知识库向量计算暂停：{exc}，{backoff:.0f} 秒后重试"
   },

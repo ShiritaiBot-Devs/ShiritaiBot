@@ -16,7 +16,7 @@
   "tooManyPages": "模型列表分页超过限制，请缩小提供商返回范围",
   "modelsUnreadable": "无法读取提供商模型列表，请检查连接和接口协议",
   "modelsInvalidHint": "提供商未返回有效的模型列表，请检查接口协议和服务地址",
-  "toolCalls": "，请求调用 {count} 个工具",
+  "toolCalls_other": "，请求调用 {count} 个工具",
   "subscriptionModels": "无法获取 ChatGPT 套餐的模型列表，请检查授权和网络。",
   "allFailed": "所有候选模型调用失败，请检查 Provider 地址、凭据与模型名称",
   "subscriptionLimit": "ChatGPT 套餐用量已达上限，请在 ChatGPT 用量设置中查看。",

@@ -173,10 +173,10 @@ class Application:
         log.log(
             Text(
                 "app.log.startedOn" if cfg.proactive.enabled else "app.log.startedOff",
-                tools=len(self.registry.tools),
-                plugins=len(self.plugins.loaded),
-                adapters=len(self.adapters.instances),
-                mcp=len(self.mcp.servers),
+                tools=Text("app.log.tools", count=len(self.registry.tools)),
+                plugins=Text("app.log.plugins", count=len(self.plugins.loaded)),
+                adapters=Text("app.log.connections", count=len(self.adapters.instances)),
+                mcp=Text("app.log.mcpServers", count=len(self.mcp.servers)),
             )
         )
 

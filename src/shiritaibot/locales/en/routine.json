@@ -5,7 +5,8 @@
     "source": "Schedule",
     "retry": "Schedule item {key} failed to fire; retrying in {backoff:g} s",
     "schedulerError": "Scheduler error ({name}); retrying in 5 s",
-    "cleaned": "Cleaned up {count} schedule items that ended more than {value} days ago",
+    "cleaned_one": "Cleaned up {count} schedule item that ended more than {value} days ago",
+    "cleaned_other": "Cleaned up {count} schedule items that ended more than {value} days ago",
     "deleted": "Deleted {kind} “{brief}”",
     "status": "{kind} “{brief}” status changed to {status}"
   },

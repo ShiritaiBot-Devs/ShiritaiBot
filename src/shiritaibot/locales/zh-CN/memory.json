@@ -21,7 +21,9 @@
     "summaryFailed": "短期记忆摘要失败（{name}），60 秒后重试",
     "maintenanceSource": "记忆",
     "maintenanceError": "记忆整理出错（{name}）",
-    "maintenance": "记忆整理：归档 {archived} 个久未出现的新名字，汇总 {conflicts} 个待确认问题",
+    "maintenance": "记忆整理：归档 {archived}，汇总 {conflicts}",
+    "staleNames_other": "{count} 个久未出现的新名字",
+    "openQuestions_other": "{count} 个待确认问题",
     "vectorsSource": "记忆",
     "noEmbedding": "Embedding 不可用，本次{table}检索只用关键词"
   },
@@ -51,10 +53,12 @@
       "loopError": "记忆抽取循环出错（{name}）",
       "eventFailed": "事件记忆抽取失败（{name}），",
       "gateSkip": "判断模型认为没有值得记住的内容（{hint:.2f}），跳过抽取",
-      "dropped": "，丢弃 {dropped} 条未通过校验的内容",
+      "dropped_other": "，丢弃 {count} 条未通过校验的内容",
       "droppedItem": "记忆抽取丢弃「{brief}」：{reason}",
       "sessionFailed": "会话记忆抽取失败（{name}），{delay:.0f} 秒后重试",
-      "done": "记忆抽取完成：{facts} 条事实，{events} 个事件"
+      "done": "记忆抽取完成：{facts}，{events}",
+      "facts_other": "{count} 条事实",
+      "events_other": "{count} 个事件"
     },
     "conflict": {
       "thing": "事物",
@@ -78,8 +82,8 @@
   "longterm": {
     "log": {
       "source": "记忆",
-      "vectors": "已为 {done} 条记忆计算向量",
-      "migrated": "已将 {count} 条旧记忆迁移为事实",
+      "vectors_other": "已为 {count} 条记忆计算向量",
+      "migrated_other": "已将 {count} 条旧记忆迁移为事实",
       "entitySaved": "记忆实体已保存：{head}",
       "merged": "记忆实体 e{source} 已合并到 e{target}",
       "vectorsError": "记忆向量循环出错（{name}）",
@@ -166,7 +170,7 @@
   "recall": {
     "log": {
       "source": "记忆",
-      "injected": "注入 {count} 条记忆"
+      "injected_other": "注入 {count} 条记忆"
     }
   },
   "times": {

@@ -74,7 +74,8 @@
     "tooLarge": "The OneBot file response exceeds the size limit"
   },
   "noMessageId": "The OneBot response didn't include a message_id",
-  "reconnect": "Disconnected or couldn't connect ({name}); reconnecting in about {delay} seconds",
+  "reconnect_one": "Disconnected or couldn't connect ({name}); reconnecting in about {count} second",
+  "reconnect_other": "Disconnected or couldn't connect ({name}); reconnecting in about {count} seconds",
   "feishu": {
     "scopeMissing": "The group message permission im:message.group_msg is missing, so wake words without an @ are unverified.",
     "scopeUnconfirmed": "The group message permission im:message.group_msg isn't confirmed yet, so wake words without an @ are unverified.",

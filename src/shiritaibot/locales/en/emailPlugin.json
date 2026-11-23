@@ -10,7 +10,8 @@
   "log": {
     "noNew": "Mail checked; nothing new",
     "failed": "Checking mail failed ({name}: {brief})",
-    "forwarded": "Forwarded the notification by email to {count} recipients: {value}"
+    "forwarded_one": "Forwarded the notification by email to {count} recipient: {value}",
+    "forwarded_other": "Forwarded the notification by email to {count} recipients: {value}"
   },
   "configInvalid": "Invalid email plugin settings: {fields}",
   "footer": "{text}\n\n-- \nSource: {source}\n"

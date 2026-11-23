@@ -10,8 +10,8 @@
     "connectFailed": "MCP 服务 {id} 连接失败：{error}",
     "refreshFailed": "MCP 服务 {id} 刷新工具失败：{exc}",
     "toolSkipped": "MCP 服务 {key} 的工具 {original} 未注册：{error}",
-    "connected": "MCP 服务 {id}（{name}）已连接：{count} 个工具",
-    "toolsUpdated": "MCP 服务 {id} 的工具列表已更新：{count} 个"
+    "connected_other": "MCP 服务 {id}（{name}）已连接：{count} 个工具",
+    "toolsUpdated_other": "MCP 服务 {id} 的工具列表已更新：{count} 个"
   },
   "connectFailed": "连接失败（{name}）",
   "content": {

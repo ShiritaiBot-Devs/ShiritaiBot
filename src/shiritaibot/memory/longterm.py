@@ -1470,7 +1470,7 @@ class MemoryManager:
                 if self.vectors.key() is not None:
                     done = await self.vectors.sync(await self.documents())
                     if done:
-                        log.debug(Text("memory.longterm.log.vectors", done=done))
+                        log.debug(Text("memory.longterm.log.vectors", count=done))
                 backoff = 30.0
             except Exception as exc:
                 if isinstance(exc, PublicError):

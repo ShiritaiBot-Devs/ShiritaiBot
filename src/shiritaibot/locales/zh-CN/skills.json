@@ -4,7 +4,7 @@
     "installed": "已安装技能 {name}",
     "deleted": "已删除技能 {name}",
     "installedFolder": "已从目录安装技能 {name}",
-    "written": "已写入技能 {name}（{count} 个文件）",
+    "written_other": "已写入技能 {name}（{count} 个文件）",
     "edited": "已修改技能 {name} 的 {as_posix}"
   },
   "package": "技能包",
@@ -39,7 +39,7 @@
   "pathInvalid": "文件路径必须是技能目录内的相对路径，不能包含 .. 或隐藏文件",
   "frontmatterEnd": "SKILL.md 的 frontmatter 缺少结束的 ---",
   "frontmatterYaml": "SKILL.md 的 frontmatter 不是有效的 YAML",
-  "oldTextAmbiguous": "old_text 出现了 {count} 次，请提供更长的唯一片段",
+  "oldTextAmbiguous_other": "old_text 出现了 {count} 次，请提供更长的唯一片段",
   "missing": "技能 {name} 不存在，可用 skill_list 查看已安装技能",
   "fileUnknown": "无法识别的技能文件：需要 .skill/.zip 包或 SKILL.md",
   "frontmatterName": "SKILL.md frontmatter 的 name 必须与技能名称一致",

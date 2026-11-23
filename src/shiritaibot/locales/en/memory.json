@@ -21,7 +21,11 @@
     "summaryFailed": "Short-term memory summary failed ({name}); retrying in 60 seconds",
     "maintenanceSource": "Memory",
     "maintenanceError": "Memory upkeep failed ({name})",
-    "maintenance": "Memory upkeep: archived {archived} new names not seen for a long time; collected {conflicts} questions to confirm",
+    "maintenance": "Memory upkeep: archived {archived}; collected {conflicts}",
+    "staleNames_one": "{count} new name not seen for a long time",
+    "staleNames_other": "{count} new names not seen for a long time",
+    "openQuestions_one": "{count} question to confirm",
+    "openQuestions_other": "{count} questions to confirm",
     "vectorsSource": "Memory",
     "noEmbedding": "Embedding unavailable; this {table} search uses keywords only"
   },
@@ -52,10 +56,15 @@
       "loopError": "Memory extraction loop failed ({name})",
       "eventFailed": "Event memory extraction failed ({name}), ",
       "gateSkip": "The decision model found nothing worth remembering ({hint:.2f}); skipping extraction",
-      "dropped": ", dropped {dropped} entries that failed checks",
+      "dropped_one": ", dropped {count} entry that failed checks",
+      "dropped_other": ", dropped {count} entries that failed checks",
       "droppedItem": "Memory extraction dropped “{brief}”: {reason}",
       "sessionFailed": "Session memory extraction failed ({name}); retrying in {delay:.0f} s",
-      "done": "Memory extraction done: {facts} facts, {events} events"
+      "done": "Memory extraction done: {facts}, {events}",
+      "facts_one": "{count} fact",
+      "facts_other": "{count} facts",
+      "events_one": "{count} event",
+      "events_other": "{count} events"
     },
     "conflict": {
       "thing": "thing",
@@ -79,8 +88,10 @@
   "longterm": {
     "log": {
       "source": "Memory",
-      "vectors": "Computed vectors for {done} memories",
-      "migrated": "Migrated {count} old memories into facts",
+      "vectors_one": "Computed vectors for {count} memory",
+      "vectors_other": "Computed vectors for {count} memories",
+      "migrated_one": "Migrated {count} old memory into a fact",
+      "migrated_other": "Migrated {count} old memories into facts",
       "entitySaved": "Memory entity saved: {head}",
       "merged": "Memory entity e{source} merged into e{target}",
       "vectorsError": "Memory vector loop failed ({name})",
@@ -167,7 +178,8 @@
   "recall": {
     "log": {
       "source": "Memory",
-      "injected": "Injected {count} memories"
+      "injected_one": "Injected {count} memory",
+      "injected_other": "Injected {count} memories"
     }
   },
   "times": {

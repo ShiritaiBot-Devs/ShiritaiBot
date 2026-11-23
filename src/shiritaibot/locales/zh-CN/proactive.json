@@ -34,7 +34,7 @@
     "noNotify": "处理结束：不发送通知，理由：{brief}",
     "agentFailed": "无法启动 Proactive Agent（{name}）",
     "channelFailed": "插件 {plugin} 的通知渠道转发失败（{name}）",
-    "sending": "向{recipient}发送 {count} 条通知（来源 {source}）：{brief}",
+    "sending_other": "向{recipient}发送 {count} 条通知（来源 {source}）：{brief}",
     "willNotify": "处理结束：将通知{recipient}{value}——{brief}",
     "received": "收到事件「{brief}」（来源 {source}，类型 {kind}，紧急度 {urgency}）"
   },
@@ -67,7 +67,7 @@
   "loopFailed": "Loop 失败、超时或未返回有效结构化结果",
   "triageFailed": "分类失败，交给 Proactive Loop 核查",
   "needsOwner": "后台任务需要你在私聊中处理：{reason}",
-  "sentSummary": "{source}: {count} 条通知已发送给{recipient}",
+  "sentSummary_other": "{source}: {count} 条通知已发送给{recipient}",
   "jevVerdict": "Jev 判定重要性 {importance}，建议 {choice}（置信度 {float:.2f}）",
   "quietHours": "免打扰时段（{quiet_start}–{quiet_end} {timezone}），通知延后到 {quiet_end2} 发送",
   "triageResult": "分诊结果：重要性 {importance}/4（{value}），建议{value2}；理由：{brief}"

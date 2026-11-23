@@ -511,8 +511,8 @@ class PluginManager:
             hooks = sum(h.kind not in {"command", "llm_tool"} for h in handlers)
             log.log(
                 t("plugins.loadedSummary", name=metadata['name'], key=key, again=t("plugins.again") if old else '', count=len(context.tools))
-                + (t("plugins.commandsSummary", commands=commands) if commands else "")
-                + (t("plugins.hooksSummary", hooks=hooks) if hooks else "")
+                + (t("plugins.commandsSummary", count=commands) if commands else "")
+                + (t("plugins.hooksSummary", count=hooks) if hooks else "")
                 + (t("plugins.channelsSummary", count=len(channels)) if channels else "")
             )
             await self.store.activity("plugin.loaded", key)

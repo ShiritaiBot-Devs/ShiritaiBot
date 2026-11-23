@@ -34,7 +34,7 @@
   "ownerNotAllowed": "{owner} 不在插件允许操作的账号范围内",
   "repoUpdateEmpty": "repo_update 至少需要一个要修改的字段",
   "issueUpdateEmpty": "issue_update 至少需要一个要修改的字段",
-  "truncated": "\n…（已截断，共 {count} 字符）",
+  "truncated_other": "\n…（已截断，共 {count} 字符）",
   "runInvalid": "subagent_run 不是有效的子代理运行 ID",
   "reviewBody": "COMMENT / REQUEST_CHANGES 需要 body",
   "connectFailed": "GitHub 连接失败（{name}）",

@@ -298,7 +298,7 @@ class OneBot:
                 raise
             except Exception as exc:
                 # Only the first failure of a reconnect streak is a warning; retries stay quiet.
-                message = t("adapters.reconnect", name=type(exc).__name__, delay=delay)
+                message = t("adapters.reconnect", name=type(exc).__name__, count=delay)
                 (self.log.debug if warned else self.log.warning)(message)
                 warned = True
                 await self.store.activity(

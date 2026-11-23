@@ -17,8 +17,8 @@
     "noReport": "模型未调用 proactive_report 提交结论，已提醒一次",
     "repeatLimit": "重复调用 {name} 已达 5 次，终止本轮",
     "handoff": "Agent Chat 判断需要执行任务或核查细节，转给 Agent Work",
-    "step": "第 {value} 步：请求模型（上下文 {count} 条消息）",
-    "agentChat": "Agent Chat 请求模型（可见对话 {count} 条消息）",
+    "step_other": "第 {value} 步：请求模型（上下文 {count} 条消息）",
+    "agentChat_other": "Agent Chat 请求模型（可见对话 {count} 条消息）",
     "routerFailed": "分流模型调用失败（{name}），默认交给 Agent Work",
     "toolDone": "工具 {name} 完成，用时 {spent:.1f}s：{summary}",
     "toolFailed": "工具 {name} 失败，用时 {spent:.1f}s：{summary}",
@@ -26,8 +26,8 @@
     "routerAnswer": "分流模型判定 → {value}（模型回答 {brief}）",
     "command": "{value} 执行指令 {brief}",
     "routerDecision": "分流模型（决策模型）判定 → {value}（闲聊概率 {float:.2f}）",
-    "turnCancelled": "本轮已取消（{steps} 步，用时 {value:.1f}s）",
-    "turnDone": "本轮完成（{value} 步，用时 {value2:.1f}s）",
+    "turnCancelled_other": "本轮已取消（{count} 步，用时 {value:.1f}s）",
+    "turnDone_other": "本轮完成（{count} 步，用时 {value2:.1f}s）",
     "notify": "通知决定：{value}，{brief}",
     "mergeWindow": "消息合并窗口：已缓存 {count} 条，{max:.1f} 秒后开始处理",
     "start": "开始处理（{route}，候选模型 {models}）：{brief}"
@@ -42,12 +42,12 @@
   "chatToolCall": "Agent Chat 返回了工具调用，请检查模型配置后重试",
   "turnFailed": "本轮执行失败 ({name})",
   "stepLimit": "已达到本轮步数限制（{steps} 步）：已完成前面的步骤，但任务还需要更多操作。可以让我接着做、把范围缩小后重试，或在设置 → 策略里提高 max_steps。",
-  "timeLimit": "本轮执行时间已达上限（{max_turn_seconds} 秒，{steps} 步）：已完成前面的步骤，但任务还需要更多时间。可以让我接着做、把任务拆小后重试，或在设置 → 策略里提高 max_turn_seconds。",
+  "timeLimit_other": "本轮执行时间已达上限（{max_turn_seconds} 秒，{count} 步）：已完成前面的步骤，但任务还需要更多时间。可以让我接着做、把任务拆小后重试，或在设置 → 策略里提高 max_turn_seconds。",
   "context": {
     "log": {
       "source": "上下文",
       "compressFailed": "上下文压缩失败，按丢弃策略推进旧轮次",
-      "compressed": "上下文已压缩：{split} 轮旧对话合并为 {count} 字摘要"
+      "compressed_other": "上下文已压缩：{count} 轮旧对话合并为 {chars} 字摘要"
     },
     "compressFailed": "上下文压缩失败：所有候选模型均未返回有效摘要。",
     "limit": "本轮输入达到上下文字符上限，请减少输入或调高上限。"

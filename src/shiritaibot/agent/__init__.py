@@ -1026,14 +1026,14 @@ class AgentRuntime:
                 )
         except asyncio.CancelledError:
             body["status"] = "cancelled"
-            log.log(Text("agent.log.turnCancelled", steps=body['steps'], value=time.monotonic() - started))
+            log.log(Text("agent.log.turnCancelled", count=body['steps'], value=time.monotonic() - started))
             raise
         except TimeoutError:
             # asyncio.timeout(max_turn_seconds) 到期；工具自身超时已在 tools 层消化，
             # 走到这里的基本都是整轮时间超限。给出与步数超限一致的指引而非裸类型名。
             body["status"] = "failed"
             error = (
-                t("agent.timeLimit", max_turn_seconds=cfg.policy.max_turn_seconds, steps=body['steps'])
+                t("agent.timeLimit", max_turn_seconds=cfg.policy.max_turn_seconds, count=body['steps'])
             )
             log.error(Text("agent.log.turnFailed", error=error))
             if actor is None:
@@ -1062,7 +1062,7 @@ class AgentRuntime:
                 await asyncio.shield(hooks.call("agent_done", info, result))
             if body["status"] == "completed":
                 log.log(
-                    Text("agent.log.turnDone", value=body['steps'] + 1, value2=time.monotonic() - started)
+                    Text("agent.log.turnDone", count=body['steps'] + 1, value2=time.monotonic() - started)
                 )
             body["finished"] = now().isoformat()
             await self.store.put("turn", ctx.turn, body, execution_session)

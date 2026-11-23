@@ -649,8 +649,8 @@ class MemoryExtractor:
                     stats["events"] += 1
         await self.memory.load_aliases()
         log.log(
-            t("memory.extract.log.done", facts=stats['facts'], events=stats['events'])
-            + (t("memory.extract.log.dropped", dropped=stats['dropped']) if stats["dropped"] else ""),
+            t("memory.extract.log.done", facts=t("memory.extract.log.facts", count=stats['facts']), events=t("memory.extract.log.events", count=stats['events']))
+            + (t("memory.extract.log.dropped", count=stats['dropped']) if stats["dropped"] else ""),
             window.label,
         )
         return stats

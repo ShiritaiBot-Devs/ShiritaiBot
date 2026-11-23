@@ -378,7 +378,7 @@ class MemeCore:
                 if self.vectors.key() is not None and self.items:
                     done = await self.vectors.sync(self.documents())
                     if done:
-                        log.debug(Text("memes.log.vectors", done=done))
+                        log.debug(Text("memes.log.vectors", count=done))
                 backoff = 30.0
             except Exception as exc:
                 if isinstance(exc, PublicError):

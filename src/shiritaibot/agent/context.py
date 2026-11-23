@@ -209,7 +209,7 @@ class ContextManager:
                         )
                     if summary:
                         log.log(
-                            Text("agent.context.log.compressed", split=split, count=len(summary)),
+                            Text("agent.context.log.compressed", count=split, chars=len(summary)),
                             describe_session(session),
                         )
             else:

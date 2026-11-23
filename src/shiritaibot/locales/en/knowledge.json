@@ -23,8 +23,10 @@
   "log": {
     "source": "Knowledge base",
     "deleted": "Deleted document {ref}",
-    "vectors": "Computed vectors for {done} chunks",
-    "added": "Added “{title}”: {count} chunks",
+    "vectors_one": "Computed vectors for {count} chunk",
+    "vectors_other": "Computed vectors for {count} chunks",
+    "added_one": "Added “{title}”: {count} chunk",
+    "added_other": "Added “{title}”: {count} chunks",
     "vectorsError": "Knowledge base vector loop failed ({name})",
     "vectorsPaused": "Knowledge base vector computing paused: {exc}; retrying in {backoff:.0f} s"
   },

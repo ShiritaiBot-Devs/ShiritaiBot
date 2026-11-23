@@ -5,7 +5,7 @@
     "source": "日程",
     "retry": "日程 {key} 触发失败，{backoff:g} 秒后重试",
     "schedulerError": "日程调度出错（{name}），5 秒后重试",
-    "cleaned": "自动清理 {count} 条结束超过 {value} 天的日程",
+    "cleaned_other": "自动清理 {count} 条结束超过 {value} 天的日程",
     "deleted": "删除{kind}「{brief}」",
     "status": "{kind}「{brief}」状态改为 {status}"
   },

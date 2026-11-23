@@ -416,7 +416,7 @@ class KnowledgeBase:
                 )
                 done = await self.embed_pending() if active else 0
                 if done:
-                    log.debug(Text("knowledge.log.vectors", done=done))
+                    log.debug(Text("knowledge.log.vectors", count=done))
                 backoff = 30.0
             except Exception as exc:
                 if isinstance(exc, PublicError):

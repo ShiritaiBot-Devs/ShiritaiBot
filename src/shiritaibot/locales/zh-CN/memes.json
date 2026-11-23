@@ -1,7 +1,7 @@
 {
   "log": {
     "source": "表情",
-    "vectors": "已为 {done} 个表情计算向量",
+    "vectors_other": "已为 {count} 个表情计算向量",
     "downloadFailed": "表情下载失败（{name}）",
     "vectorsError": "表情向量循环出错（{name}）",
     "vectorsPaused": "表情向量计算暂停：{exc}，{backoff:.0f} 秒后重试",

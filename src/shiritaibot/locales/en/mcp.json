@@ -10,8 +10,10 @@
     "connectFailed": "MCP server {id} failed to connect: {error}",
     "refreshFailed": "MCP server {id} failed to refresh its tools: {exc}",
     "toolSkipped": "Tool {original} of MCP server {key} wasn't registered: {error}",
-    "connected": "MCP server {id} ({name}) connected: {count} tools",
-    "toolsUpdated": "MCP server {id}'s tool list updated: {count} tools"
+    "connected_one": "MCP server {id} ({name}) connected: {count} tool",
+    "connected_other": "MCP server {id} ({name}) connected: {count} tools",
+    "toolsUpdated_one": "MCP server {id}'s tool list updated: {count} tool",
+    "toolsUpdated_other": "MCP server {id}'s tool list updated: {count} tools"
   },
   "connectFailed": "Connection failed ({name})",
   "content": {
