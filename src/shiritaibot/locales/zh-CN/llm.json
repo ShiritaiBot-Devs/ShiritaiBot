@@ -52,7 +52,7 @@
       "tooLarge": "QQ 图片超过下载上限",
       "captionFailed": "图像转述失败：{exc}",
       "unsupported": "QQ 图片无法转换成受支持的图像",
-      "downloadFailed": "图片下载失败（{name}）"
+      "downloadFailed": "图片下载失败（{name}）{status}：{url}"
     }
   }
 }

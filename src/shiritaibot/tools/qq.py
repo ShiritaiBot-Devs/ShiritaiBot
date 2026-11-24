@@ -126,7 +126,9 @@ async def download_qq_file(app, session: str, ref: str) -> dict:
         raise PublicError("tools.qq.adapterUnavailable")
     data = row["data"]
     source = await qq_file_source(bot, row["group_id"], data)
-    folder = session_dir(app.home, "files", session)
+    # Land downloads inside the session workspace so sandboxed main-loop
+    # sessions (which mount only their workspace) can read them directly.
+    folder = session_dir(app.home, "workspaces", session) / "downloads"
     await asyncio.to_thread(folder.mkdir, parents=True, exist_ok=True)
     stream = await asyncio.to_thread(
         tempfile.NamedTemporaryFile, dir=folder, suffix=".part", delete=False
@@ -193,6 +195,25 @@ def qq_tools(app) -> list[Tool]:
             for bot in app.adapters.instances.values()
         )
 
+    def owner_agent(ctx: Context) -> bool:
+        return ctx.owner and ctx.mode == "agent"
+
+    def own_chat(ctx: Context) -> tuple[str, str] | None:
+        """The chat this session belongs to, as (private|group, id)."""
+        parts = ctx.session.split(":")
+        if len(parts) == 3 and parts[0] in {"private", "group"}:
+            return parts[0], parts[2]
+        return None
+
+    def read_bot_for(ctx: Context):
+        # Read-only message access rides the session's own adapter, without owner privileges.
+        instances = {key: bot for key, bot in app.adapters.instances.items() if isinstance(bot, OneBot)}
+        parts = ctx.session.split(":")
+        bot = instances.get(parts[1]) if len(parts) == 3 else None
+        if not isinstance(bot, OneBot) or bot.status != "connected":
+            raise PublicError("会话所属 OneBot 实例不可用")
+        return bot
+
     def bot_for(ctx: Context, args: dict):
         owner_only(ctx)
         instances = {
@@ -224,7 +245,7 @@ def qq_tools(app) -> list[Tool]:
     async def local_file(ctx: Context, value: str) -> tuple[Path, bytes]:
         roots = [
             session_dir(app.home, "workspaces", ctx.session),
-            session_dir(app.home, "files", ctx.session),
+            session_dir(app.home, "files", ctx.session),  # legacy downloads
             # Plugins (e.g. thu_learn downloads) keep their files here.
             app.home / "plugin_data",
         ]
@@ -328,11 +349,30 @@ def qq_tools(app) -> list[Tool]:
         return {"sent": True, "name": params["name"], "bytes": len(content)}
 
     async def message_get(ctx, args):
-        bot = bot_for(ctx, args)
-        return await render(ctx, bot, await bot.call("get_msg", {"message_id": args["message_id"]}))
+        scope = None if owner_agent(ctx) else own_chat(ctx)
+        if scope is None:
+            bot = bot_for(ctx, args)
+            return await render(ctx, bot, await bot.call("get_msg", {"message_id": args["message_id"]}))
+        bot = read_bot_for(ctx)
+        raw = await bot.call("get_msg", {"message_id": args["message_id"]})
+        uid = str((raw.get("sender") or {}).get("user_id") or "")
+        if scope[0] == "group":
+            ok = str(raw.get("group_id") or "") == scope[1]
+        else:
+            # Own chat: the member's messages plus the bot's replies in this chat.
+            ok = uid == scope[1] or (bot.self_id and uid == str(bot.self_id))
+        if not ok:
+            raise PublicError("只能读取当前会话的消息")
+        return await render(ctx, bot, raw)
 
     async def message_history(ctx, args):
-        bot = bot_for(ctx, args)
+        scope = None if owner_agent(ctx) else own_chat(ctx)
+        if scope is None:
+            bot = bot_for(ctx, args)
+        else:
+            if args["target"] != scope[0] or str(args["id"]) != scope[1]:
+                raise PublicError("只能读取当前会话的消息记录")
+            bot = read_bot_for(ctx)
         count = args.get("count", 20)
         params = {"count": count, "message_seq": args.get("before_seq", 0)}
         if args["target"] == "group":
@@ -378,7 +418,8 @@ def qq_tools(app) -> list[Tool]:
         return {"message_id": receipt.get("message_id"), "forward_id": receipt.get("res_id")}
 
     async def forward_get(ctx, args):
-        bot = bot_for(ctx, args)
+        scope = None if owner_agent(ctx) else own_chat(ctx)
+        bot = read_bot_for(ctx) if scope is not None else bot_for(ctx, args)
         data = await bot.call("get_forward_msg", {"message_id": args["id"], "id": args["id"]})
         return {
             "messages": [await render(ctx, bot, m) for m in data.get("messages", [])],

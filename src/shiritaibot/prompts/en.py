@@ -255,9 +255,9 @@ TASK_RULES = (
 TRIAGE_SUMMARY = "Importance {importance}/4 ({value}); suggestion: {value2}."
 TASK_SUBAGENT_DONE = (
     "\n\n"
-    "This is a task the owner just delegated to a subagent in the conversation, and the owner is waiting for the result."
+    "This task was just delegated to a subagent in the conversation, and {recipient} is waiting for the result."
     " Don't check again with subagent_list or the shell;"
-    " based on the task and result above, write up the conclusion in your persona's voice and pass it on to the owner (explaining what happened if it failed)."
+    " based on the task and result above, write up the conclusion in your persona's voice and pass it on to {recipient} (explaining what happened if it failed)."
 )
 TRIAGE_SYSTEM = (
     "You classify how important events are."
@@ -271,9 +271,9 @@ TRIAGE_SYSTEM = (
 )
 TASK_SUBAGENT_INPUT = (
     "\n\n"
-    "This is a task the owner delegated to a subagent, and the subagent stopped to ask for input (see question)."
-    " If you can answer reliably from the original task, existing memory, and the tools you can use, and it doesn't involve something only the owner can decide (spending money, deleting or overwriting data, publishing or sending anything outward, loosening permissions, the owner's personal preferences), call subagent_send (id={run}) to reply directly so it continues, then briefly tell the owner in proactive_report what you answered for them and that it's running again."
-    " Otherwise, in your persona's voice, pass the subagent's question and its progress so far on to the owner, and say the task will continue once they reply;"
+    "This task was delegated to a subagent, and the subagent stopped to ask for input (see question)."
+    " If you can answer reliably from the original task, existing memory, and the tools you can use, and it doesn't involve something only the owner can decide (spending money, deleting or overwriting data, publishing or sending anything outward, loosening permissions, the owner's personal preferences), call subagent_send (id={run}) to reply directly so it continues, then briefly tell {recipient} in proactive_report what you answered and that it's running again."
+    " Otherwise, in your persona's voice, pass the subagent's question and its progress so far on to {recipient}, and say the task will continue after a reply;"
     " if it lacks permissions, tell the owner which permission in the subagent's settings they can loosen before letting it continue."
 )
 

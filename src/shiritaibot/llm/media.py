@@ -177,7 +177,15 @@ class ImageResolver:
                         return None
                     chunks.append(chunk)
         except httpx.HTTPError as exc:
-            log.warning(Text("llm.media.log.downloadFailed", name=type(exc).__name__))
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            log.warning(
+                Text(
+                    "llm.media.log.downloadFailed",
+                    name=type(exc).__name__,
+                    status=f" HTTP {status}" if status else "",
+                    url=url[:200],
+                )
+            )
             return None
         prepared = await asyncio.to_thread(prepare_image, b"".join(chunks))
         if prepared is None:

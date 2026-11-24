@@ -548,6 +548,15 @@ class ProactiveEngine:
         event = row["event"]
         ctx = Context(PREPARE_SESSION + key, "owner", "agent", True, background=True)
         scoped_routine = False
+        scoped_subagent = False
+        if delegated(event):
+            # Results go back to the session that spawned the run; owner-origin runs
+            # keep the classic background loop and notify the owner.
+            if target := await self.subagent_target(event):
+                origin_ctx = await self.routine_context(target, "", key)
+                if origin_ctx is not None:
+                    ctx = origin_ctx
+                    scoped_subagent = True
         if event["source"] == "routine" and event["kind"] in ROUTINE_KINDS:
             session, actor = await self.routine_origin(row)
             if session != "owner":
@@ -560,7 +569,11 @@ class ProactiveEngine:
                     await self.short_term.record(key, "discarded", reason)
                     return
                 ctx = origin_ctx
-        recipient = t("proactive.recipient.session") if scoped_routine else t("proactive.recipient.owner")
+        recipient = t(
+            "proactive.recipient.session"
+            if scoped_routine or scoped_subagent
+            else "proactive.recipient.owner"
+        )
         must = (
             prompt_text("TASK_MUST_NOTIFY", recipient=recipient)
             if decision.importance == 4
@@ -577,13 +590,9 @@ class ProactiveEngine:
         )
         if delegated(event) and event["kind"] == "subagent.needs_input":
             run = event["payload"].get("run_id", "")
-            prompt += (
-                prompt_text("TASK_SUBAGENT_INPUT", run=run)
-            )
+            prompt += prompt_text("TASK_SUBAGENT_INPUT", run=run, recipient=recipient)
         elif delegated(event):
-            prompt += (
-                prompt_text("TASK_SUBAGENT_DONE")
-            )
+            prompt += prompt_text("TASK_SUBAGENT_DONE", recipient=recipient)
         if event["source"] == "routine" and event["kind"] == "routine.job":
             instructions = event["payload"].get("routine_title", event["title"])
             prompt += prompt_text("TASK_JOB", recipient=recipient) + str(instructions)
@@ -599,6 +608,17 @@ class ProactiveEngine:
         except Exception as exc:
             event_log(key).error(Text("proactive.log.agentFailed", name=type(exc).__name__), exc=exc)
             await self.finish(row, "", failed=True)
+
+    async def subagent_target(self, event: dict) -> str:
+        """Session that spawned a delegated subagent run; "" keeps the owner-bound path."""
+        origin = event.get("payload", {}).get("session", "")
+        if not origin or not MAIN_SESSION.fullmatch(origin):
+            return ""
+        cfg = self.config.value
+        owner = origin.startswith("web:") or any(
+            adapter.enabled and origin == adapter.owner_session() for adapter in cfg.adapters
+        )
+        return "" if owner else origin
 
     async def queue(
         self, key: str, source: str, decision: Decision, message: str, *, session: str = ""
@@ -709,6 +729,8 @@ class ProactiveEngine:
         )
         scheduled = row["event"]["source"] == "routine" and row["event"]["kind"] in ROUTINE_KINDS
         session, _ = await self.routine_origin(row) if scheduled else ("", "")
+        if not session:
+            session = await self.subagent_target(row["event"])
         if self.hooks is not None and self.hooks.has("proactive_done"):
             event = row["event"]
             protected = delegated(event) or scheduled

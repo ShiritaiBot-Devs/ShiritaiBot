@@ -117,7 +117,7 @@
     "adapterMissing": "OneBot instance {adapter} doesn't exist or isn't connected",
     "noDownload": "OneBot returned no usable QQ HTTPS download URL or file data",
     "fileUpload": "Upload a file from the session's working directory to a friend's private chat or a group's files (up to 30 MiB)",
-    "forwardGet": "Read the content of a merged forward (id from [QQ merged forward id] in a message)",
+    "forwardGet": "Read the content of a merged forward (id from [QQ merged forward id] in a message). Non-owner sessions can only read forwards received in their own chat.",
     "groupMembers": "Page through group members (owner and admins first); can filter by QQ number, nickname, or group card",
     "requestList": "Show friend requests, join requests, and group invitations the bot received (while it was running)",
     "messageRecall": "Recall a QQ message (the bot's own messages within 2 minutes; recalling others' group messages needs admin rights)",
@@ -125,12 +125,12 @@
     "requestHandle": "Accept, reject, or ignore a friend request / join request / group invitation. Ignoring only marks it locally and doesn't notify the other side.",
     "sendPathDenied": "Only files in the session's working directory, the downloaded files folder, or the plugin data folder (plugin_data/...) can be sent",
     "groupBan": "Mute a group member; duration is in seconds (up to 30 days), and 0 unmutes. Needs admin rights.",
-    "messageGet": "Get one QQ message by message ID; files and images in it come back as refs usable with qq_file_download",
+    "messageGet": "Get one QQ message by message ID; files and images in it come back as refs usable with qq_file_download. Non-owner sessions can only read messages in their own chat.",
     "groupInvite": "Invite a friend to the group: sends the friend a group recommendation card in private, which they open to apply (QQ protocol clients have no API to add people directly)",
     "send": "Send a message from the bot's QQ account to a friend's private chat or a group, optionally with @mentions, a quoted reply, and images. You don't need this tool to reply in the current session; just answer.",
     "forwardSend": "Send a merged forward to a friend or group. Nodes can be existing messages (message_id) or custom text (text, with optional name and user_id shown as the sender).",
-    "messageHistory": "Get the QQ message history of a friend or group (with message IDs, usable for recalling, setting essence, or quoting), oldest first; page back by passing next_before_seq as before_seq.",
-    "fileDownload": "Download a QQ file reference (a file received in the current chat, or a file or image ref returned by qq_message_get / qq_message_history / qq_forward_get) and return the local path"
+    "messageHistory": "Get the QQ message history of a friend or group (with message IDs, usable for recalling, setting essence, or quoting), oldest first; page back by passing next_before_seq as before_seq. Non-owner sessions can only read the history of their own private or group chat.",
+    "fileDownload": "Download a QQ file reference (a file received in the current chat, or a file or image ref returned by qq_message_get / qq_message_history / qq_forward_get) to downloads/ in the current session workspace and return the local path"
   },
   "feishu": {
     "notAFile": "Choose a regular file",

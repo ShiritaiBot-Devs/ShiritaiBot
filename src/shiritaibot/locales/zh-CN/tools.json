@@ -117,7 +117,7 @@
     "adapterMissing": "OneBot 实例 {adapter} 不存在或未连接",
     "noDownload": "OneBot 未返回可用的 QQ HTTPS 下载地址或文件数据",
     "fileUpload": "向好友私聊或群文件上传会话工作目录中的文件（上限 30 MiB）",
-    "forwardGet": "读取合并转发消息的内容（id 来自消息中的 [合并转发 id]）",
+    "forwardGet": "读取合并转发消息的内容（id 来自消息中的 [合并转发 id]）。非主人的会话只能读取自己会话里收到的转发",
     "groupMembers": "分页查询群成员（群主、管理员在前），可按 QQ 号、昵称或群名片过滤",
     "requestList": "查看 Bot 收到的好友申请、入群申请和群邀请（Bot 运行期间收到的）",
     "messageRecall": "撤回一条 QQ 消息（Bot 自己的消息限 2 分钟内；撤回他人群消息需要管理员）",
@@ -125,12 +125,12 @@
     "requestHandle": "同意、拒绝或忽略一条好友申请 / 入群申请 / 群邀请。忽略只在本地标记，不通知对方。",
     "sendPathDenied": "只能发送当前会话工作目录、已下载文件目录或插件数据目录（plugin_data/...）中的文件",
     "groupBan": "禁言群成员，duration 为秒数（最长 30 天）；duration 为 0 时解除禁言。需要管理员。",
-    "messageGet": "按消息 ID 获取一条 QQ 消息；其中的文件和图片会返回 qq_file_download 可用的 ref",
+    "messageGet": "按消息 ID 获取一条 QQ 消息；其中的文件和图片会返回 qq_file_download 可用的 ref。非主人的会话只能读取当前会话里的消息",
     "groupInvite": "邀请好友进群：向该好友私聊发送群推荐卡片，由对方点开申请加入（QQ 协议端没有直接拉人入群的接口）",
     "send": "以 Bot 的 QQ 账号向指定好友私聊或群聊发送消息，可附 @、引用回复和图片。回复当前会话不需要此工具，直接回答即可。",
     "forwardSend": "向好友或群发送合并转发消息。节点可以是已有消息（message_id），也可以是自定义文本（text，可选 name、user_id 作为显示的发送者）。",
-    "messageHistory": "获取指定好友或群的 QQ 消息记录（含消息 ID，可用于撤回、设精华、引用），按时间正序；用 next_before_seq 作为 before_seq 向前翻页。",
-    "fileDownload": "下载 QQ 文件引用（当前聊天收到的文件，或 qq_message_get / qq_message_history / qq_forward_get 返回的文件和图片 ref），返回本地路径"
+    "messageHistory": "获取指定好友或群的 QQ 消息记录（含消息 ID，可用于撤回、设精华、引用），按时间正序；用 next_before_seq 作为 before_seq 向前翻页。非主人的会话只能读取当前会话（自己的私聊或所在群）的记录",
+    "fileDownload": "下载 QQ 文件引用（当前聊天收到的文件，或 qq_message_get / qq_message_history / qq_forward_get 返回的文件和图片 ref），保存到当前会话工作区的 downloads/ 下并返回本地路径"
   },
   "feishu": {
     "notAFile": "请选择一个普通文件",

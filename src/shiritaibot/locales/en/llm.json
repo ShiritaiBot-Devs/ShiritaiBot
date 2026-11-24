@@ -53,7 +53,7 @@
       "tooLarge": "The QQ image exceeds the download limit",
       "captionFailed": "Image description failed: {exc}",
       "unsupported": "The QQ image couldn't be converted to a supported format",
-      "downloadFailed": "Image download failed ({name})"
+      "downloadFailed": "Image download failed ({name}){status}: {url}"
     }
   }
 }
