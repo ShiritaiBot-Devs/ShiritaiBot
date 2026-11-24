@@ -89,7 +89,10 @@ def test_download_napcat_file_from_base64_without_a_usable_url(tmp_path, monkeyp
     assert result["sha256"] == hashlib.sha256(payload).hexdigest()
     assert result["name"] == "attachment.csv"
     assert Path(result["path"]).read_bytes() == payload
-    assert list(session_dir(tmp_path, "files", session).glob("*.part")) == []
+    downloads = session_dir(tmp_path, "workspaces", session) / "downloads"
+    assert Path(result["path"]).is_relative_to(downloads)
+    assert list(downloads.glob("*.part")) == []
+    assert not session_dir(tmp_path, "files", session).exists()
 
 
 def test_download_source_keeps_https_and_rejects_path_only_or_invalid_data(monkeypatch):
