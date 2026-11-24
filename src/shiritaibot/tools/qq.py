@@ -195,6 +195,25 @@ def qq_tools(app) -> list[Tool]:
             for bot in app.adapters.instances.values()
         )
 
+    def owner_agent(ctx: Context) -> bool:
+        return ctx.owner and ctx.mode == "agent"
+
+    def own_chat(ctx: Context) -> tuple[str, str] | None:
+        """The chat this session belongs to, as (private|group, id)."""
+        parts = ctx.session.split(":")
+        if len(parts) == 3 and parts[0] in {"private", "group"}:
+            return parts[0], parts[2]
+        return None
+
+    def read_bot_for(ctx: Context):
+        # Read-only message access rides the session's own adapter, without owner privileges.
+        instances = {key: bot for key, bot in app.adapters.instances.items() if isinstance(bot, OneBot)}
+        parts = ctx.session.split(":")
+        bot = instances.get(parts[1]) if len(parts) == 3 else None
+        if not isinstance(bot, OneBot) or bot.status != "connected":
+            raise PublicError("会话所属 OneBot 实例不可用")
+        return bot
+
     def bot_for(ctx: Context, args: dict):
         owner_only(ctx)
         instances = {
@@ -330,11 +349,30 @@ def qq_tools(app) -> list[Tool]:
         return {"sent": True, "name": params["name"], "bytes": len(content)}
 
     async def message_get(ctx, args):
-        bot = bot_for(ctx, args)
-        return await render(ctx, bot, await bot.call("get_msg", {"message_id": args["message_id"]}))
+        scope = None if owner_agent(ctx) else own_chat(ctx)
+        if scope is None:
+            bot = bot_for(ctx, args)
+            return await render(ctx, bot, await bot.call("get_msg", {"message_id": args["message_id"]}))
+        bot = read_bot_for(ctx)
+        raw = await bot.call("get_msg", {"message_id": args["message_id"]})
+        uid = str((raw.get("sender") or {}).get("user_id") or "")
+        if scope[0] == "group":
+            ok = str(raw.get("group_id") or "") == scope[1]
+        else:
+            # Own chat: the member's messages plus the bot's replies in this chat.
+            ok = uid == scope[1] or (bot.self_id and uid == str(bot.self_id))
+        if not ok:
+            raise PublicError("只能读取当前会话的消息")
+        return await render(ctx, bot, raw)
 
     async def message_history(ctx, args):
-        bot = bot_for(ctx, args)
+        scope = None if owner_agent(ctx) else own_chat(ctx)
+        if scope is None:
+            bot = bot_for(ctx, args)
+        else:
+            if args["target"] != scope[0] or str(args["id"]) != scope[1]:
+                raise PublicError("只能读取当前会话的消息记录")
+            bot = read_bot_for(ctx)
         count = args.get("count", 20)
         params = {"count": count, "message_seq": args.get("before_seq", 0)}
         if args["target"] == "group":
@@ -380,7 +418,8 @@ def qq_tools(app) -> list[Tool]:
         return {"message_id": receipt.get("message_id"), "forward_id": receipt.get("res_id")}
 
     async def forward_get(ctx, args):
-        bot = bot_for(ctx, args)
+        scope = None if owner_agent(ctx) else own_chat(ctx)
+        bot = read_bot_for(ctx) if scope is not None else bot_for(ctx, args)
         data = await bot.call("get_forward_msg", {"message_id": args["id"], "id": args["id"]})
         return {
             "messages": [await render(ctx, bot, m) for m in data.get("messages", [])],
@@ -623,7 +662,8 @@ def qq_tools(app) -> list[Tool]:
         ),
         Tool(
             "qq_message_get",
-            "按消息 ID 获取一条 QQ 消息；其中的文件和图片会返回 qq_file_download 可用的 ref",
+            "按消息 ID 获取一条 QQ 消息；其中的文件和图片会返回 qq_file_download 可用的 ref。"
+            "非主人的会话只能读取当前会话里的消息",
             schema({"message_id": MESSAGE_ID, "adapter": ADAPTER}, ["message_id"]),
             message_get,
             risk="safe",
@@ -631,7 +671,8 @@ def qq_tools(app) -> list[Tool]:
         Tool(
             "qq_message_history",
             "获取指定好友或群的 QQ 消息记录（含消息 ID，可用于撤回、设精华、引用），"
-            "按时间正序；用 next_before_seq 作为 before_seq 向前翻页。",
+            "按时间正序；用 next_before_seq 作为 before_seq 向前翻页。"
+            "非主人的会话只能读取当前会话（自己的私聊或所在群）的记录",
             schema(
                 {
                     **CHAT,
@@ -680,7 +721,8 @@ def qq_tools(app) -> list[Tool]:
         ),
         Tool(
             "qq_forward_get",
-            "读取合并转发消息的内容（id 来自消息中的 [合并转发 id]）",
+            "读取合并转发消息的内容（id 来自消息中的 [合并转发 id]）。"
+            "非主人的会话只能读取自己会话里收到的转发",
             schema(
                 {"id": {"type": "string", "minLength": 1, "maxLength": 200}, "adapter": ADAPTER},
                 ["id"],
