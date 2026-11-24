@@ -126,7 +126,9 @@ async def download_qq_file(app, session: str, ref: str) -> dict:
         raise PublicError("文件所属 OneBot 实例不可用")
     data = row["data"]
     source = await qq_file_source(bot, row["group_id"], data)
-    folder = session_dir(app.home, "files", session)
+    # Land downloads inside the session workspace so sandboxed main-loop
+    # sessions (which mount only their workspace) can read them directly.
+    folder = session_dir(app.home, "workspaces", session) / "downloads"
     await asyncio.to_thread(folder.mkdir, parents=True, exist_ok=True)
     stream = await asyncio.to_thread(
         tempfile.NamedTemporaryFile, dir=folder, suffix=".part", delete=False
@@ -224,7 +226,7 @@ def qq_tools(app) -> list[Tool]:
     async def local_file(ctx: Context, value: str) -> tuple[Path, bytes]:
         roots = [
             session_dir(app.home, "workspaces", ctx.session),
-            session_dir(app.home, "files", ctx.session),
+            session_dir(app.home, "files", ctx.session),  # legacy downloads
             # Plugins (e.g. thu_learn downloads) keep their files here.
             app.home / "plugin_data",
         ]
@@ -853,7 +855,7 @@ def qq_tools(app) -> list[Tool]:
         Tool(
             "qq_file_download",
             "下载 QQ 文件引用（当前聊天收到的文件，或 qq_message_get / qq_message_history / "
-            "qq_forward_get 返回的文件和图片 ref），返回本地路径",
+            "qq_forward_get 返回的文件和图片 ref），保存到当前会话工作区的 downloads/ 下并返回本地路径",
             schema({"ref": TEXT}, ["ref"]),
             file_download,
             risk="normal",
