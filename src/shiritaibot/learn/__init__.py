@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from shiritaibot.i18n import Text, t
 from shiritaibot.plugin_api.base import (
     ExternalEvent,
     InteractionRequired,
@@ -46,9 +47,7 @@ class OneLearnPlugin(Plugin):
         self.lock = asyncio.Lock()
         self.context.register_tool(
             "learn_query",
-            "查询课程、公告、未提交作业、课件与作业附件；"
-            "homework_detail 需要 homework_id，返回单个作业的详情。"
-            "需要身份验证时，使用学校插件的登录和验证码工具。",
+            "learn.tools.query",
             schema(
                 {
                     "operation": {
@@ -73,10 +72,7 @@ class OneLearnPlugin(Plugin):
         )
         self.context.register_tool(
             "learn_download",
-            "下载课件或作业附件到该插件私有目录。"
-            "download 需要 course_id + file_id（来自 files 查询）；"
-            "download_homework_attachment 需要 homework_id + file_id"
-            "（来自 homework_attachments 查询）。",
+            "learn.tools.download",
             schema(
                 {
                     "operation": {
@@ -104,7 +100,7 @@ class OneLearnPlugin(Plugin):
         async with self.lock:
             command = self.context.settings.get("command", [])
             if not command:
-                raise PublicError("请配置 OneLearn 适配进程 command")
+                raise PublicError("learn.noCommand")
             password = await self.context.resolve_secret(self.context.settings.get("password", ""))
             request = LearnRequest.model_validate(
                 {
@@ -135,13 +131,13 @@ class OneLearnPlugin(Plugin):
                 )
             except ValueError:
                 if result["exit_code"]:
-                    detail = result["stderr"].strip()[-500:] or "无 stderr 输出"
+                    detail = result["stderr"].strip()[-500:] or t("learn.noStderr")
                     raise PublicError(
-                        f"网络学堂适配端进程异常退出（exit code {result['exit_code']}）：{detail}"
+                        "learn.adapterExited", exit_code=result['exit_code'], detail=detail
                     ) from None
                 if result["truncated"]:
-                    raise PublicError("网络学堂适配端输出超过 1MB 上限被截断") from None
-                raise PublicError("OneLearn 适配端没有返回有效 JSON") from None
+                    raise PublicError("learn.outputTruncated") from None
+                raise PublicError("learn.invalidJson") from None
 
     async def query(self, ctx, args):
         result = await self.invoke(
@@ -150,19 +146,19 @@ class OneLearnPlugin(Plugin):
             background=ctx.background,
         )
         if ctx.background and not result.get("ok") and result.get("status") in AUTH_FAILURES:
-            raise InteractionRequired("auth", "请在主人私聊中登录网络学堂并完成所需验证。")
+            raise InteractionRequired("auth", t("learn.loginHint"))
         return result
 
     async def sync_once(self):
         result = await self.invoke("homework", {}, background=True)
         if not result.get("ok"):
-            self.context.logger.warning(f"网络学堂登录状态异常：{result.get('status', 'unknown')}")
+            self.context.logger.warning(Text("learn.log.loginState", state=result.get('status', 'unknown')))
             await self.context.emit(
                 ExternalEvent(
                     source="learn",
                     kind="learn.auth.expired",
                     dedup_key=f"{self.context.id}:auth:{datetime.now(ZoneInfo('Asia/Shanghai')).date()}",
-                    title="网络学堂需要检查登录状态",
+                    title=t("learn.event.checkLogin"),
                     payload={"status": result.get("status", "unknown")},
                 )
             )
@@ -185,7 +181,7 @@ class OneLearnPlugin(Plugin):
                         if key in old
                         else "learn.assignment.created",
                         dedup_key=key + ":" + digest,
-                        title=str(item.get("title", "网络学堂作业变化")),
+                        title=str(item.get("title", t("learn.event.homeworkChanged"))),
                         payload=item,
                     )
                 )
@@ -200,9 +196,9 @@ class OneLearnPlugin(Plugin):
             1 for key, digest in current.items() if old is not None and old.get(key) != digest
         )
         self.context.logger.log(
-            f"同步完成：{len(current)} 项作业" + (f"，{changed} 项有变化" if changed else "")
+            t("learn.synced", count=len(current)) + (t("learn.syncedChanged", changed=changed) if changed else "")
             if old is not None
-            else f"首次同步，记录 {len(current)} 项作业作为基线"
+            else t("learn.firstSync", count=len(current))
         )
 
     async def poll(self, interval):
@@ -210,13 +206,13 @@ class OneLearnPlugin(Plugin):
             try:
                 await self.sync_once()
             except Exception as exc:
-                self.context.logger.warning(f"同步失败（{type(exc).__name__}）")
+                self.context.logger.warning(Text("learn.log.syncFailed", name=type(exc).__name__))
                 await self.context.emit(
                     ExternalEvent(
                         source="learn",
                         kind="learn.sync.failed",
                         dedup_key="sync:" + type(exc).__name__,
-                        title="网络学堂同步失败",
+                        title=t("learn.event.syncFailed"),
                         payload={"error": type(exc).__name__},
                     )
                 )

@@ -1,0 +1,74 @@
+name: 问题反馈 / Bug report
+description: 报告错误或异常行为 / Report something that doesn't work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！中文或英文都可以。请先搜索已有 issue，并删去日志和截图中的令牌、密码、QQ 号等隐私信息。
+        Thanks for the report! Chinese or English are both fine. Please search existing issues first, and remove tokens, passwords, account IDs, and other private details from logs and screenshots.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么 / What happened
+      description: 实际看到的结果，以及期望的结果。 / What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / Version
+      description: WebUI「检查更新」中的当前版本，或 `git rev-parse --short HEAD` 的结果。 / The current version under "Check for updates" in the WebUI, or the output of `git rev-parse --short HEAD`.
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: 部署方式 / How it's installed
+      options:
+        - 一键部署脚本 / One-click install script
+        - Docker
+        - 源码运行 / From source
+        - 其他 / Other
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 涉及的入口 / Where it happens
+      multiple: true
+      options:
+        - WebUI
+        - QQ（OneBot / NapCat）
+        - QQ 官方机器人 / Official QQ bot
+        - 飞书 / Feishu / Lark
+        - 插件 / Plugin
+        - 其他 / Other
+  - type: dropdown
+    id: language
+    attributes:
+      label: 界面与回复语言 / Language
+      options:
+        - 简体中文 / Simplified Chinese
+        - 英文 / English
+  - type: input
+    id: system
+    attributes:
+      label: 系统 / Operating system
+      placeholder: Ubuntu 24.04 / macOS 15 / Windows 11
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / Logs
+      description: WebUI「日志 → 运行日志」或 `data/logs/shiritaibot.log` 中的相关部分。 / The relevant part of "Activity Log → Runtime logs" in the WebUI or `data/logs/shiritaibot.log`.
+      render: text

@@ -10,10 +10,11 @@ from pydantic import AwareDatetime, Field, model_validator
 
 from shiritaibot.core import EVENT_TITLE_LIMIT, ExternalEvent, Model, PublicError, now, uid
 from shiritaibot.core.logs import brief, get_logger
+from shiritaibot.i18n import Text, join_list, t
 
-log = get_logger("日程")
+log = get_logger("routine.log.source")
 
-KINDS = {"todo": "待办", "event": "日程", "course": "课程", "reminder": "提醒", "job": "定时任务"}
+KINDS = {"todo": "routine.kinds.todo", "event": "routine.kinds.event", "course": "routine.kinds.course", "reminder": "routine.kinds.reminder", "job": "routine.kinds.job"}
 FINISHED = ("completed", "cancelled", "fired")
 DAY = 86400
 # Finished items and past events stay visible this long, then are deleted automatically.
@@ -77,10 +78,10 @@ class RoutineManager:
             body["actor"] = actor
         result = await self.store.put("routine", key, body, session)
         log.log(
-            f"新建{KINDS[item.kind]}「{brief(item.title, 60)}」"
-            + (f"，cron {item.cron}" if item.cron else "")
+            t("routine.created", kind=Text(KINDS[item.kind]), brief=brief(item.title, 60))
+            + (t("routine.createdCron", cron=item.cron) if item.cron else "")
             + (
-                f"，时间 {item.due.astimezone(ZoneInfo(item.timezone)):%Y-%m-%d %H:%M}"
+                t("routine.createdAt", when=item.due.astimezone(ZoneInfo(item.timezone)))
                 if item.due
                 else ""
             )
@@ -91,7 +92,7 @@ class RoutineManager:
     async def _get(self, key: str, session: str | None) -> dict:
         row = await self.store.get("routine", key)
         if not row or (session is not None and row.get("scope") != session):
-            raise PublicError("日程不存在或已删除")
+            raise PublicError("routine.missing")
         return row
 
     async def update_status(self, key: str, status: str) -> dict:
@@ -103,9 +104,9 @@ class RoutineManager:
         """Edit an item in place. Changing the time of a reminder or job reschedules it,
         unless it was completed or cancelled."""
         if (not changes and status is None) or set(changes) - set(EDITABLE):
-            raise PublicError("只能修改 " + "、".join(EDITABLE))
+            raise PublicError("routine.onlyUpdate", fields=t("common.separator").join(EDITABLE))
         if status is not None and status not in {"completed", "cancelled", "open"}:
-            raise PublicError("日程状态无效")
+            raise PublicError("routine.statusInvalid")
         async with self.lock:
             row = await self._get(key, session)
             if changes:
@@ -113,7 +114,7 @@ class RoutineManager:
             if status is not None:
                 row.update(status=status, next_fire=None)
                 log.log(
-                    f"{KINDS.get(row['kind'], row['kind'])}「{brief(row['title'], 60)}」状态改为 {status}"
+                    Text("routine.log.status", kind=Text(KINDS.get(row['kind'], row['kind'])), brief=brief(row['title'], 60), status=status)
                 )
             result = await self.store.put("routine", key, row, row["scope"])
         self.wake.set()
@@ -125,7 +126,7 @@ class RoutineManager:
             item = RoutineItem.model_validate({**current, **changes})
         except ValueError:
             raise PublicError(
-                "修改后的日程无效：时间须带时区，结束须晚于开始，定时任务须为五段 cron"
+                "routine.invalidUpdate"
             ) from None
         row.update({k: v for k, v in item.model_dump(mode="json").items() if k in EDITABLE})
         if {"due", "cron", "timezone"} & set(changes) and row["status"] not in {
@@ -135,15 +136,15 @@ class RoutineManager:
             next_fire = schedule(item)
             row.update(status="scheduled" if next_fire else "open", next_fire=next_fire)
         log.log(
-            f"修改{KINDS.get(row['kind'], row['kind'])}「{brief(row['title'], 60)}」："
-            + "、".join(sorted(changes))
+            t("routine.updated", kind=Text(KINDS.get(row['kind'], row['kind'])), brief=brief(row['title'], 60))
+            + join_list(sorted(changes))
         )
 
     async def delete(self, key: str, *, session: str) -> dict:
         async with self.lock:
             row = await self._get(key, session)
             await self.store.delete("routine", key)
-        log.log(f"删除{KINDS.get(row['kind'], row['kind'])}「{brief(row['title'], 60)}」")
+        log.log(Text("routine.log.deleted", kind=Text(KINDS.get(row['kind'], row['kind'])), brief=brief(row['title'], 60)))
         self.wake.set()
         return {"deleted": key, "kind": row["kind"], "title": row["title"]}
 
@@ -172,13 +173,13 @@ class RoutineManager:
                     f"DELETE FROM records WHERE kind='routine' AND id IN ({marks})", tuple(stale)
                 )
         if stale:
-            log.log(f"自动清理 {len(stale)} 条结束超过 {KEEP_FINISHED // DAY} 天的日程")
+            log.log(Text("routine.log.cleaned", count=len(stale), value=KEEP_FINISHED // DAY))
         return len(stale)
 
     async def _fire(self, row: dict, stamp: float) -> None:
         key, fire = row["id"], row["next_fire"]
         delay = stamp - fire
-        title = ("（延迟提醒）" if delay > 60 else "") + row["title"]
+        title = (t("routine.lateTitle") if delay > 60 else "") + row["title"]
         payload = {
             "routine_id": key,
             "scheduled_at": datetime.fromtimestamp(fire, UTC).isoformat(),
@@ -206,8 +207,12 @@ class RoutineManager:
         await self.emit(event, routine_session=row["scope"], routine_actor=row.get("actor", ""))
         await self.store.put("routine", key, {**row, **changes}, row["scope"])
         log.log(
-            f"{KINDS.get(row['kind'], row['kind'])}触发：{brief(row['title'], 80)}"
-            + (f"（延迟 {delay:.0f} 秒）" if delay > 60 else "")
+            Text(
+                "routine.log.firedLate" if delay > 60 else "routine.log.fired",
+                kind=Text(KINDS.get(row["kind"], row["kind"])),
+                brief=brief(row["title"], 80),
+                delay=delay,
+            )
         )
 
     async def tick(self) -> float:
@@ -236,7 +241,7 @@ class RoutineManager:
                 except Exception as exc:
                     backoff = min(300, max(5, backoff * 2))
                     retry_at = now().timestamp() + backoff
-                    log.error(f"日程 {key} 触发失败，{backoff:g} 秒后重试", exc=exc)
+                    log.error(Text("routine.log.retry", key=key, backoff=backoff), exc=exc)
             retries[occurrence] = (retry_at, backoff)
             wake_at = min(wake_at, retry_at)
         self.retries = retries
@@ -252,7 +257,7 @@ class RoutineManager:
                     await self.prune(stamp)
                 delay = await self.tick()
             except Exception as exc:
-                log.error(f"日程调度出错（{type(exc).__name__}），5 秒后重试", exc=exc)
+                log.error(Text("routine.log.schedulerError", name=type(exc).__name__), exc=exc)
                 await self.store.activity("scheduler.failed", type(exc).__name__)
                 delay = 5
             try:

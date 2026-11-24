@@ -15,6 +15,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
+from shiritaibot.i18n import Locale, Text, instance_locale, t
+
 LOG_NAME = "shiritaibot.log"
 # The level chosen in the WebUI, kept across restarts.
 LEVEL_NAME = "level"
@@ -56,10 +58,12 @@ def brief(value: Any, limit: int = 80) -> str:
         )
     elif isinstance(value, (list, tuple)):
         if value and all(isinstance(item, (str, int, float)) for item in value):
-            text = "、".join(brief(item, 30) for item in value[:5])
-            text += f" 等 {len(value)} 项" if len(value) > 5 else ""
+            text = t("logs.separator", locale=instance_locale()).join(
+                brief(item, 30) for item in value[:5]
+            )
+            text += t("logs.more", locale=instance_locale(), count=len(value)) if len(value) > 5 else ""
         else:
-            text = f"{len(value)} 项"
+            text = t("logs.items", locale=instance_locale(), count=len(value))
     else:
         text = str(value)
     return text if len(text) <= limit else text[: limit - 1] + "…"
@@ -70,15 +74,15 @@ def describe_session(session: str) -> str:
     kind, _, rest = session.partition(":")
     adapter, _, target = rest.partition(":")
     if kind == "private" and target:
-        return f"{adapter}·私聊 {target}"
+        return t("logs.privateChat", locale=instance_locale(), adapter=adapter, target=target)
     if kind == "group" and target:
-        return f"{adapter}·群 {target}"
+        return t("logs.groupChat", locale=instance_locale(), adapter=adapter, target=target)
     if kind == "web":
         return "WebUI" if rest == "owner" else f"WebUI·{rest}"
     if session.startswith("background:proactive:"):
-        return "事件 " + session.removeprefix("background:proactive:")[:8]
+        return t("logs.event", locale=instance_locale()) + session.removeprefix("background:proactive:")[:8]
     if kind == "background":
-        return "后台·" + rest
+        return t("logs.background", locale=instance_locale()) + rest
     return session
 
 
@@ -147,10 +151,13 @@ def _tail(path: Path, lines: int, factor: int = 1) -> list[str]:
 class Logger:
     """Component logger. Extra tags render as further ``[...]`` brackets after the source."""
 
-    def __init__(self, source: str, *tags: Any):
+    def __init__(self, source: str | Text, *tags: Any):
+        # The source may be a catalog key or Text; its display name is rendered per record.
         self.source = source
-        self.tags = tuple(str(tag) for tag in tags if tag not in (None, ""))
-        self._logger = logging.getLogger(f"{ROOT}.{source}")
+        # Tags and the source may be catalog keys or Text; they are rendered per record.
+        self.tags = tuple(tag for tag in tags if tag not in (None, ""))
+        name = source.key + "".join(f".{v}" for v in source.params.values()) if isinstance(source, Text) else source
+        self._logger = logging.getLogger(f"{ROOT}.{name}")
 
     def bind(self, *tags: Any) -> Logger:
         """A logger with the same source and additional fixed tags."""
@@ -164,14 +171,19 @@ class Logger:
     ) -> None:
         if not self._logger.isEnabledFor(level):
             return
+        # Logs use the instance's global language, never a session's /lang override.
+        locale = instance_locale()
         self._logger.log(
             level,
             "%s",
-            message,
+            message.render(locale) if isinstance(message, Text) else _render(message, locale),
             exc_info=(type(exc), exc, exc.__traceback__) if exc is not None else None,
             extra={
-                "source": self.source,
-                "tags": (*self.tags, *(str(t) for t in tags if t not in (None, ""))),
+                "source": _render(self.source, locale),
+                "tags": tuple(
+                    _render(tag, locale)
+                    for tag in (*self.tags, *(t for t in tags if t not in (None, "")))
+                ),
             },
         )
 
@@ -190,7 +202,13 @@ class Logger:
         self._emit(logging.ERROR, message, tags, exc)
 
 
-def get_logger(source: str, *tags: Any) -> Logger:
+def _render(value: Any, locale: Locale) -> str:
+    if isinstance(value, Text):
+        return value.render(locale)
+    return t(value, locale=locale) if isinstance(value, str) else str(value)
+
+
+def get_logger(source: str | Text, *tags: Any) -> Logger:
     return Logger(source, *tags)
 
 
@@ -247,7 +265,7 @@ class LogManager:
         """Switch the bot's level live for terminal, file and WebUI feed, and save it."""
         name = level.strip().lower()
         if name not in CHOICES:
-            raise ValueError("日志级别只能是 debug、info、warning 或 error")
+            raise ValueError(t("logs.levelInvalid", locale=instance_locale()))
         self.level = level_number(name)
         logging.getLogger(ROOT).setLevel(self.level)
         self.directory.mkdir(parents=True, exist_ok=True)

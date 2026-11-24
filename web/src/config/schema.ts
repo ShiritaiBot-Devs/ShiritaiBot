@@ -1393,7 +1393,7 @@ export function createAdapter(
     auto_start: [],
     auto_start_after: 60,
     domain: "feishu",
-    wake_keywords: ["小知"],
+    wake_keywords: ["小知"], // i18n: ok
     feishu_group_context: false,
     memory_profile: "feishu",
   };

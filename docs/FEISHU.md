@@ -1,5 +1,7 @@
 # 飞书应用机器人
 
+[English](FEISHU.en.md) · **简体中文**
+
 飞书可作为 ShiritaiBot 的聊天入口。主人直接私聊机器人，指定群里的成员也可用句首关键词唤醒它。运行 ShiritaiBot 的机器需要能访问飞书开放平台，长连接由 ShiritaiBot 主动建立。
 
 ## 扫码创建

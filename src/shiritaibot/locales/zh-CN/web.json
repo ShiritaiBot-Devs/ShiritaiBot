@@ -1,3 +1,47 @@
 {
-  "token_required": "需要 WebUI 管理令牌"
+  "token_required": "需要 WebUI 管理令牌",
+  "providerMissing": "模型对应的提供商不存在，请检查配置",
+  "modelNotSaved": "找不到已保存的模型，可能尚未保存或已改名。请刷新页面，使用测试当前配置。",
+  "decisionFailed": "决策模型调用失败，请检查 Provider 地址、凭据与模型名称",
+  "dimensions": "向量维度 {count}",
+  "providerUrl": "请检查提供商地址和模型配置；地址须为不含账号和查询参数的 HTTP(S) 地址",
+  "providerMismatch": "模型所属的提供商与当前配置不一致，请检查提供商名称",
+  "noCliCheck": "内置子代理无需检测 CLI",
+  "skillTooLarge": "技能包不能超过 10 MiB",
+  "pluginLoadFailed": "插件加载失败",
+  "pluginZipTooLarge": "插件 ZIP 不能超过 20 MiB",
+  "eventMissing": "事件不存在",
+  "originalMissing": "原始文件缺失",
+  "documentMissing": "文档不存在",
+  "fileTooLarge": "文件不能超过 {limit} MiB",
+  "defaultLibrary": "默认知识库",
+  "memeMissing": "表情不存在",
+  "memeTooLarge": "表情图片不能超过 2 MB",
+  "memoryKindInvalid": "无效的记忆类型",
+  "memoryProfileMissing": "记忆库不存在或未配置",
+  "log": {
+    "owner": "主人",
+    "level": "日志级别 {old} → {new}",
+    "update": "收到管理后台更新请求：{kind} {ref}",
+    "restart": "收到管理后台重启请求，正在关闭服务"
+  },
+  "chatBusy": "请先停止当前任务，再删除对话。",
+  "chatNameEmpty": "对话名称不能为空",
+  "mainOnly": "仅支持 Main 会话，Proactive Loop 请修改默认权限",
+  "qqCallbackRejected": "QQ 官方机器人回调未通过",
+  "callbackTooLarge": "回调内容过大",
+  "qqOfficialMissing": "QQ 官方适配器不存在或未启用",
+  "configChanged": "配置已更新，请核对最新配置后再保存。",
+  "restartUnsupported": "当前启动方式不支持重启，请使用 shiritaibot run 启动",
+  "subscriptionUnsaved": "请先保存 OpenAI Subscription 提供商。",
+  "invalidSession": "会话标识无效",
+  "chatgptHelper": {
+    "lang": "zh-CN",
+    "title": "返回 ShiritaiBot",
+    "intro": "复制下面的一次性回调地址，粘贴回 WebUI 的 ChatGPT 授权面板。",
+    "label": "一次性回调地址",
+    "copy": "复制回调地址",
+    "copied": "已复制",
+    "manual": "请使用键盘复制"
+  }
 }

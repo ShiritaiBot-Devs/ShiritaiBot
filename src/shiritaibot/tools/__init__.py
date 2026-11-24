@@ -18,8 +18,9 @@ from shiritaibot.core import (
 )
 from shiritaibot.core.logs import describe_session, get_logger
 from shiritaibot.core.text import redact_secrets
+from shiritaibot.i18n import Text, t
 
-log = get_logger("工具")
+log = get_logger("tools.log.source")
 
 
 class ToolRegistry:
@@ -38,7 +39,7 @@ class ToolRegistry:
     @staticmethod
     def validate(tool: Tool) -> None:
         if tool.risk not in {"safe", "normal", "sensitive", "dangerous"}:
-            raise ValueError("工具必须声明有效的安全等级")
+            raise ValueError(t("tools.riskInvalid"))
         Draft202012Validator.check_schema(tool.schema)
 
     def remove_plugin(self, plugin: str) -> None:
@@ -55,7 +56,7 @@ class ToolRegistry:
         try:
             tool = self.tools.get(name)
             if not tool:
-                raise PublicError("工具不存在或未启用")
+                raise PublicError("tools.missing")
             args = json.loads(arguments) if isinstance(arguments, str) else arguments
             errors = Draft202012Validator(tool.schema).iter_errors(args)
             details = []
@@ -65,7 +66,7 @@ class ToolRegistry:
                 detail = redact_secrets(detail, self.secrets)
                 details.append(detail if len(detail) <= 512 else detail[:511] + "…")
             if details:
-                return canonical({"error": "工具参数不符合 JSON Schema：" + "\n".join(details)})
+                return canonical({"error": t("tools.schemaInvalid") + "\n".join(details)})
             with record_usage_for(ctx.session):
                 await self.permissions.check(ctx, tool, args)
                 async with asyncio.timeout(tool.timeout):
@@ -93,19 +94,19 @@ class ToolRegistry:
         except InteractionRequired:
             raise
         except (ValidationError, json.JSONDecodeError):
-            return canonical({"error": "工具参数不符合 JSON Schema"})
+            return canonical({"error": t("tools.schemaInvalidShort")})
         except PublicError as exc:
             return canonical({"error": str(exc)})
         except TimeoutError:
-            return canonical({"error": "工具超时，执行已中止"})
+            return canonical({"error": t("tools.timeout")})
         except Exception as exc:
             log.error(
-                f"工具 {name} 抛出异常（{type(exc).__name__}）",
+                Text("tools.log.raised", name=name, name2=type(exc).__name__),
                 describe_session(ctx.session),
                 exc=exc,
             )
             await self.store.activity("tool.failed", f"{name}: {type(exc).__name__}", ctx.session)
-            return canonical({"error": f"工具失败 ({type(exc).__name__})，请检查配置或连接"})
+            return canonical({"error": t("tools.failed", name=type(exc).__name__)})
 
 
 def schema(properties: dict, required: list[str] | None = None) -> dict:

@@ -17,12 +17,12 @@ LINE_LIMIT = 4 * 1024 * 1024
 
 def resolve_command(command: list[str]) -> list[str]:
     if not command:
-        raise PublicError("未配置可执行程序")
+        raise PublicError("process.noExecutable")
     executable = shutil.which(command[0])
     if not executable:
-        raise PublicError("找不到配置的可执行程序")
+        raise PublicError("process.executableMissing")
     if Path(executable).suffix.lower() in {".cmd", ".bat", ".ps1"}:
-        raise PublicError("请配置原生可执行程序，或 [node, CLI入口.js]；不运行 shell 包装脚本")
+        raise PublicError("process.nativeOnly")
     return [executable, *command[1:]]
 
 

@@ -19,6 +19,7 @@ from shiritaibot.core import (
     uid,
 )
 from shiritaibot.core.logs import get_logger
+from shiritaibot.i18n import Text, t
 from shiritaibot.llm.media import ImageResolver
 from shiritaibot.llm.streaming import ResponseStreamError, collect_stream
 from shiritaibot.llm.subscription import (
@@ -30,7 +31,7 @@ from shiritaibot.llm.subscription import (
     SubscriptionError,
 )
 
-log = get_logger("模型")
+log = get_logger("llm.log.source")
 
 
 def plain(message: dict) -> dict:
@@ -300,7 +301,7 @@ def request_payload(
         if tools:
             body["tools"] = [{"functionDeclarations": [clean(t["function"]) for t in tools]}]
         return f"/models/{model}:generateContent", body
-    raise PublicError("不支持的 LLM 协议")
+    raise PublicError("llm.protocolUnsupported")
 
 
 def parse_reply(protocol: str, model: str, data: dict, *, opaque_key: str | None = None) -> Reply:
@@ -589,7 +590,7 @@ class ProviderManager:
                     and row["slug"]
                 ]
             except (httpx.HTTPError, KeyError, TypeError, ValueError):
-                raise PublicError("无法获取 ChatGPT 套餐的模型列表，请检查授权和网络。") from None
+                raise PublicError("llm.subscriptionModels") from None
         ref = provider.api_key
         token = await self.vault.resolve(ref) if ref.startswith(("env:", "secret:")) else ref
         headers = {}
@@ -618,13 +619,13 @@ class ProviderManager:
                 )
                 body = response.json()
                 if not isinstance(body, dict):
-                    raise PublicError("提供商未返回有效的模型列表")
+                    raise PublicError("llm.modelsInvalid")
                 rows = body.get("models" if provider.protocol == "gemini" else "data")
                 if not isinstance(rows, list):
-                    raise PublicError("提供商未返回有效的模型列表，请检查接口协议和服务地址")
+                    raise PublicError("llm.modelsInvalidHint")
                 for row in rows:
                     if not isinstance(row, dict):
-                        raise PublicError("提供商返回了无效的模型条目")
+                        raise PublicError("llm.modelEntryInvalid")
                     if provider.protocol == "gemini":
                         methods = row.get("supportedGenerationMethods", [])
                         if methods and "generateContent" not in methods:
@@ -633,7 +634,7 @@ class ProviderManager:
                     else:
                         key = row["id"]
                     if not isinstance(key, str) or not key:
-                        raise PublicError("提供商返回了无效的模型名称")
+                        raise PublicError("llm.modelNameInvalid")
                     found[key] = {
                         "id": key,
                         "name": row.get("displayName", row.get("display_name", key)),
@@ -648,16 +649,16 @@ class ProviderManager:
                 if not cursor:
                     return sorted(found.values(), key=lambda row: row["id"])
                 if cursor in cursors:
-                    raise PublicError("提供商的模型分页游标重复，请稍后重试")
+                    raise PublicError("llm.cursorRepeated")
                 cursors.add(cursor)
                 params = {"pageToken" if provider.protocol == "gemini" else "after_id": cursor}
-            raise PublicError("模型列表分页超过限制，请缩小提供商返回范围")
+            raise PublicError("llm.tooManyPages")
         except httpx.HTTPStatusError as exc:
             raise PublicError(
-                f"获取模型失败（HTTP {exc.response.status_code}），请检查 API Key、地址与权限"
+                "llm.modelsHttp", status_code=exc.response.status_code
             ) from None
         except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
-            raise PublicError("无法读取提供商模型列表，请检查连接和接口协议") from None
+            raise PublicError("llm.modelsUnreadable") from None
 
     async def complete(
         self,
@@ -674,7 +675,7 @@ class ProviderManager:
         cfg = settings or self.config.value
         candidates = cfg.routes.get(route, [])
         if not candidates:
-            raise PublicError(f"尚未配置 {route} 模型路由，请在 WebUI 配置 Provider、模型和路由")
+            raise PublicError("llm.routeMissing", route=route)
         images = ImageResolver(self, scope, cfg) if scope else None
         if images and not images.present(messages):
             images = None
@@ -733,7 +734,7 @@ class ProviderManager:
             if model.max_context and estimated_tokens(body) + reserved_output > model.max_context:
                 context_skipped = True
                 log.warning(
-                    f"{model.display_name} 的估算上下文超过上限 {model.max_context}，跳过", route
+                    Text("llm.log.contextTooLong", display_name=model.display_name, max_context=model.max_context), route
                 )
                 await self.store.activity("provider.context_limit", model.display_name)
                 continue
@@ -771,8 +772,8 @@ class ProviderManager:
                     scope=scope,
                 )
                 log.debug(
-                    f"{model.display_name} 应答，用时 {time.monotonic() - started:.1f}s"
-                    + (f"，请求调用 {len(reply.calls)} 个工具" if reply.calls else ""),
+                    t("llm.replied", display_name=model.display_name, value=time.monotonic() - started)
+                    + (t("llm.toolCalls", count=len(reply.calls)) if reply.calls else ""),
                     route,
                 )
                 return reply
@@ -794,10 +795,10 @@ class ProviderManager:
                     )
                 ):
                     self.subscriptions.mark_limit(provider.id)
-                    subscription_error = "ChatGPT 套餐用量已达上限，请在 ChatGPT 用量设置中查看。"
+                    subscription_error = t("llm.subscriptionLimit")
                 await self._record_call(model, provider.protocol, "failed", scope=scope)
                 log.warning(
-                    f"{model.display_name} 调用失败（{failure(provider.id, exc)}），尝试下一个候选模型",
+                    Text("llm.log.candidateFailed", display_name=model.display_name, failure=failure(provider.id, exc)),
                     route,
                 )
                 await self.store.activity("provider.failed", failure(provider.id, exc))
@@ -806,13 +807,13 @@ class ProviderManager:
             raise SubscriptionError(subscription_error)
         if context_skipped:
             raise PublicError(
-                "候选模型调用失败，部分模型的估算上下文超过上限，请减少输入或调整模型上下文配置"
+                "llm.contextTooLong"
             )
         if decision_only:
             raise PublicError(
-                f"{route} 路由的候选模型调用失败；Jev 等决策模型不生成文本，请再添加一个文本模型"
+                "llm.decisionOnly", route=route
             )
-        raise PublicError("所有候选模型调用失败，请检查 Provider 地址、凭据与模型名称")
+        raise PublicError("llm.allFailed")
 
     def embedding_model(self, settings=None, route: str = "embedding"):
         """(model, provider) serving the route, or None; only the first usable one counts."""
@@ -841,7 +842,7 @@ class ProviderManager:
         """Vectors from the embedding route's model, keyed by `embedding_key`."""
         selected = self.embedding_model(settings, route)
         if selected is None:
-            raise PublicError("尚未配置 Embedding 模型")
+            raise PublicError("llm.noEmbedding")
         model, provider = selected
         ref = provider.api_key
         token = await self.vault.resolve(ref) if ref.startswith(("env:", "secret:")) else ref
@@ -885,12 +886,12 @@ class ProviderManager:
         except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
             await self._record_call(model, "embedding", "failed")
             log.warning(
-                f"Embedding 模型 {model.display_name} 调用失败（{failure(provider.id, exc)}）",
+                Text("llm.log.embeddingFailed", display_name=model.display_name, failure=failure(provider.id, exc)),
                 route,
             )
             await self.store.activity("provider.failed", failure(provider.id, exc))
             self.record_failure(provider.id)
-            raise PublicError("Embedding 调用失败，请检查 Provider 地址、凭据与模型名称") from None
+            raise PublicError("llm.embeddingFailed") from None
         await self._record_call(model, "embedding", "ok", data.get("usage"))
         return self.embedding_key(model), vectors
 
@@ -934,7 +935,7 @@ class ProviderManager:
             except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
                 await self._record_call(model, "systemone", "failed")
                 log.warning(
-                    f"决策模型 {model.display_name} 调用失败（{failure(provider.id, exc)}）", route
+                    Text("llm.log.decisionFailed", display_name=model.display_name, failure=failure(provider.id, exc)), route
                 )
                 await self.store.activity("provider.failed", failure(provider.id, exc))
                 self.record_failure(provider.id)

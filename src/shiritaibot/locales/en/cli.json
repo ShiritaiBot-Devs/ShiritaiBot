@@ -1,0 +1,13 @@
+{
+  "windowsEntry": "On Windows, .cmd/.ps1 entry points must be replaced with the native executable or node + CLI.js.",
+  "tokenEmpty": "The admin token file is empty: {path}",
+  "tokenUnreadable": "Can't read the admin token: {path} ({strerror}). Use the --home folder you start with.",
+  "newToken": "Generate a new token if this folder has never been started",
+  "runtimeReady": "Runtime environment ready: {directory}",
+  "extra": "Enable an optional Core dependency group, such as --extra learn; repeatable",
+  "portBusyShort": "Port {port} is already in use; a ShiritaiBot instance may already be running. Close the old instance first, or start on another port: shiritaibot run --port {value}",
+  "checkingDeps": "Checking Core and plugin dependencies. Preparing the runtime environment the first time can take a few minutes…",
+  "portBusy": "Port {port} is already in use; a ShiritaiBot instance may already be running.\n· Open http://127.0.0.1:{port2} to see whether it's that one.\n· To stop the old instance, close the window running it or end the matching python/shiritaibot process.\n· Or start on another port: shiritaibot run --port {value}",
+  "logLevel": "Bot log level for this run: debug / info / warning / error. Defaults to the level saved in the WebUI.",
+  "allowedHost": "Extra allowed Host (tunnel or reverse proxy domain); repeatable; supports *.example.com"
+}

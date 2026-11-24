@@ -1,5 +1,7 @@
 # 表情管理器
 
+[English](MEMES.en.md) · **简体中文**
+
 表情管理器让 Bot 在 QQ 会话里发表情包。代码在 `src/shiritaibot/meme/`，由三部分组成，
 外加三个模型工具和 WebUI 的“表情管理”页。配置在 `config.toml` 的 `[meme]`；所用模型在
 `routes.meme`，和其他路由放在一起。

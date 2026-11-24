@@ -20,6 +20,7 @@ import httpx
 
 from shiritaibot import __version__ as BOT_VERSION
 from shiritaibot.core.logs import get_logger
+from shiritaibot.i18n import Text, t
 
 log = get_logger("MCP")
 
@@ -69,7 +70,7 @@ class StdioTransport(Transport):
                 **kwargs,
             )
         except (OSError, ValueError) as exc:
-            raise McpError(f"无法启动 MCP 服务进程（{type(exc).__name__}），请检查命令") from None
+            raise McpError(t("mcp.client.startFailed", name=type(exc).__name__)) from None
         self.tasks = [
             asyncio.create_task(self._read()),
             asyncio.create_task(self._drain_stderr()),
@@ -85,13 +86,13 @@ class StdioTransport(Transport):
                 try:
                     message = json.loads(line)
                 except json.JSONDecodeError:
-                    log.debug(f"MCP {self.name} 输出了非 JSON 行，已忽略")
+                    log.debug(Text("mcp.client.log.nonJson", name=self.name))
                     continue
                 for item in message if isinstance(message, list) else [message]:
                     if isinstance(item, dict):
                         await self.on_message(item)
         except (asyncio.LimitOverrunError, ValueError):
-            log.warning(f"MCP {self.name} 输出的单条消息过大，连接已关闭")
+            log.warning(Text("mcp.client.log.tooLarge", name=self.name))
         finally:
             self.closed.set()
 
@@ -102,13 +103,13 @@ class StdioTransport(Transport):
 
     async def send(self, message: dict) -> None:
         if not self.process or not self.process.stdin or self.closed.is_set():
-            raise McpError("MCP 服务进程已退出")
+            raise McpError(t("mcp.client.exited"))
         data = json.dumps(message, ensure_ascii=False, separators=(",", ":")) + "\n"
         try:
             self.process.stdin.write(data.encode())
             await self.process.stdin.drain()
         except (BrokenPipeError, ConnectionResetError):
-            raise McpError("MCP 服务进程已退出") from None
+            raise McpError(t("mcp.client.exited")) from None
 
     @property
     def alive(self) -> bool:
@@ -164,16 +165,16 @@ class HttpTransport(Transport):
             request = self.client.build_request("POST", self.url, json=message, headers=headers)
             response = await self.client.send(request, stream=True)
         except httpx.HTTPError as exc:
-            raise McpError(f"无法连接 MCP 服务（{type(exc).__name__}）") from None
+            raise McpError(t("mcp.client.connectFailed", name=type(exc).__name__)) from None
         if session := response.headers.get("mcp-session-id"):
             self.session_id = session
         if response.status_code >= 400:
             await response.aclose()
             if response.status_code in {401, 403}:
-                raise McpError(f"MCP 服务拒绝访问（HTTP {response.status_code}），请检查认证头")
+                raise McpError(t("mcp.client.forbidden", status_code=response.status_code))
             if response.status_code == 404 and self.session_id:
-                raise McpError("MCP 会话已失效，请重新连接")
-            raise McpError(f"MCP 服务返回 HTTP {response.status_code}")
+                raise McpError(t("mcp.client.sessionExpired"))
+            raise McpError(t("mcp.client.http", status_code=response.status_code))
         kind = response.headers.get("content-type", "")
         if response.status_code == 202 or "id" not in message or "method" not in message:
             await response.aclose()
@@ -187,7 +188,7 @@ class HttpTransport(Transport):
         try:
             body = json.loads(await response.aread())
         except (json.JSONDecodeError, httpx.HTTPError):
-            raise McpError("MCP 服务返回了无效的 JSON") from None
+            raise McpError(t("mcp.client.invalidJson")) from None
         finally:
             await response.aclose()
         for item in body if isinstance(body, list) else [body]:
@@ -281,19 +282,19 @@ class McpClient:
                     if done:
                         break
                     if not self.alive:
-                        raise McpError("MCP 服务连接已断开")
+                        raise McpError(t("mcp.client.disconnected"))
             reply = future.result()
         except TimeoutError:
             with contextlib.suppress(McpError):
                 await self.notify(
                     "notifications/cancelled", {"requestId": key, "reason": "timeout"}
                 )
-            raise McpError(f"MCP 请求 {method} 超时") from None
+            raise McpError(t("mcp.client.timeout", method=method)) from None
         finally:
             self.pending.pop(key, None)
         if "error" in reply:
             error = reply["error"] if isinstance(reply["error"], dict) else {}
-            raise McpError(f"MCP 服务错误：{str(error.get('message', '未知错误'))[:500]}")
+            raise McpError(t("mcp.client.serverError", value=str(error.get('message', t("mcp.client.unknownError")))[:500]))
         return reply.get("result", {})
 
     async def notify(self, method: str, params: dict | None = None) -> None:
@@ -341,6 +342,6 @@ class McpClient:
     async def close(self) -> None:
         for future in self.pending.values():
             if not future.done():
-                future.set_exception(McpError("MCP 连接已关闭"))
+                future.set_exception(McpError(t("mcp.client.closed")))
         self.pending.clear()
         await self.transport.close()

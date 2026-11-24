@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 
 from shiritaibot.core import PublicError, Tool
+from shiritaibot.i18n import t
 from shiritaibot.tools import TEXT, schema
 from shiritaibot.tools.qq import is_sensitive, session_dir
 
@@ -37,7 +38,7 @@ def skill_tools(app) -> list[Tool]:
 
     async def skill_read(ctx, args):
         if ctx.allowed_skills is not None and args["name"] not in ctx.allowed_skills:
-            raise PublicError("此子代理未获准使用该技能")
+            raise PublicError("skills.notAllowed")
         return await skills.read(args["name"], args.get("path", "SKILL.md"), args.get("offset", 0))
 
     async def skill_write(ctx, args):
@@ -64,7 +65,7 @@ def skill_tools(app) -> list[Tool]:
 
         path = await asyncio.to_thread(locate)
         if is_sensitive(app.home, path):
-            raise PublicError("框架内部敏感文件禁止读取")
+            raise PublicError("skills.sensitiveFile")
         row = await skills.install_path(path, replace=args.get("replace", False))
         return {
             "installed": row["name"],
@@ -79,21 +80,19 @@ def skill_tools(app) -> list[Tool]:
         folder = workspace(ctx)
         await asyncio.to_thread(folder.mkdir, parents=True, exist_ok=True)
         result = await skills.pack(args["name"], folder)
-        return {**result, "note": "可用 qq_file_send 把该 .skill 文件发给对方"}
+        return {**result, "note": t("skills.sendHint")}
 
     return [
         Tool(
             "skill_list",
-            "列出已安装的技能（Skill）：名称、描述、来源（bundled 内置 / installed 已安装）与是否启用。",
+            "skills.tool.list",
             schema({}),
             skill_list,
             risk="safe",
         ),
         Tool(
             "skill_read",
-            "读取技能文件。默认读取 SKILL.md（技能的使用说明）；path 可指定技能目录内的其他文件，"
-            "如 references/xxx.md。长文件用 next_offset 作为 offset 分段读取。"
-            "返回的 directory 是技能所在目录，可供 shell 执行技能附带的脚本。",
+            "skills.tool.read",
             schema(
                 {"name": NAME, "path": PATH, "offset": {"type": "integer", "minimum": 0}}, ["name"]
             ),
@@ -102,10 +101,7 @@ def skill_tools(app) -> list[Tool]:
         ),
         Tool(
             "skill_write",
-            "新建技能。skill_md 是 SKILL.md 全文，必须以 YAML frontmatter 开头，"
-            "包含 name（与 name 参数一致，小写字母/数字/短横线）和 description（做什么、何时使用）；"
-            "files 可附带其他文本文件（references/、scripts/、assets/ 下的相对路径）。"
-            "同名技能已存在时报错，确需整体覆盖才设置 replace=true。",
+            "skills.tool.create",
             schema(
                 {
                     "name": NAME,
@@ -124,9 +120,7 @@ def skill_tools(app) -> list[Tool]:
         ),
         Tool(
             "skill_update",
-            "修改已有技能中的一个文件（path 默认 SKILL.md）。三选一："
-            "content 整体替换（文件不存在则新建）；old_text + new_text 精确替换唯一片段；"
-            "delete=true 删除该文件（不能删除 SKILL.md）。修改内置技能会先复制为已安装副本。",
+            "skills.tool.edit",
             schema(
                 {
                     "name": NAME,
@@ -143,23 +137,21 @@ def skill_tools(app) -> list[Tool]:
         ),
         Tool(
             "skill_install",
-            "从本地文件或目录安装技能：.skill / .zip 技能包、单个 SKILL.md，或包含 SKILL.md 的目录。"
-            "对方在聊天中发送的技能文件，先用 qq_file_download 下载，再把返回的 path 传给本工具。"
-            "相对路径基于当前会话工作目录。同名技能已安装时需 replace=true 才覆盖。",
+            "skills.tool.install",
             schema({"path": TEXT, "replace": {"type": "boolean"}}, ["path"]),
             skill_install,
             risk="sensitive",
         ),
         Tool(
             "skill_remove",
-            "删除一个已安装的技能（不可恢复）。内置技能不能删除。",
+            "skills.tool.remove",
             schema({"name": NAME}, ["name"]),
             skill_remove,
             risk="dangerous",
         ),
         Tool(
             "skill_pack",
-            "把技能打包为 <name>.skill 文件，保存到当前会话工作目录并返回路径。",
+            "skills.tool.pack",
             schema({"name": NAME}, ["name"]),
             skill_pack,
             risk="normal",

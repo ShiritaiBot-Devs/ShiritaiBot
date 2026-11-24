@@ -29,14 +29,16 @@ from shiritaibot.api.hook import FILTERS, HANDLERS, MessageType, Names, Permissi
 from shiritaibot.config import is_feishu_session, is_qq_official_session
 from shiritaibot.core import Context, PublicError, uid
 from shiritaibot.core.logs import brief, get_logger
+from shiritaibot.i18n import Text, t
 
-log = get_logger("插件")
+log = get_logger("plugins.log.hooksSource")
 
 HOOK_TIMEOUT = 10
 LISTENER_TIMEOUT = 30
 PROACTIVE_TIMEOUT = 30
 COMMAND_TIMEOUT = 600
-CONTROL = re.compile(r"(停|取消|(同意|拒绝)\s+[a-f0-9]{10})")
+# Control words in either language.
+CONTROL = re.compile(r"(停|取消|stop|cancel|(同意|拒绝|approve|deny)\s+[a-f0-9]{10})", re.I)  # i18n: ok
 
 
 class UsageError(ValueError):
@@ -81,9 +83,9 @@ def _hints(func: Callable) -> dict:
 def _convert(token: str, hint) -> Any:
     if hint is bool:
         lowered = token.lower()
-        if lowered in {"1", "true", "yes", "on", "是", "开"}:
+        if lowered in {"1", "true", "yes", "on", "是", "开"}:  # i18n: ok
             return True
-        if lowered in {"0", "false", "no", "off", "否", "关"}:
+        if lowered in {"0", "false", "no", "off", "否", "关"}:  # i18n: ok
             return False
         raise ValueError(token)
     if hint in (int, float):
@@ -241,7 +243,7 @@ class HookBus:
                 commands.append(
                     {
                         "command": usage(handler),
-                        "description": handler.description,
+                        "description": t(handler.description),
                         "owner_only": handler.permission is Permission.OWNER,
                     }
                 )
@@ -259,9 +261,9 @@ class HookBus:
         task.add_done_callback(self.tasks.discard)
 
     async def _failed(self, handler: Handler, exc: BaseException) -> None:
-        what = "超时" if isinstance(exc, TimeoutError) else f"出错（{type(exc).__name__}）"
+        what = t("plugins.hooks.timeout") if isinstance(exc, TimeoutError) else t("plugins.hooks.failed", name=type(exc).__name__)
         log.warning(
-            f"插件 {handler.plugin} 的 {handler.kind} 处理器 {handler.name} {what}",
+            Text("plugins.log.handler", plugin=handler.plugin, kind=handler.kind, name=handler.name, what=what),
             exc=None if isinstance(exc, (TimeoutError, PublicError)) else exc,
         )
         await self.store.activity(
@@ -327,13 +329,13 @@ class HookBus:
     def group_help(self, text: str, event: MessageEvent) -> str:
         tokens = text[1:].split()
         lines = [
-            f"{usage(h)} — {h.description}" if h.description else usage(h)
+            f"{usage(h)} — {t(h.description)}" if h.description else usage(h)
             for h in self.available_commands(event.platform, group=event.is_group, owner=event.is_owner)
             if tokens
             and len(h.path) > 1
             and tokens[0] in h.path[0]
         ]
-        return "可用的子指令：\n" + "\n".join(lines) if lines else ""
+        return t("plugins.hooks.subcommands") + "\n".join(lines) if lines else ""
 
     async def emit_result(self, event: MessageEvent, item: Any) -> None:
         if item is None:
@@ -362,7 +364,7 @@ class HookBus:
             await event.send(str(exc))
         except Exception as exc:
             await self._failed(handler, exc)
-            await event.send(f"插件指令执行失败（{type(exc).__name__}）")
+            await event.send(t("plugins.hooks.commandFailed", name=type(exc).__name__))
 
     def bind_sender(self, event: MessageEvent, record: str | None = None) -> None:
         async def sender(text: str) -> None:
@@ -403,16 +405,15 @@ class HookBus:
                 self.bind_sender(event, turn)
                 event.stop_event()
                 log.log(
-                    f"{'主人' if event.is_owner else event.sender_id} 执行插件指令 "
-                    f"{brief(event.text, 80)}（{handler.plugin}）"
+                    Text("plugins.log.command", value=t("plugins.hooks.owner") if event.is_owner else event.sender_id, brief=brief(event.text, 80), plugin=handler.plugin)
                 )
                 if handler.permission is Permission.OWNER and not event.is_owner:
-                    await event.send("此指令仅限主人使用。")
+                    await event.send(t("plugins.hooks.ownerOnly"))
                     return True
                 try:
                     args = bind_arguments(handler.func, rest)
                 except UsageError:
-                    await event.send("用法：" + usage(handler))
+                    await event.send(t("plugins.hooks.usage") + usage(handler))
                     return True
                 # Commands may run long; the adapter keeps receiving meanwhile.
                 self.spawn(self.run_command(handler, event, args))
@@ -448,7 +449,7 @@ class HookBus:
             except Exception as exc:
                 await self._failed(handler, exc)
             if event.is_stopped:
-                log.debug(f"消息被插件 {handler.plugin} 拦截：{brief(event.text, 60)}")
+                log.debug(Text("plugins.log.intercepted", plugin=handler.plugin, brief=brief(event.text, 60)))
                 return True
         return False
 
@@ -466,7 +467,7 @@ class HookBus:
             if not isinstance(message.text, str):
                 message.text = before
             if message.cancelled:
-                log.debug(f"插件 {handler.plugin} 取消了发往 {session} 的消息")
+                log.debug(Text("plugins.log.sendCancelled", plugin=handler.plugin, session=session))
                 return None
         return message.text if message.text.strip() else None
 
@@ -496,10 +497,10 @@ class HookBus:
             await self.invoke(handler, PROACTIVE_TIMEOUT, view)
             if view.dropped:
                 if protected:
-                    log.warning(f"插件 {handler.plugin} 试图丢弃主人设定或委派的事件，已忽略")
+                    log.warning(Text("plugins.log.ownerEventKept", plugin=handler.plugin))
                     view.dropped, view.drop_reason = False, ""
                 else:
-                    view.drop_reason = view.drop_reason or f"插件 {handler.plugin} 丢弃"
+                    view.drop_reason = view.drop_reason or t("plugins.hooks.droppedBy", plugin=handler.plugin)
                     break
         return view
 
@@ -530,7 +531,7 @@ class HookBus:
                     }
                 )
             except ValueError:
-                log.warning(f"插件 {handler.plugin} 修改的分诊结果无效，已忽略")
+                log.warning(Text("plugins.log.triageInvalid", plugin=handler.plugin))
         return decision
 
     async def proactive_done(self, view: ProactiveEvent, outcome: ProactiveOutcome):
@@ -546,10 +547,10 @@ class HookBus:
                 or not isinstance(outcome.reason, str)
                 or not 1 <= len(outcome.reason.strip()) <= 2000
             ):
-                log.warning(f"插件 {handler.plugin} 修改的处理结论无效，已忽略")
+                log.warning(Text("plugins.log.verdictInvalid", plugin=handler.plugin))
                 outcome.notify, outcome.message, outcome.reason = before
             if outcome.forced and not outcome.notify:
-                log.warning(f"插件 {handler.plugin} 试图取消必须发送的通知，已忽略")
+                log.warning(Text("plugins.log.notifyKept", plugin=handler.plugin))
                 outcome.notify = True
         return outcome
 

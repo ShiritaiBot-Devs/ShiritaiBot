@@ -15,16 +15,13 @@ from dataclasses import dataclass
 
 from shiritaibot.core import canonical
 from shiritaibot.emotion.rules import Screen
+from shiritaibot.prompts import prompt as prompt_text
 
 ROUTES = ("light", "memory")
 LABELS = ("frustrated", "anxious", "sad", "angry", "tired")
 DOMINANT_FLOOR = 0.4
 SITUATION_FLOOR = 0.2
 
-SITUATION_PROMPT = (
-    "根据用户最近的消息，用不超过 40 字概括对方眼下的近况或烦心事。只写概括，不抄原话，"
-    "不写姓名、联系方式等隐私；没有值得记住的近况就输出空字符串。只输出概括本身。"
-)
 
 QUESTIONS = {
     "frustrated": {
@@ -127,7 +124,7 @@ class EmotionJudge:
         try:
             reply = await self.llm.complete(
                 "light",
-                SITUATION_PROMPT,
+                prompt_text("EMOTION_SITUATION"),
                 [{"role": "user", "content": message}],
                 [],
                 settings=settings,

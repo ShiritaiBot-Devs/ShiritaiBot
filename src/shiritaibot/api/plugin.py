@@ -126,6 +126,10 @@ class Plugin:
     def logger(self) -> Logger:
         return self.context.logger
 
+    def t(self, key: str, /, **params: Any) -> str:
+        """Text from ``locales/<locale>.json`` in this plugin's folder (see docs/I18N.md)."""
+        return self.context.t(key, **params)
+
     async def initialize(self) -> None:
         pass
 

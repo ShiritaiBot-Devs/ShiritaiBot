@@ -1,0 +1,47 @@
+{
+  "log": {
+    "source": "表情",
+    "vectors_other": "已为 {count} 个表情计算向量",
+    "downloadFailed": "表情下载失败（{name}）",
+    "vectorsError": "表情向量循环出错（{name}）",
+    "vectorsPaused": "表情向量计算暂停：{exc}，{backoff:.0f} 秒后重试",
+    "hookerSource": "表情",
+    "collectFailed": "表情收录失败：{exc}",
+    "notCollected": "未收录表情 {key}：{exc}",
+    "collectError": "表情收录出错（{name}）",
+    "collected": "收录表情 {id}（{category}）：{brief}"
+  },
+  "undecided": "无法判断",
+  "missing": "表情不存在",
+  "invalidId": "无效的表情 ID",
+  "categoryUnknown": "未配置的表情分类",
+  "descriptionEmpty": "表情描述不能为空",
+  "categoryUndecided": "无法判断表情分类",
+  "formatUnsupported": "不是受支持的图片格式",
+  "noCaption": "表情转述模型没有返回描述",
+  "judgeInvalid": "表情判断模型没有返回有效 JSON",
+  "full": "表情库已满，请先在 WebUI 删除一些表情",
+  "personaMismatch": "不符合当前人设（契合度 {score:.2f}）",
+  "imageLimits": "表情须为 2 MB 以内的 PNG、JPEG、GIF 或 WebP 图片",
+  "tools": {
+    "refOtherSession": "图片引用不属于当前会话",
+    "imageExpired": "图片已过期或不是受支持的图片",
+    "missing": "表情不存在，请先用 meme_search 查询 ID",
+    "sendHint": "用 <meme>ID</meme> 发送其中一个表情；description 是转述模型写的文字描述。",
+    "search": "按语义检索表情库，返回表情 ID、分类与文字描述；可限定分类。找到合适的表情后在回复里写 <meme>ID</meme> 发送。",
+    "view": "查看表情库中某个表情的图片（id 来自 meme_search）。仅支持图像输入的模型可用，其他模型调用会返回错误，请改看 meme_search 的文字描述。",
+    "save": "把当前会话收到的一张图片（[图片 ref=...] 中的 ref）收藏进表情库。category 留空时自动判断分类，description 留空时由表情转述模型描述。"
+  },
+  "defaultCategories": {
+    "happy": "开心、得意、庆祝、哈哈大笑",
+    "sad": "难过、委屈、哭泣、心碎",
+    "angry": "生气、不满、抓狂、怒了",
+    "think": "思考、疑惑、琢磨、让我想想",
+    "surprised": "震惊、意外、目瞪口呆",
+    "shy": "害羞、不好意思、脸红、捂脸",
+    "love": "喜欢、比心、贴贴、抱抱",
+    "tired": "累了、困、摆烂、无语、躺平",
+    "smug": "调皮、坏笑、嘲讽、阴阳怪气",
+    "greet": "打招呼、谢谢、好的、晚安等日常回应"
+  }
+}

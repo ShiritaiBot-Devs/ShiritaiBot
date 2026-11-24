@@ -13,6 +13,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from shiritaibot.core import PublicError, now
+from shiritaibot.i18n import Text, t
 
 TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken"
 MAX_CALLBACK_BYTES = 1024 * 1024
@@ -111,7 +112,7 @@ class QQMessage:
         if kind == "GROUP_AT_MESSAGE_CREATE":
             text = re.sub(r"^(?:<@!?[A-Za-z0-9_-]+>\s*)+", "", text)
         if data.get("attachments"):
-            text = (text + " [附件]").strip()
+            text = (text + " " + t("markers.attachment")).strip()
         try:
             stamp = datetime.fromisoformat(data.get("timestamp", ""))
             at = min(received, stamp.timestamp()) if stamp.tzinfo is not None else received
@@ -165,7 +166,7 @@ class QQOfficial:
                 return self._access_token
             secret = await self.vault.resolve(self.config.app_secret)
             if not self.client or not secret:
-                raise PublicError("QQ 官方机器人尚未配置 App Secret 或连接未就绪")
+                raise PublicError("adapters.qqOfficial.notReady")
             response = await self.client.post(
                 TOKEN_URL, json={"appId": self.config.app_id, "clientSecret": secret}
             )
@@ -177,7 +178,7 @@ class QQOfficial:
                     raise ValueError
             except (KeyError, TypeError, ValueError):
                 raise PublicError(
-                    f"QQ 官方机器人访问凭证获取失败（HTTP {response.status_code}）"
+                    "adapters.qqOfficial.tokenFailed", status_code=response.status_code
                 ) from None
             self._access_token = token
             self._renew_at = monotonic() + max(1, lifetime - 60)
@@ -195,7 +196,7 @@ class QQOfficial:
                 await asyncio.sleep(30)
             else:
                 if self.status != "connected":
-                    self.log.log("QQ 官方机器人凭证可用，等待开放平台 Webhook")
+                    self.log.log("adapters.qqOfficial.log.ready")
                 self.diagnostic, self.status = "", "connected"
                 await asyncio.sleep(max(1, self._renew_at - monotonic()))
 
@@ -211,7 +212,7 @@ class QQOfficial:
                             await self.sink(self, message)
                         except Exception as exc:
                             self.log.error(
-                                f"处理 QQ 官方机器人消息失败（{type(exc).__name__}）", exc=exc
+                                Text("adapters.qqOfficial.log.messageFailed", name=type(exc).__name__), exc=exc
                             )
             finally:
                 self.client, self.status = None, "disconnected"
@@ -269,7 +270,7 @@ class QQOfficial:
         code = data.get("code")
         detail = f"HTTP {response.status_code}"
         if type(code) is int:
-            detail += f"，错误码 {code}"
+            detail += t("adapters.qqOfficial.errorCode", code=code)
         if response.status_code == 401:
             async with self._auth_lock:
                 if self._access_token == token:

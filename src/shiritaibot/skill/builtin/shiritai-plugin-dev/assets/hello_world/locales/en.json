@@ -1,0 +1,5 @@
+{
+  "started": "Hello World plugin started",
+  "greeting": "Hello, {name}!",
+  "sunny": "sunny"
+}

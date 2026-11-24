@@ -11,31 +11,31 @@ from shiritaibot.auth.menu import RISK_LABELS
 from shiritaibot.config import SessionPolicy, preset_risks
 from shiritaibot.core import PublicError, uid
 from shiritaibot.core.logs import get_logger
-from shiritaibot.i18n import LOCALE_NAMES, LOCALES, normalize, t, use_locale
+from shiritaibot.i18n import LOCALE_NAMES, LOCALES, Text, normalize, t, use_locale
 
 if TYPE_CHECKING:
     from shiritaibot.plugin.core.hooks import Handler
 
 COMMANDS = {
-    "help": "查看命令帮助",
-    "status": "查看当前会话、模型和运行状态",
-    "models": "列出可用模型",
-    "model": "查看当前模型；/model 模型标识 切换；/model default 恢复路由",
-    "personas": "列出可用人格的标识和名称",
-    "persona": "查看当前人格；/persona 人格标识 切换；/persona default 恢复默认（切换仅主人）",
+    "help": "commands.help.description",
+    "status": "commands.status.description",
+    "models": "commands.models.description",
+    "model": "commands.model.description",
+    "personas": "commands.personas.description",
+    "persona": "commands.persona.description",
     # Values may be catalog keys; visible_builtin_commands renders them (docs/I18N.md).
     "lang": "commands.lang.description",
-    "new": "开始新上下文，保留历史与长期记忆（仅主人）",
-    "clear": "同 /new",
-    "stop": "停止当前任务及自己的排队消息",
-    "tools": "列出所有工具权限；/tools 工具名 deny|manual|auto|allow|inherit；/tools risk safe|normal|sensitive|dangerous 权限；/tools preset 预设",
-    "permissions": "查看当前工具的权限与审批要求",
-    "mode": "查看会话模式；/mode agent|chat 切换（仅主人）",
-    "tasks": "查看后台子代理任务（仅主人私聊）",
-    "memory": "查看长期记忆；/memory 关键词 搜索（仅主人私聊）",
-    "approve": "/approve 审批编号，同意一次操作（仅主人私聊）",
-    "deny": "/deny 审批编号，拒绝操作（仅主人私聊）",
-    "grants": "查看免问授权；/grants 撤销 工具名 [会话]（仅主人私聊）",
+    "new": "commands.new.description",
+    "clear": "commands.clear.description",
+    "stop": "commands.stop.description",
+    "tools": "commands.tools.description",
+    "permissions": "commands.permissions.description",
+    "mode": "commands.mode.description",
+    "tasks": "commands.tasks.description",
+    "memory": "commands.memory.description",
+    "approve": "commands.approve.description",
+    "deny": "commands.deny.description",
+    "grants": "commands.grants.description",
 }
 
 
@@ -44,12 +44,12 @@ PRIVATE_COMMANDS = {"tasks", "memory", "approve", "deny", "grants"}
 OWNER_COMMANDS = {"new", "clear"}
 COMMAND_TOOLS = {"memory": "memory_search", "tasks": "subagent_list"}
 COMMAND_GROUPS = {
-    "builtin:session": ("会话", ("help", "status", "new", "clear", "stop", "mode", "lang")),
-    "builtin:models": ("模型与人格", ("models", "model", "personas", "persona")),
-    "builtin:tools": ("工具与审批", ("tools", "permissions", "approve", "deny", "grants")),
-    "builtin:memory": ("记忆与任务", ("memory", "tasks")),
+    "builtin:session": ("commands.sections.session", ("help", "status", "new", "clear", "stop", "mode", "lang")),
+    "builtin:models": ("commands.sections.models", ("models", "model", "personas", "persona")),
+    "builtin:tools": ("commands.sections.tools", ("tools", "permissions", "approve", "deny", "grants")),
+    "builtin:memory": ("commands.sections.memory", ("memory", "tasks")),
 }
-log = get_logger("指令")
+log = get_logger("commands.log.source")
 
 
 def builtin_slash(text: str) -> bool:
@@ -78,7 +78,7 @@ def visible_builtin_commands(ctx, registry) -> dict[str, str]:
 def help_section_titles(handlers: Iterable[Handler]) -> dict[str, str]:
     return {
         **{key: t(title) for key, (title, _) in COMMAND_GROUPS.items()},
-        **{f"plugin:{handler.plugin}": f"插件 · {handler.plugin}" for handler in handlers},
+        **{f"plugin:{handler.plugin}": t("commands.sections.plugin", plugin=handler.plugin) for handler in handlers},
     }
 
 
@@ -93,7 +93,7 @@ def help_sections(runtime, ctx) -> list[HelpSection]:
     hooks = getattr(runtime, "hooks", None)
     handlers = hooks.commands_for_context(ctx) if hooks is not None else []
     for handler in handlers:
-        entries.setdefault(f"plugin:{handler.plugin}", []).append((usage(handler), handler.description))
+        entries.setdefault(f"plugin:{handler.plugin}", []).append((usage(handler), t(handler.description)))
     titles = help_section_titles(handlers)
     configured = {section.id: section.visible for section in runtime.config.value.help_menu_sections}
     return [
@@ -114,7 +114,7 @@ async def command(runtime, ctx, text):
     image = None
     try:
         if name in PRIVATE_COMMANDS and not private:
-            raise PublicError("此命令仅限主人私聊或 WebUI 使用。")
+            raise PublicError("commands.ownerPrivateOnly")
         capability = COMMAND_TOOLS.get(name)
         if capability:
             await runtime.registry.permissions.check(ctx, runtime.registry.tools[capability], {})
@@ -122,7 +122,7 @@ async def command(runtime, ctx, text):
             raise PublicError("commands.lang.owner_only")
         if name in OWNER_COMMANDS or (name in {"model", "persona"} and argument):
             if not ctx.owner or ctx.background:
-                raise PublicError("只有主人可以重置会话、切换模型或人格。")
+                raise PublicError("commands.ownerOnlyReset")
         if name == "help":
             sections = help_sections(runtime, ctx)
             body = "\n\n".join(
@@ -132,14 +132,14 @@ async def command(runtime, ctx, text):
                 )
                 for title, entries in sections
             )
-            answer = f"{cfg.assistant_name} 命令帮助\n\n{body or '当前会话没有可显示的命令。'}"
+            answer = t("commands.help.title", assistant_name=cfg.assistant_name, body=body or t("commands.help.empty"))
             if sections and cfg.help_menu_style != "text" and not ctx.background:
                 try:
                     image = await asyncio.to_thread(
                         render_help_menu, cfg.assistant_name, sections, cfg.help_menu_style
                     )
                 except (OSError, ValueError) as exc:
-                    log.warning(f"帮助菜单图片渲染失败，已改发文字（{exc}）")
+                    log.warning(Text("commands.log.helpImageFailed", exc=exc))
         elif name in {"new", "clear"}:
             if actor:
                 actor.task.cancel()
@@ -147,32 +147,32 @@ async def command(runtime, ctx, text):
                 if runtime.actors.get(ctx.session) is actor:
                     runtime.actors.pop(ctx.session, None)
             await runtime.store.reset_history(ctx.session, memory_profile=ctx.memory_profile)
-            answer = "已开始新上下文。历史记录和长期记忆已保留。"
+            answer = t("commands.new.done")
         elif name == "stop":
             if actor:
                 await actor.submit(ctx, "/stop")
-            answer = "已发送停止请求；仅会停止你有权控制的任务。"
+            answer = t("commands.stop.sent")
         elif name == "models":
             providers = {p.id for p in cfg.providers if p.enabled}
-            answer = "可用模型：\n" + (
+            answer = t("commands.models.title") + (
                 "\n".join(
-                    f"{m.display_name}（标识：{m.id}）"
+                    t("commands.models.item", display_name=m.display_name, id=m.id)
                     for m in cfg.models
                     if m.enabled and m.provider in providers
                 )
-                or "尚未配置，请在 WebUI 添加提供商和模型。"
+                or t("commands.models.none")
             )
         elif name == "personas":
-            answer = "可用人格（标识 · 名称）：\n" + (
+            answer = t("commands.personas.title") + (
                 "\n".join(f"{p.id} · {p.name}" for p in cfg.personas if p.enabled)
-                or "尚未添加人格，使用基础人设。"
+                or t("commands.personas.none")
             )
         elif name == "persona":
             if argument:
                 if argument != "default" and not any(
                     p.id == argument and p.enabled for p in cfg.personas
                 ):
-                    raise PublicError("人格不存在或未启用。使用 /personas 查看可用标识。")
+                    raise PublicError("commands.persona.missing")
                 await runtime.store.put(
                     "session_persona",
                     ctx.session,
@@ -183,16 +183,16 @@ async def command(runtime, ctx, text):
                 cfg.selected_persona(selected.get("persona", "") if selected else "")
                 or cfg.selected_persona()
             )
-            answer = f"当前人格：{persona.id + ' · ' + persona.name if persona else '基础人设'}"
+            answer = t("commands.persona.current", value=persona.id + ' · ' + persona.name if persona else t("commands.persona.base"))
             if argument:
-                answer += "\n人格设置从下一轮开始生效。"
+                answer += t("commands.persona.nextTurn")
         elif name in {"model", "status"}:
             if name == "model" and argument:
                 providers = {p.id for p in cfg.providers if p.enabled}
                 if argument != "default" and not any(
                     m.id == argument and m.enabled and m.provider in providers for m in cfg.models
                 ):
-                    raise PublicError("模型不存在或未启用。使用 /models 查看可用标识。")
+                    raise PublicError("commands.model.missing")
                 await runtime.store.put(
                     "session_model",
                     ctx.session,
@@ -203,34 +203,34 @@ async def command(runtime, ctx, text):
             model_names = {m.id: m.display_name for m in cfg.models}
 
             def display(ref):
-                return model_names.get(ref, f"未知提供商/{ref}")
+                return model_names.get(ref, t("commands.model.unknownProvider", ref=ref))
 
             routes = cfg.with_session_routes(ctx.session).routes
             if model:
                 models = display(model)
             elif ctx.mode != "agent":
-                models = " → ".join(map(display, routes["chat"])) or "未配置"
+                models = " → ".join(map(display, routes["chat"])) or t("commands.status.notConfigured")
             else:
-                models = " → ".join(map(display, routes["agent"])) or "未配置"
+                models = " → ".join(map(display, routes["agent"])) or t("commands.status.notConfigured")
                 if cfg.agent_split and routes["agent_chat"] and routes["router"]:
-                    models = (
-                        f"Work {models}；Chat "
-                        + " → ".join(map(display, routes["agent_chat"]))
-                        + "（按消息自动分流）"
-                    )
-            answer = f"会话：{ctx.session}\n模式：{ctx.mode}\n模型：{models}"
+                    models = t(
+                        "commands.status.splitModels",
+                        work=models,
+                        chat=" → ".join(map(display, routes["agent_chat"])),
+                    ) + t("commands.status.autoSplit")
+            answer = t("commands.status.summary", session=ctx.session, mode=ctx.mode, models=models)
             if argument:
-                answer += "\n模型设置从下一轮开始生效。"
+                answer += t("commands.model.nextTurn")
             if name == "status":
                 selected = await runtime.store.get("session_persona", ctx.session)
                 persona = (
                     cfg.selected_persona(selected.get("persona", "") if selected else "")
                     or cfg.selected_persona()
                 )
-                answer += f"\n人格：{persona.name if persona else '基础人设'}"
+                answer += t("commands.status.persona", value=persona.name if persona else t("commands.persona.base"))
                 locale, _ = await runtime.session_locale(ctx.session)
                 answer += "\n" + t("commands.lang.status", name=LOCALE_NAMES[locale])
-                answer += f"\n状态：{'执行中' if actor and actor.current else '空闲'}\n排队：{actor.queue.qsize() if actor else 0}"
+                answer += t("commands.status.state", state=t("commands.status.busy") if actor and actor.current else t("commands.status.idle"), queued=actor.queue.qsize() if actor else 0)
         elif name == "lang":
             options = ", ".join(f"{code} ({LOCALE_NAMES[code]})" for code in LOCALES)
             if argument:
@@ -257,7 +257,7 @@ async def command(runtime, ctx, text):
             profile = permissions.session_policy(ctx).model_copy(deep=True)
             if argument:
                 if not ctx.owner or ctx.background:
-                    raise PublicError("只有主人可以修改 Main 会话的模式和工具权限。")
+                    raise PublicError("commands.tools.ownerOnly")
                 args = argument.split()
                 if name == "mode":
                     args = ["mode", *args]
@@ -265,11 +265,7 @@ async def command(runtime, ctx, text):
                     profile = await permissions.set_session(ctx, lambda _: None)
                 else:
                     usage = (
-                        "用法：/tools 工具名 deny|manual|auto|allow|inherit；"
-                        "/tools risk safe|normal|sensitive|dangerous deny|manual|auto|allow；"
-                        "/tools mode agent|chat；"
-                        "/tools preset strict|balanced|autonomous|full_access；"
-                        "/tools reset"
+                        t("commands.tools.usage")
                     )
                     if len(args) not in {2, 3}:
                         raise PublicError(usage)
@@ -306,7 +302,7 @@ async def command(runtime, ctx, text):
                                     data["tools"][target] = value
                             else:
                                 raise PublicError(
-                                    "工具、模式、预设或权限值无效。使用 /tools 查看工具。"
+                                    "commands.tools.invalid"
                                 )
                         else:
                             raise PublicError(usage)
@@ -314,77 +310,78 @@ async def command(runtime, ctx, text):
 
                     profile = await permissions.set_session(ctx, update)
             labels = {
-                "deny": "禁止使用",
-                "manual": "需要人工审批",
-                "auto": "模型自动审批",
-                "allow": "无需审批",
+                "deny": t("commands.permission.deny"),
+                "manual": t("commands.permission.manual"),
+                "auto": t("commands.permission.auto"),
+                "allow": t("commands.permission.allow"),
             }
             preset_name = profile.matched_preset() or "custom"
             risk_summary = " / ".join(
                 f"{title}:{labels[getattr(profile.risks, key)]}"
                 for key, title in (
-                    ("safe", "安全"),
-                    ("normal", "一般"),
-                    ("sensitive", "敏感"),
-                    ("dangerous", "危险"),
+                    ("safe", t("commands.risk.safe")),
+                    ("normal", t("commands.risk.normal")),
+                    ("sensitive", t("commands.risk.sensitive")),
+                    ("dangerous", t("commands.risk.dangerous")),
                 )
             )
             answer = (
-                f"当前会话：{ctx.session}\n模式：{profile.mode}\n"
-                f"预设：{preset_name}（{risk_summary}）"
+                t("commands.tools.summary", session=ctx.session, mode=profile.mode, preset_name=preset_name, risk_summary=risk_summary)
             )
             if name != "mode":
                 answer += "\n" + "\n".join(
                     f"{tool.name} · {labels[permissions.configured(ctx, tool)]}"
-                    + ("（当前不可用）" if permissions.decision(ctx, tool) == "deny" else "")
+                    + (t("commands.tools.unavailable") if permissions.decision(ctx, tool) == "deny" else "")
                     for tool in sorted(runtime.registry.tools.values(), key=lambda tool: tool.name)
                 )
             if profile.mode == "chat":
-                answer += "\nChat 模式仅开放基础对话工具，扩展功能需切换为 Agent。"
+                answer += t("commands.tools.chatHint")
             if argument:
-                answer += "\n已保存。模式从下一轮生效，工具权限立即应用。"
+                answer += t("commands.tools.saved")
         elif name == "tasks":
             rows = await runtime.store.list("subagent_run", limit=20)
-            answer = "最近子代理任务：\n" + (
-                "\n".join(f"{row['id']} · {row.get('status', '')}" for row in rows) or "暂无任务"
+            answer = t("commands.tasks.title") + (
+                "\n".join(f"{row['id']} · {row.get('status', '')}" for row in rows) or t("commands.tasks.none")
             )
         elif name == "memory":
             memory = runtime.memory_for(ctx.memory_profile)
             rows = (await memory.search(query=argument, limit=10))["results"]
-            answer = "长期记忆：\n" + (
-                "\n".join(row["text"][:500] for row in rows) or "没有匹配的记忆"
+            answer = t("commands.memory.title") + (
+                "\n".join(row["text"][:500] for row in rows) or t("commands.memory.none")
             )
         elif name == "grants":
             permissions = runtime.registry.permissions
-            if argument.startswith("撤销"):
-                parts = argument.removeprefix("撤销").split()
+            # The subcommand word works in either language.
+            word = next((w for w in ("撤销", "revoke") if argument.startswith(w)), "")  # i18n: ok
+            if word:
+                parts = argument.removeprefix(word).split()
                 if not parts:
-                    raise PublicError("用法：/grants 撤销 工具名 [会话]")
+                    raise PublicError("commands.grants.usage")
                 answer = await permissions.revoke_grant(ctx, parts[0], parts[1] if len(parts) > 1 else "")
             else:
                 rows = await permissions.grant_rows(ctx)
                 answer = (
-                    "当前没有免问授权。"
+                    t("commands.grants.none")
                     if not rows
-                    else "免问授权：\n"
+                    else t("commands.grants.title")
                     + "\n".join(
                         f"{row.get('scope', '')} · {row['tool']} · "
-                        f"{RISK_LABELS.get(row.get('risk'), row.get('risk', ''))} · "
+                        f"{t(RISK_LABELS.get(row.get('risk'), row.get('risk', '')))} · "
                         f"{datetime.fromtimestamp(row['created']):%Y-%m-%d} — "
                         f"{row.get('reason', '')}"
                         for row in rows
                     )
-                    + "\n撤销：/grants 撤销 工具名 [会话]"
+                    + t("commands.grants.revokeHint")
                 )
         elif name in {"approve", "deny"}:
             if not argument:
-                raise PublicError(f"用法：/{name} 审批编号")
+                raise PublicError("commands.approve.usage", name=name)
             await runtime.registry.permissions.resolve(
                 argument, name == "approve", approver=ctx
             )
-            answer = "审批已同意。" if name == "approve" else "审批已拒绝。"
+            answer = t("commands.approve.allowed") if name == "approve" else t("commands.approve.denied")
         else:
-            answer = "未知命令。输入 /help 查看支持的命令。"
+            answer = t("commands.unknown")
     except PublicError as exc:
         answer = str(exc)
     turn = uid()

@@ -13,6 +13,7 @@ from pathlib import Path, PurePosixPath
 import httpx
 
 from shiritaibot.core import PublicError
+from shiritaibot.i18n import t
 
 from .manifest import MANIFESTS, manifest_file, read_manifest
 
@@ -22,14 +23,14 @@ MAX_UNPACKED = 100 * 1024 * 1024
 
 def validate_id(key: str) -> None:
     if not re.fullmatch(r"[a-z0-9_]{1,64}", key) or key in {"core", "__pycache__"}:
-        raise PublicError("插件标识只能包含小写字母、数字和下划线，且不能为保留名称")
+        raise PublicError("plugins.packages.idFormat")
 
 
 def check_entries(archive: zipfile.ZipFile, max_unpacked: int, label: str) -> None:
     """Reject oversized archives, absolute/parent paths, links and special files."""
     entries = archive.infolist()
     if len(entries) > 2000 or sum(i.file_size for i in entries) > max_unpacked:
-        raise PublicError(f"{label}解压后过大或文件数量超过 2000")
+        raise PublicError("plugins.packages.tooLarge", label=label)
     for item in entries:
         path = PurePosixPath(item.filename)
         mode = item.external_attr >> 16
@@ -41,7 +42,7 @@ def check_entries(archive: zipfile.ZipFile, max_unpacked: int, label: str) -> No
             or stat.S_ISLNK(mode)
             or (stat.S_IFMT(mode) and not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)))
         ):
-            raise PublicError(f"{label} ZIP 包含不安全的路径或文件类型")
+            raise PublicError("plugins.packages.unsafe", label=label)
 
 
 def extract_entries(archive: zipfile.ZipFile, stage: Path) -> None:
@@ -65,23 +66,23 @@ def plugin_root(stage: Path) -> Path:
         return stage
     found = {path.parent for name in MANIFESTS for path in stage.rglob(name)}
     if len(found) != 1:
-        raise PublicError("ZIP 中应包含一个插件及其 metadata.yaml 或 plugin.toml")
+        raise PublicError("plugins.packages.layout")
     return found.pop()
 
 
 def install_archive(root: Path, key: str, data: bytes) -> None:
     validate_id(key)
     if len(data) > MAX_ARCHIVE:
-        raise PublicError("插件 ZIP 不能超过 20 MiB")
+        raise PublicError("plugins.packages.zipTooLarge")
     if root.is_symlink():
-        raise PublicError("插件安装目录不能是符号链接")
+        raise PublicError("plugins.packages.targetSymlink")
     root.mkdir(parents=True, exist_ok=True)
     destination = root / key
     if destination.exists() or destination.is_symlink():
-        raise PublicError("同名插件目录已存在")
+        raise PublicError("plugins.packages.exists")
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
-            check_entries(archive, MAX_UNPACKED, "插件")
+            check_entries(archive, MAX_UNPACKED, t("plugins.packages.label"))
             with tempfile.TemporaryDirectory(prefix=".install-", dir=root) as staging:
                 stage = Path(staging)
                 extract_entries(archive, stage)
@@ -94,14 +95,14 @@ def install_archive(root: Path, key: str, data: bytes) -> None:
     except PublicError:
         raise
     except Exception:
-        raise PublicError("插件 ZIP 无效，请检查清单、配置定义和 Python 入口") from None
+        raise PublicError("plugins.packages.invalid") from None
 
 
 def remove_directory(root: Path, key: str) -> None:
     validate_id(key)
     directory = root / key
     if root.is_symlink() or directory.is_symlink():
-        raise PublicError("不能删除符号链接形式的插件目录")
+        raise PublicError("plugins.packages.symlinkDelete")
     if directory.is_dir():
         shutil.rmtree(directory)
 
@@ -111,7 +112,7 @@ async def download_github(url: str) -> bytes:
         r"https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?", url.strip()
     )
     if not match or any(p in {".", ".."} for p in match.groups()):
-        raise PublicError("请填写公开 GitHub 仓库地址：https://github.com/作者/仓库")
+        raise PublicError("plugins.packages.githubUrl")
     owner, repo = match.groups()
     try:
         async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
@@ -125,7 +126,7 @@ async def download_github(url: str) -> bytes:
                 async for chunk in response.aiter_bytes():
                     data.extend(chunk)
                     if len(data) > MAX_ARCHIVE:
-                        raise PublicError("GitHub 插件包不能超过 20 MiB")
+                        raise PublicError("plugins.packages.githubTooLarge")
                 return bytes(data)
     except httpx.HTTPError:
-        raise PublicError("GitHub 下载失败，请检查仓库是否公开、网络连接和 API 访问限额") from None
+        raise PublicError("plugins.packages.githubFailed") from None

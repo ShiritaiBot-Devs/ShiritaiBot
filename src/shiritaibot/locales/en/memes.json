@@ -1,0 +1,48 @@
+{
+  "log": {
+    "source": "Stickers",
+    "vectors_one": "Computed vectors for {count} sticker",
+    "vectors_other": "Computed vectors for {count} stickers",
+    "downloadFailed": "Sticker download failed ({name})",
+    "vectorsError": "Sticker vector loop failed ({name})",
+    "vectorsPaused": "Sticker vector computing paused: {exc}; retrying in {backoff:.0f} s",
+    "hookerSource": "Stickers",
+    "collectFailed": "Sticker collection failed: {exc}",
+    "notCollected": "Didn't collect sticker {key}: {exc}",
+    "collectError": "Sticker collection error ({name})",
+    "collected": "Collected sticker {id} ({category}): {brief}"
+  },
+  "undecided": "Couldn't decide",
+  "missing": "Sticker not found",
+  "invalidId": "Invalid sticker ID",
+  "categoryUnknown": "That sticker category isn't configured",
+  "descriptionEmpty": "The sticker description can't be empty",
+  "categoryUndecided": "Couldn't decide the sticker category",
+  "formatUnsupported": "Not a supported image format",
+  "noCaption": "The sticker description model returned no description",
+  "judgeInvalid": "The sticker judging model didn't return valid JSON",
+  "full": "The sticker library is full. Delete some stickers in the WebUI first.",
+  "personaMismatch": "Doesn't fit the current persona (fit {score:.2f})",
+  "imageLimits": "Stickers must be PNG, JPEG, GIF, or WebP images up to 2 MB",
+  "tools": {
+    "refOtherSession": "The image reference doesn't belong to this session",
+    "imageExpired": "The image expired or isn't a supported image",
+    "missing": "The sticker doesn't exist. Find its ID with meme_search first.",
+    "sendHint": "Send one of them with <meme>ID</meme>; description is the text the description model wrote.",
+    "search": "Search the sticker library by meaning and return sticker IDs, categories, and text descriptions; can be limited to a category. Once you find a good sticker, send it by writing <meme>ID</meme> in your reply.",
+    "view": "View the image of a sticker in the library (id from meme_search). Only works for models that accept images; other models get an error, so read the text description from meme_search instead.",
+    "save": "Save an image received in this session (the ref in [image ref=...]) to the sticker library. Leave category empty to choose one automatically, and description empty to let the description model write it."
+  },
+  "defaultCategories": {
+    "happy": "happy, proud, celebrating, laughing out loud",
+    "sad": "sad, hurt, crying, heartbroken",
+    "angry": "angry, annoyed, losing it, furious",
+    "think": "thinking, puzzled, pondering, let me think",
+    "surprised": "shocked, surprised, speechless",
+    "shy": "shy, embarrassed, blushing, facepalm",
+    "love": "love, heart hands, cuddles, hugs",
+    "tired": "tired, sleepy, giving up, speechless, lying flat",
+    "smug": "playful, smirking, teasing, sarcastic",
+    "greet": "greetings, thanks, OK, good night, and other everyday replies"
+  }
+}

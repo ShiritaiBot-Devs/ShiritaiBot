@@ -1,0 +1,5 @@
+{
+  "noExecutable": "No executable is configured",
+  "executableMissing": "The configured executable wasn't found",
+  "nativeOnly": "Configure a native executable, or [node, CLI entry.js]; shell wrapper scripts aren't run"
+}

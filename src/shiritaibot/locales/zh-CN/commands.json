@@ -8,5 +8,125 @@
     "unknown": "不支持的语言：{value}。可选：{options}。",
     "owner_only": "只有主人可以切换会话语言。",
     "status": "语言：{name}"
+  },
+  "sections": {
+    "session": "会话",
+    "models": "模型与人格",
+    "tools": "工具与审批",
+    "memory": "记忆与任务",
+    "plugin": "插件 · {plugin}"
+  },
+  "log": {
+    "source": "指令",
+    "helpImageFailed": "帮助菜单图片渲染失败，已改发文字（{exc}）"
+  },
+  "status": {
+    "idle": "空闲",
+    "notConfigured": "未配置",
+    "busy": "执行中",
+    "autoSplit": "（按消息自动分流）",
+    "description": "查看当前会话、模型和运行状态",
+    "persona": "\n人格：{value}",
+    "summary": "会话：{session}\n模式：{mode}\n模型：{models}",
+    "state": "\n状态：{state}\n排队：{queued}",
+    "splitModels": "Work {work}；Chat {chat}"
+  },
+  "risk": {
+    "safe": "安全",
+    "normal": "一般",
+    "sensitive": "敏感",
+    "dangerous": "危险"
+  },
+  "persona": {
+    "base": "基础人设",
+    "nextTurn": "\n人格设置从下一轮开始生效。",
+    "missing": "人格不存在或未启用。使用 /personas 查看可用标识。",
+    "description": "查看当前人格；/persona 人格标识 切换；/persona default 恢复默认（切换仅主人）",
+    "current": "当前人格：{value}"
+  },
+  "permission": {
+    "deny": "禁止使用",
+    "allow": "无需审批",
+    "manual": "需要人工审批",
+    "auto": "模型自动审批"
+  },
+  "tasks": {
+    "none": "暂无任务",
+    "title": "最近子代理任务：\n",
+    "description": "查看后台子代理任务（仅主人私聊）"
+  },
+  "help": {
+    "description": "查看命令帮助",
+    "empty": "当前会话没有可显示的命令。",
+    "title": "{assistant_name} 命令帮助\n\n{body}",
+    "imageTitle": "命令帮助"
+  },
+  "models": {
+    "description": "列出可用模型",
+    "title": "可用模型：\n",
+    "none": "尚未配置，请在 WebUI 添加提供商和模型。",
+    "item": "{display_name}（标识：{id}）"
+  },
+  "clear": {
+    "description": "同 /new"
+  },
+  "approve": {
+    "allowed": "审批已同意。",
+    "denied": "审批已拒绝。",
+    "usage": "用法：/{name} 审批编号",
+    "description": "/approve 审批编号，同意一次操作（仅主人私聊）"
+  },
+  "tools": {
+    "unavailable": "（当前不可用）",
+    "saved": "\n已保存。模式从下一轮生效，工具权限立即应用。",
+    "ownerOnly": "只有主人可以修改 Main 会话的模式和工具权限。",
+    "invalid": "工具、模式、预设或权限值无效。使用 /tools 查看工具。",
+    "chatHint": "\nChat 模式仅开放基础对话工具，扩展功能需切换为 Agent。",
+    "summary": "当前会话：{session}\n模式：{mode}\n预设：{preset_name}（{risk_summary}）",
+    "description": "列出所有工具权限；/tools 工具名 deny|manual|auto|allow|inherit；/tools risk safe|normal|sensitive|dangerous 权限；/tools preset 预设",
+    "usage": "用法：/tools 工具名 deny|manual|auto|allow|inherit；/tools risk safe|normal|sensitive|dangerous deny|manual|auto|allow；/tools mode agent|chat；/tools preset strict|balanced|autonomous|full_access；/tools reset"
+  },
+  "memory": {
+    "title": "长期记忆：\n",
+    "none": "没有匹配的记忆",
+    "description": "查看长期记忆；/memory 关键词 搜索（仅主人私聊）"
+  },
+  "grants": {
+    "title": "免问授权：\n",
+    "none": "当前没有免问授权。",
+    "usage": "用法：/grants 撤销 工具名 [会话]",
+    "revokeHint": "\n撤销：/grants 撤销 工具名 [会话]",
+    "description": "查看免问授权；/grants 撤销 工具名 [会话]（仅主人私聊）"
+  },
+  "personas": {
+    "description": "列出可用人格的标识和名称",
+    "none": "尚未添加人格，使用基础人设。",
+    "title": "可用人格（标识 · 名称）：\n"
+  },
+  "model": {
+    "unknownProvider": "未知提供商/{ref}",
+    "nextTurn": "\n模型设置从下一轮开始生效。",
+    "missing": "模型不存在或未启用。使用 /models 查看可用标识。",
+    "description": "查看当前模型；/model 模型标识 切换；/model default 恢复路由"
+  },
+  "stop": {
+    "description": "停止当前任务及自己的排队消息",
+    "sent": "已发送停止请求；仅会停止你有权控制的任务。"
+  },
+  "permissions": {
+    "description": "查看当前工具的权限与审批要求"
+  },
+  "ownerOnlyReset": "只有主人可以重置会话、切换模型或人格。",
+  "ownerPrivateOnly": "此命令仅限主人私聊或 WebUI 使用。",
+  "new": {
+    "description": "开始新上下文，保留历史与长期记忆（仅主人）",
+    "done": "已开始新上下文。历史记录和长期记忆已保留。"
+  },
+  "deny": {
+    "description": "/deny 审批编号，拒绝操作（仅主人私聊）"
+  },
+  "unknown": "未知命令。输入 /help 查看支持的命令。",
+  "mode": {
+    "description": "查看会话模式；/mode agent|chat 切换（仅主人）"
   }
 }

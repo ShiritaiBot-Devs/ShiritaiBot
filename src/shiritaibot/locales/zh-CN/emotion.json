@@ -1,0 +1,29 @@
+{
+  "moods": {
+    "frustrated": "烦躁",
+    "anxious": "焦急",
+    "sad": "低落",
+    "angry": "生气",
+    "tired": "疲惫",
+    "unsettled": "情绪波动"
+  },
+  "strength": {
+    "very": "非常",
+    "somewhat": "有些"
+  },
+  "age": {
+    "justNow": "刚刚",
+    "minutes_other": "{count} 分钟前",
+    "hours_other": "{count} 小时前",
+    "days_other": "{count} 天前"
+  },
+  "log": {
+    "source": "情绪",
+    "judgeFailed": "情绪判定失败",
+    "failed": "情绪处理失败",
+    "signalFailed": "情绪信号读取失败",
+    "situationFailed": "情绪近况概括失败",
+    "stateFailed": "情绪状态读取失败",
+    "judged": "情绪判定 {key}: value={value:.2f} source={source} affect={affect} categories={brief}"
+  }
+}

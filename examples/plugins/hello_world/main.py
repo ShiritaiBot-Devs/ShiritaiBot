@@ -1,3 +1,9 @@
+"""Hello World: the plugin API v2 example.
+
+User-facing text lives in locales/<locale>.json and is read with self.t("key", param=value)
+(docs/I18N.md). Docstrings stay in one language: they become /help text and tool descriptions.
+"""
+
 from shiritaibot.api import (
     Context,
     LLMRequest,
@@ -19,7 +25,7 @@ class HelloWorld(Plugin):
         super().__init__(context, config)
 
     async def initialize(self):
-        self.logger.log("Hello World 插件已启动")
+        self.logger.log(self.t("started"))
 
     # 指令 -----------------------------------------------------------------------------
 
@@ -29,7 +35,12 @@ class HelloWorld(Plugin):
         count = await self.get_kv_data("count", 0) + 1
         await self.put_kv_data("count", count)
         yield event.plain_result(
-            f"{self.config['greeting']} {name or event.get_sender_name()}（第 {count} 次）"
+            self.t(
+                "hello",
+                greeting=self.config["greeting"],
+                name=name or event.get_sender_name(),
+                count=count,
+            )
         )
 
     @hook.command_group("calc")
@@ -46,7 +57,7 @@ class HelloWorld(Plugin):
     async def reset(self, event: MessageEvent):
         """清零招呼计数（仅主人）"""
         await self.delete_kv_data("count")
-        return "已清零。"
+        return self.t("reset")
 
     # 消息监听 -------------------------------------------------------------------------
 
@@ -65,7 +76,7 @@ class HelloWorld(Plugin):
         Args:
             name(string): 要问候的人，可省略
         """
-        self.logger.log(f"向 {ctx.session} 打招呼")
+        self.logger.log(self.t("greetingLog", session=ctx.session))
         return {"message": f"{self.config['greeting']} {name}".strip(), "session": ctx.session}
 
     # Agent 生命周期 -------------------------------------------------------------------
@@ -73,9 +84,7 @@ class HelloWorld(Plugin):
     @hook.on_llm_request()
     async def add_hint(self, turn: Turn, request: LLMRequest):
         if request.step == 0 and not turn.background:
-            request.add_context(
-                "<hello_world>用户想打招呼时可以调用 hello_world 工具。</hello_world>"
-            )
+            request.add_context(self.t("hint"))
 
     @hook.on_decorating_result()
     async def sign(self, message: OutgoingMessage):
@@ -87,11 +96,11 @@ class HelloWorld(Plugin):
     @hook.on_proactive_event()
     async def drop_sources(self, event: ProactiveEvent):
         if event.source in self.config["drop_sources"]:
-            event.drop(f"Hello World 配置为丢弃来源 {event.source}")
+            event.drop(self.t("dropped", source=event.source))
 
     @hook.on_proactive_judged()
     async def floor(self, event: ProactiveEvent, triage: Triage):
         minimum = self.config["advanced"]["min_importance"]
         if 0 < triage.importance < minimum:
             triage.importance = 0
-            triage.reason += f"（低于 Hello World 设定的最低重要性 {minimum}）"
+            triage.reason += self.t("belowMinimum", minimum=minimum)

@@ -1,0 +1,24 @@
+{
+  "event": {
+    "homeworkChanged": "网络学堂作业变化",
+    "syncFailed": "网络学堂同步失败",
+    "checkLogin": "网络学堂需要检查登录状态"
+  },
+  "noStderr": "无 stderr 输出",
+  "syncedChanged": "，{changed} 项有变化",
+  "outputTruncated": "网络学堂适配端输出超过 1MB 上限被截断",
+  "loginHint": "请在主人私聊中登录网络学堂并完成所需验证。",
+  "invalidJson": "OneLearn 适配端没有返回有效 JSON",
+  "synced_other": "同步完成：{count} 项作业",
+  "noCommand": "请配置 OneLearn 适配进程 command",
+  "log": {
+    "syncFailed": "同步失败（{name}）",
+    "loginState": "网络学堂登录状态异常：{state}"
+  },
+  "firstSync_other": "首次同步，记录 {count} 项作业作为基线",
+  "adapterExited": "网络学堂适配端进程异常退出（exit code {exit_code}）：{detail}",
+  "tools": {
+    "query": "查询课程、公告、未提交作业、课件与作业附件；homework_detail 需要 homework_id，返回单个作业的详情。需要身份验证时，使用学校插件的登录和验证码工具。",
+    "download": "下载课件或作业附件到该插件私有目录。download 需要 course_id + file_id（来自 files 查询）；download_homework_attachment 需要 homework_id + file_id（来自 homework_attachments 查询）。"
+  }
+}

@@ -10,6 +10,7 @@ from typing import Any, Awaitable, Callable
 from shiritaibot.core import Context, ExternalEvent, InteractionRequired, PublicError, Tool
 from shiritaibot.core.logs import Logger, brief, get_logger
 from shiritaibot.core.process import run_process
+from shiritaibot.i18n import Text, plugin_text
 from shiritaibot.tools import TEXT, schema
 
 
@@ -28,16 +29,23 @@ class PluginContext:
     # Non-secret variables for shell and subagent child processes (see set_process_env).
     process_env: dict[str, str] = field(default_factory=dict)
     # Text appended to new subagent prompts (see add_subagent_note).
-    subagent_notes: list[str] = field(default_factory=list)
+    subagent_notes: list[str | Text] = field(default_factory=list)
     # Rewriters for shell tool commands (see add_shell_filter).
     shell_filters: list[Callable[[str], str]] = field(default_factory=list)
+    # The plugin's folder; its locales/<locale>.json serve ``t``.
+    directory: Path | None = None
     # Colored terminal + rolling file + WebUI feed, tagged with this plugin's id.
     logger: Logger = field(init=False)
 
     _resolve_interaction: Callable[[str], Awaitable[None]] | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
-        self.logger = get_logger(f"插件:{self.id}")
+        self.logger = get_logger(Text("plugins.log.pluginSource", id=self.id))
+
+    def t(self, key: str, /, **params: Any) -> str:
+        """Text from this plugin's ``locales/<locale>.json`` in the active language (the
+        chat's or request's), falling back to zh-CN and then to ``key`` itself."""
+        return plugin_text(self.directory, key, **params)
 
     async def emit_many(self, events: list[ExternalEvent]) -> list[str]:
         """Submit a batch through the same ingress and deduplication as emit."""
@@ -89,11 +97,14 @@ class PluginContext:
                 raise ValueError(f"invalid value for environment variable {name}")
         self.process_env.update(env)
 
-    def add_subagent_note(self, text: str) -> None:
+    def add_subagent_note(self, text: str | Text) -> None:
         """Append an instruction to the prompt of every new (non-generic) subagent run.
 
         Resumed runs already carry it in their native session. Revoked on reload or stop.
         """
+        if isinstance(text, Text):  # rendered in the language of each new run
+            self.subagent_notes.append(text)
+            return
         if not isinstance(text, str) or not text.strip():
             raise ValueError("subagent note must be non-empty text")
         self.subagent_notes.append(text.strip())

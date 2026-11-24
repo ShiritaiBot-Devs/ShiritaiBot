@@ -9,9 +9,10 @@ import aiosqlite
 
 from shiritaibot.core import EventBus, PublicError, canonical, now, uid
 from shiritaibot.core.logs import get_logger
+from shiritaibot.i18n import Text, t
 
 # Call sites log a readable line themselves; this keeps the raw activity kind for debugging.
-log = get_logger("活动")
+log = get_logger("chats.log.source")
 GROUP_MESSAGES_KEPT = 2000
 MEMORY_PROFILE_FILTER = "COALESCE(json_extract(data,'$._memory_profile'),'default')=?"
 
@@ -46,7 +47,7 @@ class Store:
             ):
                 for row in rows:
                     row["status"] = "interrupted"
-                    log.debug(f"上次未完成的 {kind} {row['id'][:8]} 标记为已中断")
+                    log.debug(Text("chats.log.interrupted", kind=kind, value=row['id'][:8]))
                     await self.put(kind, row["id"], row, row.get("scope", ""))
 
     async def close(self) -> None:
@@ -266,7 +267,7 @@ class Store:
         for row in rows:
             opening = " ".join((row.pop("opening") or "").split("\n<context", 1)[0].split())
             row["title"] = row["title"] or (
-                "默认对话" if row["id"] == "web:owner" else opening[:48] or "新对话"
+                t("chats.defaultChat") if row["id"] == "web:owner" else opening[:48] or t("chats.newChat")
             )
             row["pinned"] = bool(row["pinned"])
         return rows
@@ -280,7 +281,7 @@ class Store:
             (session, title, pinned, pinned, session),
         )
         if not changed:
-            raise PublicError("对话已删除")
+            raise PublicError("chats.deleted")
 
     async def delete_web_chat(self, session: str) -> None:
         async with self.lock:

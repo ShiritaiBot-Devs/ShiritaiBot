@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 文档 / Documentation
+    url: https://shiritaibot.dev/docs/models
+    about: 安装、模型配置和使用说明 / Installation, model setup, and usage guides
+  - name: 插件开发 / Plugin development
+    url: https://shiritaibot.dev/docs/plugins
+    about: 插件 API 与示例 / Plugin API and examples

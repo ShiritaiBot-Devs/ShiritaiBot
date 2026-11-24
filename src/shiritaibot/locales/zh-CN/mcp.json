@@ -1,0 +1,42 @@
+{
+  "noReason": "未提供原因",
+  "missing": "MCP 服务不存在",
+  "toolError": "MCP 工具返回错误：",
+  "toolNameConflict": "工具名称与已有工具冲突",
+  "schemaInvalid": "输入 Schema 无效",
+  "reconfigured": "MCP 服务已重新配置，请重新调用",
+  "log": {
+    "disconnected": "MCP 服务 {key} 已断开",
+    "connectFailed": "MCP 服务 {id} 连接失败：{error}",
+    "refreshFailed": "MCP 服务 {id} 刷新工具失败：{exc}",
+    "toolSkipped": "MCP 服务 {key} 的工具 {original} 未注册：{error}",
+    "connected_other": "MCP 服务 {id}（{name}）已连接：{count} 个工具",
+    "toolsUpdated_other": "MCP 服务 {id} 的工具列表已更新：{count} 个"
+  },
+  "connectFailed": "连接失败（{name}）",
+  "content": {
+    "binary": "[二进制资源 {uri}，未展示]",
+    "hidden": "[{kind}: {value}，未展示]",
+    "resource": "[资源 {uri}]\n{text}",
+    "link": "[资源链接 {name}: {uri}]"
+  },
+  "unavailable": "MCP 服务 {id} 不可用：{error}",
+  "client": {
+    "unknownError": "未知错误",
+    "closed": "MCP 连接已关闭",
+    "exited": "MCP 服务进程已退出",
+    "disconnected": "MCP 服务连接已断开",
+    "sessionExpired": "MCP 会话已失效，请重新连接",
+    "invalidJson": "MCP 服务返回了无效的 JSON",
+    "timeout": "MCP 请求 {method} 超时",
+    "log": {
+      "nonJson": "MCP {name} 输出了非 JSON 行，已忽略",
+      "tooLarge": "MCP {name} 输出的单条消息过大，连接已关闭"
+    },
+    "connectFailed": "无法连接 MCP 服务（{name}）",
+    "http": "MCP 服务返回 HTTP {status_code}",
+    "startFailed": "无法启动 MCP 服务进程（{name}），请检查命令",
+    "forbidden": "MCP 服务拒绝访问（HTTP {status_code}），请检查认证头",
+    "serverError": "MCP 服务错误：{value}"
+  }
+}

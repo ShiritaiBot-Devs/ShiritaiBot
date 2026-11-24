@@ -7,10 +7,12 @@ export function ModelOptions({ models }: { models: ModelConfig[] }) {
     <optgroup key={provider} label={provider || i18n.t("unknownProvider")}>
       {group.map((model) => (
         <option key={model.id} value={model.id}>
-          {configuredModelName(model)}
           {group.some((item) => item !== model && item.model === model.model)
-            ? `（${model.id}）`
-            : ""}
+            ? i18n.t("withDetail", {
+                label: configuredModelName(model),
+                detail: model.id,
+              })
+            : configuredModelName(model)}
         </option>
       ))}
     </optgroup>

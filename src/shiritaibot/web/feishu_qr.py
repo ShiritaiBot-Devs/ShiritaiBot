@@ -19,6 +19,7 @@ from shiritaibot.app import Application, FeishuAdapterConflict
 from shiritaibot.config import AdapterConfig
 from shiritaibot.core import Model
 from shiritaibot.core.logs import get_logger
+from shiritaibot.i18n import Text, t
 
 FeishuDomain = Literal["feishu", "lark"]
 RegistrationStatus = Literal["waiting", "authorized", "denied", "expired", "error", "applied"]
@@ -28,11 +29,8 @@ MAX_QR_LIFETIME = 600
 APPLY_LIFETIME = 300
 MAX_SESSIONS = 8
 
-log = get_logger("飞书")
-RECOVERY_MESSAGE = (
-    "未能获取飞书应用凭据。若已在手机上创建，请在飞书开放平台查看 "
-    "App ID 和 App Secret，再手动配置。"
-)
+log = get_logger("adapters.qr.log.source")
+RECOVERY_MESSAGE = "adapters.qr.noCredentials"  # catalog key
 
 
 async def _register_app(**options):
@@ -121,7 +119,7 @@ class FeishuQrRegistration:
                     self.sessions.pop(key)
                     break
             else:
-                raise HTTPException(429, "有过多未结束的扫码会话，请取消已有会话后再试。")
+                raise HTTPException(429, t("adapters.qr.tooMany"))
         loop = asyncio.get_running_loop()
         session = Registration(secrets.token_urlsafe(24), domain, loop.create_future())
         self.sessions[session.id] = session
@@ -139,11 +137,11 @@ class FeishuQrRegistration:
     async def _register(self, session: Registration) -> None:
         def fail(reason: str) -> None:
             waiting = session.ready.done()
-            phase = "等待扫码结果" if waiting else "获取二维码"
-            log.warning(f"扫码创建失败（{phase}，{reason}）")
+            phase = t("adapters.qr.phase.waiting") if waiting else t("adapters.qr.phase.fetching")
+            log.warning(Text("adapters.qr.log.failed", phase=phase, reason=reason))
             session.finish(
                 "error",
-                RECOVERY_MESSAGE if waiting else "未能获取飞书二维码，请检查网络后重试。",
+                t(RECOVERY_MESSAGE if waiting else "adapters.qr.fetchFailed"),
             )
 
         try:
@@ -193,7 +191,7 @@ class FeishuQrRegistration:
                         source="shiritaibot",
                         domain=DOMAINS[session.domain][1],
                         lark_domain=DOMAINS["lark"][1],
-                        app_preset={"name": "ShiritaiBot", "desc": "ShiritaiBot 飞书应用机器人"},
+                        app_preset={"name": "ShiritaiBot", "desc": t("adapters.qr.appName")},
                         addons={
                             "preset": False,
                             "scopes": {
@@ -208,26 +206,26 @@ class FeishuQrRegistration:
                         create_only=True,
                     )
             except AppAccessDeniedError:
-                session.finish("denied", "手机端已拒绝创建飞书应用。")
+                session.finish("denied", t("adapters.qr.denied"))
                 return
             except (AppExpiredError, TimeoutError):
                 if session.ready.done():
-                    session.finish("expired", "二维码已过期，请重新扫码。")
+                    session.finish("expired", t("adapters.qr.expiredScan"))
                 else:
-                    session.finish("error", "获取二维码超时，请检查网络后重试。")
+                    session.finish("error", t("adapters.qr.fetchTimeout"))
                 return
             except RegisterAppError as exc:
                 if exc.code == "invalid_grant":
-                    session.finish("expired", "二维码已过期，请重新生成。")
+                    session.finish("expired", t("adapters.qr.expired"))
                 else:
-                    fail("飞书返回注册错误")
+                    fail(t("adapters.qr.reason.registration"))
                 return
             except httpx.RequestError:
-                fail("飞书网络请求失败")
+                fail(t("adapters.qr.reason.network"))
                 return
 
             if not isinstance(result, dict):
-                fail("注册结果格式异常")
+                fail(t("adapters.qr.reason.format"))
                 return
             app_id, secret = result.get("client_id"), result.get("client_secret")
             user_info = result.get("user_info")
@@ -240,10 +238,10 @@ class FeishuQrRegistration:
                 or not 0 < len(secret) <= 10000
                 or secret.startswith(("env:", "secret:"))
             ):
-                fail("应用凭据校验失败")
+                fail(t("adapters.qr.reason.credentials"))
                 return
             if isinstance(brand, str) and brand in {"feishu", "lark"} and brand != session.domain:
-                fail("注册平台不匹配")
+                fail(t("adapters.qr.reason.platform"))
                 return
             session.finish("authorized")
             session.app_id, session.app_secret = app_id, secret
@@ -252,7 +250,7 @@ class FeishuQrRegistration:
             del result, user_info, secret
         except Exception:
             # SDK exceptions can embed upstream responses and verification URLs.
-            fail("注册响应或校验异常")
+            fail(t("adapters.qr.reason.other"))
         finally:
             if not session.ready.done():
                 session.ready.set_result(None)
@@ -262,12 +260,12 @@ class FeishuQrRegistration:
             async with session.lock:
                 if session.status == "authorized":
                     session.finish(
-                        "expired", "本地保存窗口已过期。若应用已在飞书创建，请用手动配置。"
+                        "expired", t("adapters.qr.saveExpired")
                     )
 
     def _get(self, session_id: str) -> Registration:
         if (session := self.sessions.get(session_id)) is None:
-            raise HTTPException(404, "扫码会话已结束，请重新获取二维码。")
+            raise HTTPException(404, t("adapters.qr.ended"))
         return session
 
     def status(self, session_id: str) -> dict:
@@ -279,10 +277,10 @@ class FeishuQrRegistration:
             if session.applied is not None:
                 previous, version = session.applied
                 if previous != body:
-                    raise HTTPException(409, "此扫码会话已保存。")
+                    raise HTTPException(409, t("adapters.qr.saved"))
             else:
                 if session.status != "authorized" or time.monotonic() >= session.deadline:
-                    raise HTTPException(409, "扫码会话尚未完成或已过期，请重新扫码。")
+                    raise HTTPException(409, t("adapters.qr.notDone"))
                 adapter = AdapterConfig(
                     id=body.adapter_id,
                     type="feishu",
@@ -298,7 +296,7 @@ class FeishuQrRegistration:
                     raise HTTPException(409, str(exc)) from None
                 except Exception:
                     raise HTTPException(
-                        500, "应用配置未能完成，请在协议连接页检查实例状态。"
+                        500, t("adapters.qr.configFailed")
                     ) from None
                 session.applied = body, version
                 session.finish("applied")
@@ -310,7 +308,7 @@ class FeishuQrRegistration:
         if (session := self.sessions.get(session_id)) is not None:
             async with session.lock:
                 self.sessions.pop(session_id, None)
-                session.finish("expired", "扫码会话已取消。")
+                session.finish("expired", t("adapters.qr.cancelled"))
                 if not session.ready.done():
                     session.ready.set_result(None)
                 if session.task is not None:

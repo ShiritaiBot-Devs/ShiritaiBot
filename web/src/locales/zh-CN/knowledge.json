@@ -36,7 +36,8 @@
     "noEmbedding": "未配置 Embedding，检索只用关键词",
     "indexed": "{indexed} 已索引，{pending} 待计算",
     "title": "文档",
-    "summary": "{documents} 篇 · {chunks} 个分块 · {size} · 向量"
+    "summary": "{documents} · {chunks} · {size} · 向量",
+    "count_other": "{count} 篇"
   },
   "filter": {
     "submit": "筛选",

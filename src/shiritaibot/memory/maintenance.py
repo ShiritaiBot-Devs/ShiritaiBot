@@ -7,9 +7,10 @@ from datetime import date
 
 from shiritaibot.core import ExternalEvent, now
 from shiritaibot.core.logs import get_logger
+from shiritaibot.i18n import Text, t
 from shiritaibot.memory.longterm import MemoryManager, ref
 
-log = get_logger("记忆")
+log = get_logger("memory.log.maintenanceSource")
 DAY = 86400
 # A name seen fewer than three times and not for this long was probably a passer-by.
 CANDIDATE_IDLE = 90 * DAY
@@ -34,8 +35,7 @@ class MemoryMaintenance:
         await self.store.put("memory_maintenance", "last", {"at": stamp, **result})
         if any(result.values()):
             log.log(
-                f"记忆整理：归档 {result['archived']} 个久未出现的新名字，"
-                f"汇总 {result['conflicts']} 个待确认问题"
+                Text("memory.log.maintenance", archived=Text("memory.log.staleNames", count=result['archived']), conflicts=Text("memory.log.openQuestions", count=result['conflicts']))
             )
         return result
 
@@ -74,9 +74,9 @@ class MemoryMaintenance:
                 source="memory",
                 kind="memory.conflict",
                 dedup_key=f"conflicts:{date.today().isoformat()}",
-                title=f"记忆里有 {len(rows)} 个问题需要主人确认",
+                title=t("memory.maintenance.questions", count=len(rows)),
                 payload={
-                    "how": "在消息里顺带问主人；得到答复后调用 memory_resolve 记录",
+                    "how": t("memory.maintenance.howTo"),
                     "questions": [{"id": ref("c", row["id"]), "note": row["note"]} for row in rows],
                 },
                 urgency="low",
@@ -94,5 +94,5 @@ class MemoryMaintenance:
             try:
                 await self.tick()
             except Exception as exc:
-                log.error(f"记忆整理出错（{type(exc).__name__}）", exc=exc)
+                log.error(Text("memory.log.maintenanceError", name=type(exc).__name__), exc=exc)
             await asyncio.sleep(3600)

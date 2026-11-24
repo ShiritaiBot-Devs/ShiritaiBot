@@ -1,0 +1,101 @@
+{
+  "log": {
+    "source": "Approvals",
+    "secretFile": "The command touches a file with secrets; switching to manual approval",
+    "ownerDenied": "The owner denied {name}",
+    "ownerApproved": "The owner approved {name}",
+    "grantMemoryFailed": "Couldn't save the standing grant to memory: {note}",
+    "decisionIncomplete": "The decision model returned an incomplete approval; using the text model instead",
+    "quickGrant": "Five-minute grant active; allowing {name}",
+    "timeout": "Approval {key} timed out; {name} not run",
+    "jevHandoff": "Decision model verdict: {verdict} (approval probability {allow:.2f}); handing it to the text model for review",
+    "waiting": "Waiting for the owner to approve {key}: {name} ({brief})"
+  },
+  "verdict": {
+    "approved": "approved",
+    "denied": "denied"
+  },
+  "jev": {
+    "denied": "denied",
+    "unsure": "unsure",
+    "approved": "Decision model (Jev) approved (approval probability {allow:.2f})",
+    "verdict": "Decision model (Jev) verdict: {verdict} (approval probability {allow:.2f})"
+  },
+  "cancelled": "Approval cancelled",
+  "sessionInvalid": "Invalid session ID.",
+  "waitCancelled": "Waiting for approval was cancelled",
+  "timedOut": "Approval timed out; not run",
+  "menuExpired": "The approval menu has expired.",
+  "grant": {
+    "remembered": ", saved to long-term memory",
+    "notRemembered": " (couldn't save it to memory; the setting still applies)",
+    "memoryTitle": "Approval grant: always allow {tool}",
+    "done": "{tool} will always be allowed{tail}",
+    "memoryBody": "In session {session}, the owner gave {tool} standing approval ({now:%Y-%m-%d})"
+  },
+  "noPending": "There's no pending approval",
+  "autoUnavailable": "The auto-approval model isn't available",
+  "autoDenied": "Model auto-approval denied: ",
+  "policyDenied": "The permission policy blocked the tool",
+  "deniedByOwner": "The owner denied this call",
+  "bindingChanged": "The connection's session binding changed.",
+  "changedDuring": "Permissions changed during approval; not run",
+  "notFound": "The approval doesn't exist, was already handled, or expired",
+  "autoFailedError": "Auto-approval failed: {exc}; not run",
+  "revoke": {
+    "memoryTitle": "Approval revoked: {tool} needs approval again",
+    "memoryBody": "The owner revoked {tool}'s standing approval ({now:%Y-%m-%d})",
+    "done": "Revoked {target}'s standing grant for {tool}; it needs manual approval from now on."
+  },
+  "scheduledManual": "This scheduled run needs manual approval, so the tool wasn't run",
+  "autoFailed": "Auto-approval failed, timed out, or returned an invalid format; not run",
+  "elapsed": ", took {elapsed}s",
+  "noGrant": "{target} has no standing grant for {tool}.",
+  "proactiveDefaultsOnly": "The Proactive Loop can only set default permissions for new tasks",
+  "reuse": "Reused the approval decision for the same call from the last minute: {value}",
+  "autoResult": "Model auto-approval {verdict} {name} ({args}): {reason}{elapsed}",
+  "risk": {
+    "safe": "Safe",
+    "normal": "Normal",
+    "sensitive": "Sensitive",
+    "dangerous": "Dangerous"
+  },
+  "menu": {
+    "verb": {
+      "allow": "Approved",
+      "deny": "Denied"
+    },
+    "replyNumber": "Reply with a number:",
+    "option": {
+      "allow": "1 Approve",
+      "deny": "2 Deny",
+      "dangerous": " (⚠ high risk, be careful)",
+      "perCall": "This subagent requires approval for every call",
+      "quick": "3 Allow {name} for the next five minutes",
+      "limited": "(This command touches secret files or comes from a background session, so only 1/2 are offered)",
+      "always": "4 Always allow {name} without asking{warning}"
+    },
+    "batch": {
+      "details": "3 Show details",
+      "allowAll": "1 Approve all",
+      "denyAll": "2 Deny all",
+      "title_one": "{count} item needs confirmation:",
+      "title_other": "{count} items need confirmation:"
+    },
+    "detailOpened": "Opened the details.",
+    "detail": {
+      "title": "Details by type:",
+      "oneByOne": "{value} Handle one by one",
+      "allowGroup": "{value} Approve all {name}",
+      "denyGroup": "{value} Deny all {name}",
+      "group": "[{risk} · {name}] {count}"
+    },
+    "settledAll": "{verb} all: {count}",
+    "needsConfirm": "Needs confirmation: {name}",
+    "settledGroup": "{name}: {verb} all {count}",
+    "quickGranted": "Approvals for {name} in the next five minutes will be allowed automatically",
+    "settled": "{verb}: {name} {key}",
+    "args": "Arguments: {brief}",
+    "fallback": "To do: {name} {brief}\nWhy: (couldn't write an explanation; judge from the arguments above)"
+  }
+}

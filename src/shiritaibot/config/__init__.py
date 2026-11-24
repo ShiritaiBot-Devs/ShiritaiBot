@@ -22,7 +22,7 @@ from pydantic import (
 )
 
 from shiritaibot.core import Context, Model, PublicError
-from shiritaibot.i18n import DEFAULT_LOCALE, Locale
+from shiritaibot.i18n import DEFAULT_LOCALE, Locale, join_list, set_instance_locale, t
 from shiritaibot.prompts import prompt as prompt_text
 from shiritaibot.prompts import zh as zh_prompts
 
@@ -188,7 +188,7 @@ class AdapterConfig(Instance):
     qq_sandbox: bool = False
     app_secret: str = Field(default="", max_length=10000, repr=False)
     domain: Literal["feishu", "lark"] = "feishu"
-    wake_keywords: list[str] = Field(default_factory=lambda: ["小知"])
+    wake_keywords: list[str] = Field(default_factory=lambda: ["小知"])  # i18n: ok
     feishu_group_context: bool = False
     memory_profile: ProfileId = "feishu"
 
@@ -208,24 +208,24 @@ class AdapterConfig(Instance):
     def platform_ids(self) -> AdapterConfig:
         if self.type == "feishu":
             if self.app_id and not re.fullmatch(r"cli_[A-Za-z0-9]+", self.app_id):
-                raise ValueError("飞书 App ID 必须以 cli_ 开头")
+                raise ValueError(t("config.feishuAppId"))
             if self.owner_id and not re.fullmatch(r"ou_[A-Za-z0-9]+", self.owner_id):
-                raise ValueError("飞书主人 ID 必须是 ou_ 开头的 open_id")
+                raise ValueError(t("config.feishuOwner"))
             if any(not re.fullmatch(r"oc_[A-Za-z0-9]+", group) for group in self.groups):
-                raise ValueError("飞书群 ID 必须是 oc_ 开头的 chat_id")
+                raise ValueError(t("config.feishuGroup"))
             if self.groups and not self.wake_keywords:
-                raise ValueError("配置飞书群时至少填写一个句首唤醒词")
+                raise ValueError(t("config.feishuWakeWord"))
         if self.type == "qq_official":
             if self.app_id and not re.fullmatch(r"[0-9]+", self.app_id):
-                raise ValueError("QQ 官方机器人 App ID 必须为数字")
+                raise ValueError(t("config.qqAppIdDigits"))
             if self.enabled and not self.app_id:
-                raise ValueError("启用 QQ 官方机器人需要填写 App ID")
+                raise ValueError(t("config.qqAppIdRequired"))
             if any(
                 not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value)
                 for value in [self.owner_id, *self.groups, *self.friends, *self.ignore_users]
                 if value
             ):
-                raise ValueError("QQ 官方机器人会话配置需要使用 OpenID")
+                raise ValueError(t("config.qqOpenId"))
         return self
 
     @property
@@ -249,7 +249,7 @@ class AdapterConfig(Instance):
     def auto_start_valid(cls, value: list[str]) -> list[str]:
         value = [item.strip() for item in value if item.strip()]
         if any(len(item) > 1000 for item in value):
-            raise ValueError("auto_start 的每个参数不能超过 1000 个字符")
+            raise ValueError(t("config.autoStartArg"))
         return value
 
 
@@ -407,10 +407,10 @@ class McpServerConfig(Instance):
             url = urlsplit(self.url)
             if url.scheme not in {"http", "https"} or not url.hostname or "@" in self.url:
                 raise ValueError(
-                    f"MCP 服务「{self.id}」的 URL 必须是 http:// 或 https://，且不能内嵌账号密码"
+                    t("config.mcpUrl", id=self.id)
                 )
         if self.transport == "stdio" and self.enabled and not self.command:
-            raise ValueError(f"stdio 类型的 MCP 服务「{self.id}」需要填写启动命令")
+            raise ValueError(t("config.mcpCommand", id=self.id))
         return self
 
 
@@ -447,8 +447,8 @@ class MemoryProfile(Model):
 
 
 BUILTIN_MEMORY_PROFILES = {
-    "default": MemoryProfile(name="默认记忆库"),
-    "feishu": MemoryProfile(name="飞书记忆库"),
+    "default": MemoryProfile(name="默认记忆库"),  # i18n: ok
+    "feishu": MemoryProfile(name="飞书记忆库"),  # i18n: ok
 }
 
 
@@ -483,20 +483,29 @@ class MemeCategory(Model):
     description: str = Field(default="", max_length=200)
 
 
+def meme_description(category: MemeCategory) -> str:
+    """A category's description for the model and WebUI; shipped defaults that were never
+    edited follow the bot language."""
+    defaults = {item.name: item.description for item in default_meme_categories()}
+    if category.description and category.description == defaults.get(category.name):
+        return t(f"memes.defaultCategories.{category.name}")
+    return category.description
+
+
 def default_meme_categories() -> list[MemeCategory]:
     return [
         MemeCategory(name=name, description=description)
         for name, description in (
-            ("happy", "开心、得意、庆祝、哈哈大笑"),
-            ("sad", "难过、委屈、哭泣、心碎"),
-            ("angry", "生气、不满、抓狂、怒了"),
-            ("think", "思考、疑惑、琢磨、让我想想"),
-            ("surprised", "震惊、意外、目瞪口呆"),
-            ("shy", "害羞、不好意思、脸红、捂脸"),
-            ("love", "喜欢、比心、贴贴、抱抱"),
-            ("tired", "累了、困、摆烂、无语、躺平"),
-            ("smug", "调皮、坏笑、嘲讽、阴阳怪气"),
-            ("greet", "打招呼、谢谢、好的、晚安等日常回应"),
+            ("happy", "开心、得意、庆祝、哈哈大笑"),  # i18n: ok
+            ("sad", "难过、委屈、哭泣、心碎"),  # i18n: ok
+            ("angry", "生气、不满、抓狂、怒了"),  # i18n: ok
+            ("think", "思考、疑惑、琢磨、让我想想"),  # i18n: ok
+            ("surprised", "震惊、意外、目瞪口呆"),  # i18n: ok
+            ("shy", "害羞、不好意思、脸红、捂脸"),  # i18n: ok
+            ("love", "喜欢、比心、贴贴、抱抱"),  # i18n: ok
+            ("tired", "累了、困、摆烂、无语、躺平"),  # i18n: ok
+            ("smug", "调皮、坏笑、嘲讽、阴阳怪气"),  # i18n: ok
+            ("greet", "打招呼、谢谢、好的、晚安等日常回应"),  # i18n: ok
         )
     ]
 
@@ -548,12 +557,12 @@ class KnowledgeConfig(Model):
         if self.chunk_overlap * 2 > self.chunk_chars:
             raise ValueError("chunk_overlap must be at most half of chunk_chars")
         if self.libraries.keys() & {"default", "disabled"}:
-            raise ValueError("default 和 disabled 是保留的知识库标识")
+            raise ValueError(t("config.libraryReserved"))
         for session, library in self.sessions.items():
             if not MAIN_SESSION.fullmatch(session):
-                raise ValueError(f"无效的知识库绑定会话：{session}")
+                raise ValueError(t("config.libraryBindingInvalid", session=session))
             if library not in {"default", "disabled"} and library not in self.libraries:
-                raise ValueError(f"会话 {session} 引用了未知知识库 {library}")
+                raise ValueError(t("config.libraryUnknown", session=session, library=library))
         return self
 
     def library_for(self, session: str) -> str | None:
@@ -731,7 +740,7 @@ class Policy(Model):
     debounce_max_seconds: float = Field(default=6.0, ge=0, le=60)
     # A message ending with any of these flushes the window immediately.
     debounce_suffixes: list[str] = Field(
-        default_factory=lambda: ["?", "？", "。", ".", "!", "！"], max_length=50
+        default_factory=lambda: ["?", "？", "。", ".", "!", "！"], max_length=50  # i18n: ok
     )
 
     @model_validator(mode="after")
@@ -945,9 +954,9 @@ class Settings(Model):
         overrides = {}
         for session, routes in value.items():
             if not MAIN_SESSION.fullmatch(session):
-                raise ValueError("会话路由需要 Main web/private/group 会话 ID")
+                raise ValueError(t("config.sessionRouteId"))
             if invalid := routes.keys() - SESSION_ROUTE_KEYS:
-                raise ValueError(f"以下路由无法按会话设置：{'、'.join(sorted(invalid))}")
+                raise ValueError(t("config.routesNotPerSession", routes=join_list(sorted(invalid))))
             if active := {key: models for key, models in routes.items() if models}:
                 overrides[session] = active
         return overrides
@@ -968,7 +977,7 @@ class Settings(Model):
     @classmethod
     def help_menu_sections_unique(cls, value: list[HelpMenuSection]) -> list[HelpMenuSection]:
         if len({section.id for section in value}) != len(value):
-            raise ValueError("帮助菜单分区不能重复")
+            raise ValueError(t("config.helpSectionsDuplicate"))
         return value
 
     @field_validator("wake_keywords")
@@ -993,7 +1002,7 @@ class Settings(Model):
     def strip_wake_prefix(self, text: str) -> str:
         for word in sorted(self.wake_keywords, key=len, reverse=True):
             if text.startswith(word):
-                return text[len(word) :].lstrip(" ，,：:！!、\t\n")
+                return text[len(word) :].lstrip(" ，,：:！!、\t\n")  # i18n: ok (separators in either language)
         return text
 
     def selected_persona(self, selected: str = "") -> PersonaConfig | None:
@@ -1024,12 +1033,12 @@ class Settings(Model):
             prompt = prompt_text("DEFAULT_PERSONA", lang)
         else:
             prompt = self.persona
-        prompt += prompt_text("ASSISTANT_NAME", lang).format(name=self.assistant_name)
+        prompt += prompt_text("ASSISTANT_NAME", lang, name=self.assistant_name)
         if owner:
             if self.owner_name == zh_prompts.DEFAULT_OWNER_NAME and lang != DEFAULT_LOCALE:
                 prompt += prompt_text("OWNER_IS_USER", lang)
             else:
-                prompt += prompt_text("OWNER_NAME", lang).format(name=self.owner_name)
+                prompt += prompt_text("OWNER_NAME", lang, name=self.owner_name)
         prompt += prompt_text("REPLY_FORCED" if forced else "REPLY_DEFAULT", lang)
         return prompt
 
@@ -1170,18 +1179,18 @@ class Settings(Model):
             self.mcp_servers,
         ]:
             if len({x.id for x in items}) != len(items):
-                raise ValueError("存在重复的实例 ID，请检查提供商、模型、协议端、插件、人设和 MCP")
+                raise ValueError(t("config.duplicateIds"))
         providers = {p.id for p in self.providers}
         models = {m.id for m in self.models}
         missing = [m.id for m in self.models if m.provider not in providers]
         if missing:
-            raise ValueError(f"模型 {'、'.join(missing)} 引用了不存在的提供商")
+            raise ValueError(t("config.modelProviderMissing", models=join_list(missing)))
         routes = [*self.routes.items()]
         for overrides in self.session_routes.values():
             routes.extend(overrides.items())
         lost = sorted({m for _, route in routes for m in route if m not in models})
         if lost:
-            raise ValueError(f"路由引用了不存在的模型：{'、'.join(lost)}")
+            raise ValueError(t("config.routeModelMissing", models=join_list(lost)))
         decision = {
             m.id
             for m in self.models
@@ -1195,91 +1204,91 @@ class Settings(Model):
             for m in route
         ):
             raise ValueError(
-                "判定类模型（systemone，如 jev）只能放在 router、light、memory、approval 和 meme 路由"
+                t("config.decisionRoutes")
             )
         embedding = {m.id for m in self.models if m.kind == "embedding"}
         for instance in self.subagents:
             if instance.kind != "shiritaibot" or not instance.model:
                 continue
             if instance.model not in models - decision - embedding:
-                raise ValueError(f"子代理 {instance.id} 需要已配置的文本生成模型")
+                raise ValueError(t("config.subagentModel", id=instance.id))
             if instance.enabled and not any(
                 m.id == instance.model and m.enabled and p.enabled and p.id == m.provider
                 for m in self.models
                 for p in self.providers
             ):
-                raise ValueError(f"子代理 {instance.id} 选择的模型或提供商未启用")
+                raise ValueError(t("config.subagentModelDisabled", id=instance.id))
         if any(
             (m in embedding) != (key == "embedding")
             for key, route in routes
             if key != "test"
             for m in route
         ):
-            raise ValueError("向量模型只能单独放在 embedding 路由，其他路由不能引用它")
+            raise ValueError(t("config.embeddingOnly"))
         if any(
             p.id == m.provider and p.protocol not in EMBEDDING_PROTOCOLS
             for m in self.models
             if m.kind == "embedding"
             for p in self.providers
         ):
-            raise ValueError("向量模型需要 OpenAI 兼容或 Gemini 协议的提供商")
+            raise ValueError(t("config.embeddingProtocol"))
         if any(
             m.id in route and "image" not in m.modalities
             for key, route in routes
             if key == "vision"
             for m in self.models
         ):
-            raise ValueError("vision 路由里的模型必须支持图像输入（modalities 含 image）")
+            raise ValueError(t("config.visionImage"))
         if any(
             m.id in self.routes["meme"] and m.id not in decision and "image" not in m.modalities
             for m in self.models
         ):
-            raise ValueError("meme 路由中的文本模型必须支持图像输入（modalities 含 image）")
+            raise ValueError(t("config.memeImage"))
         if self.context.compression_model in decision | embedding:
-            raise ValueError("上下文压缩模型必须能生成文本，不能用判定模型或向量模型")
+            raise ValueError(t("config.compressionText"))
         if self.default_persona and not any(
             p.id == self.default_persona and p.enabled for p in self.personas
         ):
-            raise ValueError("默认人设引用了不存在或未启用的人设")
+            raise ValueError(t("config.personaMissing"))
         if self.context.compression_model and not any(
             m.id == self.context.compression_model
             and m.enabled
             and any(p.id == m.provider and p.enabled for p in self.providers)
             for m in self.models
         ):
-            raise ValueError("上下文压缩模型引用了不存在或未启用的模型/提供商")
+            raise ValueError(t("config.compressionMissing"))
         if self.private_require_keyword and not self.wake_keywords:
             raise ValueError("private keyword activation requires at least one wake keyword")
         if sum(a.enabled and a.type == "feishu" for a in self.adapters) > 1:
-            raise ValueError("当前每个 ShiritaiBot 实例支持启用一个飞书长连接")
+            raise ValueError(t("config.feishuOneLink"))
         if self.memory.profiles.keys() & BUILTIN_MEMORY_PROFILES.keys():
-            raise ValueError("default 和 feishu 是保留的记忆库标识")
+            raise ValueError(t("config.memoryReserved"))
         for session, profile_id in self.memory.sessions.items():
             if not MAIN_SESSION.fullmatch(session):
-                raise ValueError(f"无效的记忆绑定会话：{session}")
+                raise ValueError(t("config.memoryBindingInvalid", session=session))
             profile = self.memory.profile(profile_id)
             if profile is None:
-                raise ValueError(f"会话 {session} 引用了未知记忆库 {profile_id}")
+                raise ValueError(t("config.memoryUnknown", session=session, profile_id=profile_id))
             # Existing bindings may be retained after an adapter is removed. A personal
             # assignment is only effective while the session is still the current owner.
             if (session.startswith("group:") or session.startswith("web:")) and (
                 (profile.audience == "personal") != session.startswith("web:")
             ):
-                raise ValueError("群聊需绑定会话记忆库，WebUI 对话需绑定个人记忆库")
+                raise ValueError(t("config.memoryAudience"))
         official_ids = [a.app_id for a in self.adapters if a.type == "qq_official" and a.enabled]
         if len(set(official_ids)) != len(official_ids):
-            raise ValueError("同一个 QQ 官方机器人 App ID 只能启用一个连接")
+            raise ValueError(t("config.qqAppIdOnce"))
         for adapter in self.adapters:
             if adapter.type == "feishu":
                 profile = self.memory.profile(adapter.memory_profile)
                 if profile is None or profile.audience != "personal":
-                    raise ValueError("飞书私聊默认记忆库必须是已配置的个人记忆库")
+                    raise ValueError(t("config.feishuMemory"))
         for a in self.adapters:
             if a.type == "onebot11" and (
                 not a.url.startswith(("ws://", "wss://")) or "@" in a.url or "?" in a.url
             ):
                 raise ValueError(
-                    f"协议端「{a.id}」的地址必须是 ws:// 或 wss://，且不能内嵌账号密码或查询参数"
+                    t("config.adapterUrl", id=a.id)
                 )
         for p in self.providers:
             if (
@@ -1288,8 +1297,7 @@ class Settings(Model):
                 or "?" in p.base_url
             ):
                 raise ValueError(
-                    f"提供商「{p.id}」的接口地址（base_url）必须是 http:// 或 https://，"
-                    "且不能内嵌账号密码或查询参数"
+                    t("config.providerUrl", id=p.id)
                 )
         for plugin in self.plugins:
             for key in ("password", "api_key", "token", "access_token"):
@@ -1317,17 +1325,22 @@ class ConfigService:
                 self.value = Settings.model_validate(
                     tomllib.loads(await asyncio.to_thread(self.path.read_text, encoding="utf-8"))
                 )
+                set_instance_locale(self.value.locale)
             except ValidationError as error:
-                fields = "、".join(
-                    f"{'.'.join(map(str, row['loc']))}（{row['type']}）"
+                fields = join_list(
+                    t(
+                        "common.withDetail",
+                        label=".".join(map(str, row["loc"])),
+                        detail=row["type"],
+                    )
                     for row in error.errors(include_input=False, include_url=False)
                 )
                 raise PublicError(
-                    f"配置文件 {self.path} 校验失败，请检查以下字段：{fields}"
+                    "config.fileInvalid", path=self.path, fields=fields
                 ) from None
             except tomllib.TOMLDecodeError:
                 raise PublicError(
-                    f"配置文件 {self.path} 的 TOML 格式无效，请检查文件语法"
+                    "config.fileToml", path=self.path
                 ) from None
         else:
             await self.save(self.value)
@@ -1349,4 +1362,5 @@ class ConfigService:
 
             await asyncio.to_thread(write)
             self.value = value
+            set_instance_locale(value.locale)
             self.version += 1

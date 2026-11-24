@@ -15,8 +15,9 @@ from dataclasses import dataclass
 
 from shiritaibot.core import model_usage_session, now, uid
 from shiritaibot.core.logs import brief, get_logger
+from shiritaibot.i18n import Text
 
-log = get_logger("记忆")
+log = get_logger("memory.judge.log.source")
 
 # Thresholds to calibrate against the judgment log before relying on Jev for Chinese text.
 GATE_SKIP = 0.2  # Below: a window is not worth extracting. Low on purpose: misses cost more.
@@ -90,7 +91,7 @@ class MemoryJudge:
             return None
         answers = await self.llm.decide("memory", state, questions, settings=self.settings())
         if answers is None:
-            log.debug(f"判断模型未给出 {point} 结果，改用文本模型或规则")
+            log.debug(Text("memory.judge.log.noResult", point=point))
         return answers
 
     async def record(self, point: str, items: list[dict]) -> None:

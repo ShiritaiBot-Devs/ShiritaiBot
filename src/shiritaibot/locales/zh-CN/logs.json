@@ -1,0 +1,10 @@
+{
+  "levelInvalid": "日志级别只能是 debug、info、warning 或 error",
+  "background": "后台·",
+  "event": "事件 ",
+  "groupChat": "{adapter}·群 {target}",
+  "privateChat": "{adapter}·私聊 {target}",
+  "items_other": "{count} 项",
+  "more": " 等 {count} 项",
+  "separator": "、"
+}

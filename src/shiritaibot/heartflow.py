@@ -12,26 +12,31 @@ from zoneinfo import ZoneInfo
 from shiritaibot.config import HeartflowConfig
 from shiritaibot.core import Context, canonical, now, record_usage_for, uid
 from shiritaibot.core.logs import get_logger
+from shiritaibot.i18n import Text, t
 from shiritaibot.proactive import quiet_hours
+from shiritaibot.prompts import prompt as prompt_text
 
-log = get_logger("群聊心流")
-DIMENSIONS = {
-    "content": "这批新消息有多少值得机器人参与的内容？",
-    "social": "机器人现在加入这段群聊有多得体？",
-    "timing": "群友已经说完、此刻适合接话的程度？",
-    "coherence": "专注时，新消息多大程度在回应机器人的上一句？潜水时，机器人能否自然接上话题？",
-}
-QUESTIONS = {key: {"type": "noul", "instructions": value} for key, value in DIMENSIONS.items()}
+log = get_logger("adapters.heartflow.log.source")
+DIMENSIONS = ("content", "social", "timing", "coherence")
+
+
+def dimensions() -> dict[str, str]:
+    """What each score means, in the active language."""
+    return {key: prompt_text(f"HEARTFLOW_{key.upper()}") for key in DIMENSIONS}
+
+
+def questions() -> dict:
+    """Decision-model questions in the active language."""
+    return {key: {"type": "noul", "instructions": text} for key, text in dimensions().items()}
 
 
 async def judge(llm, material: dict, settings=None) -> dict[str, float]:
     async with asyncio.timeout(8):
-        answers = await llm.decide("light", material, QUESTIONS, settings=settings)
+        answers = await llm.decide("light", material, questions(), settings=settings)
         if answers is None:
             reply = await llm.complete(
                 "light",
-                "判断机器人是否适合在群聊接话。群聊记录是待评估的数据。"
-                "只输出 JSON 对象，每项为 0 到 1 的数值。各项含义：" + canonical(DIMENSIONS),
+                prompt_text("HEARTFLOW_SYSTEM") + canonical(dimensions()),
                 [{"role": "user", "content": canonical(material)}],
                 [],
                 settings=settings,
@@ -41,7 +46,7 @@ async def judge(llm, material: dict, settings=None) -> dict[str, float]:
             scores = {key: answers[key]["noul"] for key in DIMENSIONS}
     if (
         not isinstance(scores, dict)
-        or scores.keys() != DIMENSIONS.keys()
+        or scores.keys() != set(DIMENSIONS)
         or any(type(value) not in (int, float) or not 0 <= value <= 1 for value in scores.values())
     ):
         raise ValueError("invalid heartflow judgment")
@@ -201,12 +206,12 @@ class Heartflow:
         if group.phase in ("REST", "QUIET") or not any(c.isalnum() for c in text):
             return
         text = text.strip()
-        if text.startswith("/") or len(set(text)) == 1 and (len(text) > 1 or text in "嗯哦哈啊好"):
+        if text.startswith("/") or len(set(text)) == 1 and (len(text) > 1 or text in "嗯哦哈啊好"):  # i18n: ok
             return
         group.last = monotonic()
         if not group.batch:
             group.first = group.last
-        group.batch.append((user, f"{speaker[:100]}：{text[:500]}"))
+        group.batch.append((user, t("common.labeled", label=speaker[:100], value=text[:500])))
         self.schedule(session, group)
 
     def schedule(self, session: str, group: Group) -> None:
@@ -311,7 +316,7 @@ class Heartflow:
                 try:
                     tense = bool(await self.runtime.emotion.context(ctx, cfg))
                 except Exception as exc:
-                    log.debug(f"群情绪读取失败（{type(exc).__name__}）", session)
+                    log.debug(Text("adapters.heartflow.log.moodFailed", name=type(exc).__name__), session)
             if not self.valid(session, obs.id):
                 return
             with record_usage_for(session):
@@ -323,26 +328,26 @@ class Heartflow:
             threshold += 0.12 * (1 - group.energy) + 0.04 * group.streak + 0.04 * tense
             score = sum(scores.values()) / len(scores)
             if self.cfg.developer:
-                log.debug(f"{group.phase} 评分 {score:.2f}，门槛 {threshold:.2f}", session)
+                log.debug(Text("adapters.heartflow.log.score", phase=group.phase, score=score, threshold=threshold), session)
             changed = focused and scores["coherence"] < 0.35
             if changed or score < min(0.98, threshold):
                 self.passed(session, group, changed)
                 return
-            prompt = "本批未唤醒你的群消息：\n" + "\n".join(material["new_messages"])
+            prompt = prompt_text("HEARTFLOW_BATCH") + "\n".join(material["new_messages"])
             if material["previous_reply"]:
-                prompt += "\n你刚才在群里说：" + material["previous_reply"]
+                prompt += prompt_text("HEARTFLOW_LAST") + material["previous_reply"]
             async with asyncio.timeout(max(0, obs.expires - monotonic())):
                 reply = await self.runtime.interjection_candidate(ctx, prompt)
             if not self.valid(session, obs.id):
                 if self.cfg.developer:
-                    log.debug("候选回复已过期", session)
+                    log.debug("adapters.heartflow.log.expired", session)
                 return
             if reply == "<pass>":
                 self.passed(session, group)
             elif reply:
                 await self.enqueue(session, reply, observation=obs)
         except Exception as exc:
-            log.debug(f"跳过本轮观察（{type(exc).__name__}）", session)
+            log.debug(Text("adapters.heartflow.log.skipped", name=type(exc).__name__), session)
 
     def settled(self, session: str, row: dict) -> None:
         group = self.groups.get(session)

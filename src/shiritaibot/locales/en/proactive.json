@@ -1,0 +1,76 @@
+{
+  "importance": {
+    "1": "low",
+    "3": "high",
+    "2": "normal",
+    "4": "highest",
+    "0": "can be dropped"
+  },
+  "recipient": {
+    "owner": "the owner",
+    "session": "the original session"
+  },
+  "notStated": "not stated",
+  "log": {
+    "retrying": "retrying",
+    "fallback": "using the default judgment",
+    "dropped": "Importance 0; event dropped",
+    "eventTag": "Event {value}",
+    "disabled": "The proactive engine is off; the event is only recorded",
+    "pluginInvalid": "The event a plugin changed is invalid; ignored",
+    "verdictInvalid": "The verdict a plugin changed is invalid; ignored",
+    "jevIncomplete": "The decision model returned an incomplete triage; using the text model instead",
+    "toAgent": "Passing it to the Proactive Agent to check and handle",
+    "noConclusion": "The Proactive Agent gave no valid conclusion; following the triage suggestion",
+    "memoryFailed": "Couldn't submit memory extraction ({name})",
+    "triageInvalid": "Triage model output invalid ({name}), ",
+    "loopError": "Proactive engine loop failed ({name})",
+    "duplicate": "Duplicate event ignored: {brief}",
+    "triageText": "Triage done by the text model: {brief}",
+    "promptFailed": "Couldn't send the interaction reminder; retrying next round ({name})",
+    "timeout": "The Proactive Agent didn't finish within {limit} seconds; treating it as timed out",
+    "pluginDropped": "A plugin dropped the event: {brief}",
+    "triageJev": "Triage done by the decision model (Jev): {brief}",
+    "noNotify": "Done: no notification, because {brief}",
+    "agentFailed": "Couldn't start the Proactive Agent ({name})",
+    "channelFailed": "Plugin {plugin}'s notification channel failed to forward ({name})",
+    "sending_one": "Sending {count} notification to {recipient} (source {source}): {brief}",
+    "sending_other": "Sending {count} notifications to {recipient} (source {source}): {brief}",
+    "willNotify": "Done: will notify {recipient}{value}: {brief}",
+    "received": "Received event “{brief}” (source {source}, type {kind}, urgency {urgency})"
+  },
+  "decision": {
+    "ignore": "can be ignored",
+    "notify": "notify the owner right away",
+    "log": "just record it, no need to disturb",
+    "digest": "can be summarized for the owner later"
+  },
+  "reason": {
+    "highest": "highest importance",
+    "reminder": "a reminder the session set"
+  },
+  "report": {
+    "notify": "Whether to send a notification",
+    "reason": "One sentence on why you are or aren't notifying",
+    "message": "The full message for the recipient, written in the persona's voice; if not notifying, a summary of what was done",
+    "description": "Submit the conclusion for this proactive event. Call it exactly once when you're done; the task ends after the call."
+  },
+  "taskSessionGone": "The task's session is no longer valid",
+  "disabled": "The proactive engine is off",
+  "routineSessionGone": "The schedule item's original session isn't available",
+  "routineNote": " (a schedule item the session set)",
+  "ownerTimeout": "Waited too long for the owner",
+  "routineDeliveryMissing": "Delivery for the schedule session isn't configured",
+  "ownerHandled": "The owner handled it; running again",
+  "routineOnlyScheduler": "Schedule events are created by the scheduler",
+  "unfinished": "\n(Proactive handling didn't finish, or its result was invalid)",
+  "handedToAdapter": "Passed to the protocol client to notify {recipient}",
+  "loopFailed": "The Loop failed, timed out, or returned no valid structured result",
+  "triageFailed": "Classification failed; passing it to the Proactive Loop to check",
+  "needsOwner": "A background task needs you in the private chat: {reason}",
+  "sentSummary_one": "{source}: {count} notification sent to {recipient}",
+  "sentSummary_other": "{source}: {count} notifications sent to {recipient}",
+  "jevVerdict": "Jev rated importance {importance} and suggests {choice} (confidence {float:.2f})",
+  "quietHours": "Do Not Disturb ({quiet_start}–{quiet_end} {timezone}); the notification is delayed until {quiet_end2}",
+  "triageResult": "Triage: importance {importance}/4 ({value}), suggestion {value2}; reason: {brief}"
+}

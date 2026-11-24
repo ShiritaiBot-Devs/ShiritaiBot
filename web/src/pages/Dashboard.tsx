@@ -350,7 +350,7 @@ function UsageChart({
               role="img"
               aria-label={`${formatBucketTime(row.hour, daily)} ${series
                 .map((item) => `${item.label} ${item.value(row)}`)
-                .join("，")}`}
+                .join(i18n.t("commaSeparator"))}`}
               onMouseEnter={() => setHover(index)}
               onFocus={() => setHover(index)}
               onBlur={() => setHover(null)}

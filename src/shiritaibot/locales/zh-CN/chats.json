@@ -1,0 +1,9 @@
+{
+  "deleted": "对话已删除",
+  "newChat": "新对话",
+  "defaultChat": "默认对话",
+  "log": {
+    "interrupted": "上次未完成的 {kind} {value} 标记为已中断",
+    "source": "活动"
+  }
+}

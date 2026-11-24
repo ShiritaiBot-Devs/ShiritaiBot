@@ -7,31 +7,34 @@ value is atmosphere only and never names or cares for anyone publicly.
 
 from __future__ import annotations
 
-EMOTIONS = {
-    "frustrated": "烦躁",
-    "anxious": "焦急",
-    "sad": "低落",
-    "angry": "生气",
-    "tired": "疲惫",
-}
+from shiritaibot.i18n import TranslatedDict, t
+from shiritaibot.prompts import prompt as prompt_text
+
+EMOTIONS = TranslatedDict({
+    "frustrated": "emotion.moods.frustrated",
+    "anxious": "emotion.moods.anxious",
+    "sad": "emotion.moods.sad",
+    "angry": "emotion.moods.angry",
+    "tired": "emotion.moods.tired",
+})
 CALM_FLOOR = 0.25
 
 
 def _strength(value: float) -> str:
     if value >= 0.85:
-        return "非常"
-    return "" if value >= 0.6 else "有些"
+        return t("emotion.strength.very")
+    return "" if value >= 0.6 else t("emotion.strength.somewhat")
 
 
 def _age(at: float, updated: float) -> str:
     delta = max(0.0, at - updated)
     if delta < 60:
-        return "刚刚"
+        return t("emotion.age.justNow")
     if delta < 3600:
-        return f"{int(delta // 60)} 分钟前"
+        return t("emotion.age.minutes", count=int(delta // 60))
     if delta < 86400:
-        return f"{int(delta // 3600)} 小时前"
-    return f"{int(delta // 86400)} 天前"
+        return t("emotion.age.hours", count=int(delta // 3600))
+    return t("emotion.age.days", count=int(delta // 86400))
 
 
 def render(
@@ -46,38 +49,36 @@ def render(
 ) -> str:
     if value < CALM_FLOOR:
         return ""
-    mood = _strength(value) + EMOTIONS.get(affect, "情绪波动")
+    mood = _strength(value) + EMOTIONS.get(affect, t("emotion.moods.unsettled"))
     if group:
         if tone < 0.2 and value < 0.6:
             return ""
         lines = [
             "<emotion>",
-            f"本群当前的气氛：{mood}。",
-            "回复时整体语气放稳，先解决大家在问的事，少开玩笑。"
-            "不要点名或评论任何人的状态，也不要公开表示关心。",
+            prompt_text("EMOTION_GROUP_MOOD", mood=mood),
+            prompt_text("EMOTION_GROUP_TONE"),
         ]
         if tone > 0.6:
-            lines.append("可以简短表达理解，但不要单独关心某个人，也不要追问隐私。")
+            lines.append(prompt_text("EMOTION_GROUP_LIGHT"))
         lines.append("</emotion>")
         return "\n".join(lines)
     if tone < 0.2:
         if value < 0.6:
             return ""
-        return "\n".join(["<emotion>", f"对方当前：{mood}。", "语气收敛，少开玩笑。", "</emotion>"])
+        return "\n".join(["<emotion>", prompt_text("EMOTION_USER_MOOD", mood=mood), prompt_text("EMOTION_TONE_MILD"), "</emotion>"])
     lines = [
         "<emotion>",
-        f"对方当前：{mood}。",
-        "语气放稳，先回应用户真正要处理的事。",
-        "可以有一句简短的理解或确认，但不要展开安慰。",
+        prompt_text("EMOTION_USER_MOOD", mood=mood),
+        prompt_text("EMOTION_TONE_STEADY"),
+        prompt_text("EMOTION_ACKNOWLEDGE"),
     ]
     if tone > 0.6:
         lines.append(
-            "如果合适，可以说一句真诚的关心，最多一句；"
-            "不要每轮都关心，也不要让话题偏离开用户的问题。"
+            prompt_text("EMOTION_CARE")
         )
     if situation and value >= 0.4:
         lines.append(
-            f"此前提到：{situation}（{_age(at, updated)}）。可以自然接上，但不要主动追问细节。"
+            prompt_text("EMOTION_SITUATION_NOTE", situation=situation, age=_age(at, updated))
         )
     lines.append("</emotion>")
     return "\n".join(lines)

@@ -1,7 +1,11 @@
 name: github
 display_name: GitHub
-desc: 以专用 bot 账号读写 GitHub 仓库；token 只在插件进程内使用，不进入模型上下文
-short_desc: 以 bot 账号读写 GitHub
+desc:
+  zh-CN: 以专用 bot 账号读写 GitHub 仓库；token 只在插件进程内使用，不进入模型上下文
+  en: Read and write GitHub repositories with a dedicated bot account; the token stays inside the plugin process and never enters the model's context
+short_desc:
+  zh-CN: 以 bot 账号读写 GitHub
+  en: Read and write GitHub as a bot account
 version: 1.0.0
 author: ShiritaiBot
 repo: https://github.com/XCM42-Orion/ShiritaiBot

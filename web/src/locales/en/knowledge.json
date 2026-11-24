@@ -38,7 +38,9 @@
     "noEmbedding": "No embedding model, so search uses keywords only",
     "indexed": "{indexed} indexed, {pending} pending",
     "title": "Documents",
-    "summary": "{documents} documents · {chunks} chunks · {size} · vectors"
+    "summary": "{documents} · {chunks} · {size} · vectors",
+    "count_one": "{count} document",
+    "count_other": "{count} documents"
   },
   "filter": {
     "submit": "Filter",

@@ -1,0 +1,5 @@
+{
+  "started": "Hello World 插件已启动",
+  "greeting": "你好，{name}！",
+  "sunny": "晴"
+}

@@ -8,6 +8,9 @@
 2. Catalogs: every locale has the same keys and the same ``{placeholders}`` as zh-CN, for
    both ``src/shiritaibot/locales`` and ``web/src/locales``. Plural forms (``key_one``,
    ``key_other``) count as one key, since each language has its own set of forms.
+3. Plugin text: in the plugins shipped here (``metadata.yaml`` and ``_conf_schema.json``),
+   a Chinese label, description or option text must be a per-language map with an
+   ``en`` entry, such as ``{"zh-CN": "默认城市", "en": "Default city"}``.
 
 Usage: python3 scripts/check_i18n.py [--update]
 """
@@ -24,7 +27,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "scripts" / "i18n-baseline.json"
-CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
+# CJK ideographs, plus CJK and full-width punctuation such as （）：，。 that only Chinese uses.
+CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3000-\u303f\uff01-\uff60]")
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
 PLURAL = re.compile(r"_(zero|one|two|few|many|other)$")
 # Where Chinese text belongs: catalogs, per-locale prompts, and tests.
@@ -53,8 +57,18 @@ def docstring_lines(tree: ast.AST) -> set[int]:
     return lines
 
 
+# Text that must stay Chinese (language data such as word lists, bilingual control words,
+# internal IDs) is marked so the count stays honest: "i18n: ok" on the line, or
+# "i18n-check: language-data" anywhere in a file made of such data.
+LINE_OK = "i18n: ok"
+FILE_OK = "i18n-check: language-data"
+
+
 def python_lines(text: str) -> int:
-    skip = docstring_lines(ast.parse(text))
+    if FILE_OK in text:
+        return 0
+    marked = {n for n, line in enumerate(text.splitlines(), 1) if LINE_OK in line}
+    skip = docstring_lines(ast.parse(text)) | marked
     found: set[int] = set()
     string_tokens = {tokenize.STRING}
     if hasattr(tokenize, "FSTRING_MIDDLE"):
@@ -71,7 +85,7 @@ def typescript_lines(text: str) -> int:
     count = 0
     for line in text.splitlines():
         code = line.strip()
-        if code.startswith(("//", "/*", "*", "{/*")):
+        if code.startswith(("//", "/*", "*", "{/*")) or LINE_OK in line:
             continue
         if CJK.search(code.split(" // ", 1)[0]):
             count += 1
@@ -140,6 +154,62 @@ def catalog_problems() -> list[str]:
     return problems
 
 
+# Plugin manifest and settings fields that users read (docs/PLUGINS.md, "Languages").
+PLUGIN_TEXT = {"display_name", "desc", "short_desc", "description", "hint", "labels", "subtitles"}
+PLUGIN_DIRS = (
+    "src/shiritaibot/plugin",
+    "src/shiritaibot/skill/builtin",
+    "examples/plugins",
+)
+
+
+def has_cjk(value) -> bool:
+    if isinstance(value, str):
+        return bool(CJK.search(value))
+    if isinstance(value, list):
+        return any(has_cjk(item) for item in value)
+    return False
+
+
+def untranslated(data, path: str = ""):
+    """Paths of user-facing fields holding Chinese without an English entry."""
+    if isinstance(data, list):
+        for index, item in enumerate(data):
+            yield from untranslated(item, f"{path}[{index}]")
+        return
+    if not isinstance(data, dict):
+        return
+    for key, value in data.items():
+        where = f"{path}.{key}" if path else str(key)
+        if key in PLUGIN_TEXT and not isinstance(value, dict) and has_cjk(value):
+            yield where
+        elif key in PLUGIN_TEXT and isinstance(value, dict) and "zh-CN" in value:
+            if "en" not in value:
+                yield where
+        else:
+            yield from untranslated(value, where)
+
+
+def plugin_text_problems() -> list[str]:
+    try:
+        import yaml
+    except ImportError:  # metadata.yaml needs PyYAML; run through "uv run" to include it
+        yaml = None
+    problems = []
+    for folder in PLUGIN_DIRS:
+        for file in sorted((ROOT / folder).rglob("*")):
+            if file.name == "_conf_schema.json":
+                data = json.loads(file.read_text(encoding="utf-8"))
+            elif file.name == "metadata.yaml" and yaml is not None:
+                data = yaml.safe_load(file.read_text(encoding="utf-8"))
+            else:
+                continue
+            rel = file.relative_to(ROOT).as_posix()
+            for where in untranslated(data):
+                problems.append(f"{rel}: {where} has Chinese text without an en entry")
+    return problems
+
+
 def main() -> int:
     counts = scan()
     if "--update" in sys.argv[1:]:
@@ -150,7 +220,7 @@ def main() -> int:
         print(f"Baseline updated: {sum(counts.values())} lines in {len(counts)} files.")
         return 0
     baseline = json.loads(BASELINE.read_text(encoding="utf-8")) if BASELINE.exists() else {}
-    problems = catalog_problems()
+    problems = catalog_problems() + plugin_text_problems()
     for rel, count in sorted(counts.items()):
         allowed = baseline.get(rel, 0)
         if count > allowed:

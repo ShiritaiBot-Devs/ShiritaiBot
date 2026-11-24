@@ -1,5 +1,7 @@
 # 插件与 OneLearn
 
+[English](PLUGINS.en.md) · **简体中文**
+
 ## 目录约定
 
 `src/shiritaibot/plugin/core/` 是主仓库的插件宿主；`src/shiritaibot/plugin/` 下除 `core/`、通用的邮件插件 `email/`、GitHub 插件 `github/` 和开发公告插件 `srtb_plugin_devs_notice/` 外，其余目录都被 `.gitignore` 忽略，飞书和网络学堂需在部署环境中单独安装实际代码与清单。干净 checkout 不含这两个插件。旧的 `integrations/`、`builtin_plugins/` 已撤销。
@@ -348,7 +350,7 @@ support_platforms: [qq, web] # 仅展示
 shiritaibot_version: ">=0.2,<1"   # 可选；不满足时插件显示为加载失败
 ```
 
-宿主不会自动安装 `requirements.txt`。
+依赖写在插件目录的 `requirements.txt` 或 `pyproject.toml` 中，由宿主自动解析安装，见[插件依赖管理](#插件依赖管理)。
 
 ### 插件类
 
@@ -372,7 +374,7 @@ class MyPlugin(Plugin):
         yield event.plain_result(f"你好 {name or event.get_sender_name()}")
 ```
 
-`main.py` 中必须恰好定义一个 `Plugin` 子类（可以有中间基类，取最末端的那个）。实例上可用：`self.config`（配置）、`self.context`（宿主服务）、`self.name`（插件 ID）、`self.data_dir`（`<home>/plugin_data/<id>/`，大文件放这里）、`self.logger`，以及每个插件独立的 KV 存储 `await self.get_kv_data(key, default)` / `put_kv_data(key, value)` / `delete_kv_data(key)`（值需可 JSON 序列化）。
+`main.py` 中必须恰好定义一个 `Plugin` 子类（可以有中间基类，取最末端的那个）。实例上可用：`self.config`（配置）、`self.context`（宿主服务）、`self.name`（插件 ID）、`self.data_dir`（`<home>/plugin_data/<id>/`，大文件放这里）、`self.logger`、`self.t()`（按语言取文字，见下文“多语言”），以及每个插件独立的 KV 存储 `await self.get_kv_data(key, default)` / `put_kv_data(key, value)` / `delete_kv_data(key)`（值需可 JSON 序列化）。
 
 ### 指令
 
@@ -462,6 +464,16 @@ async def weather(self, ctx: ToolContext, city: str, days: int = 1):
 | `await decide(state, questions, route="light")` | 向决策模型提出结构化问题；未配置决策模型时返回 None |
 | `get_plugins()` | 已加载插件的元数据 |
 | `get_platform(adapter_id)` | OneBot 协议端实例；`await platform.call(action, params)` 可直接调用协议端 API |
+| `t(key, **params)` | 按当前语言读取插件 `locales/` 中的文字（与 `self.t` 相同） |
+
+### 多语言
+
+插件可以同时支持中文和英文（[I18N.md](I18N.md)）：
+
+- 用户看到的文字放在插件目录的 `locales/zh-CN.json` 和 `locales/en.json`，代码里用 `self.t("键", 参数=值)` 取用；文字里的 `{参数}` 会被替换，字面花括号写成 `{{ }}`。找不到当前语言时回退到中文，再找不到就原样返回键名。
+- `metadata.yaml` 的 `display_name`、`desc`、`short_desc`，以及 `_conf_schema.json` 的 `description`、`hint`、`labels` 都可以写成按语言区分的映射：`{"zh-CN": "默认城市", "en": "Default city"}`。WebUI 会按查看者的语言显示。
+- 当前语言跟随会话（`/lang` 或全局默认）；日志始终使用全局默认语言。
+- 示例见技能 `shiritai-plugin-dev` 的 `assets/hello_world/`。
 
 ### 运行约定
 
@@ -496,6 +508,7 @@ v1 的 `PluginContext` 提供以下能力（v2 的 `Context` 同样具备）：
 - `add_subagent_note(text)`：在新启动的非 generic 子代理提示词末尾追加说明。
 - `add_shell_filter(rewrite)`：注册一个同步、无副作用的 `rewrite(command) -> command`，在 shell 工具命令获批后、执行前改写命令。过滤器出错时被忽略，原命令照常执行。
 - `session_workspace(session)`：返回会话的 shell 工作目录。
+- `t(key, **params)`：按当前语言读取插件 `locales/` 中的文字。
 
 以上环境变量、子代理说明和 shell 过滤器都会在插件重载或停用时撤销。v1 工具调用与插件重载通过锁互斥。
 
@@ -503,7 +516,7 @@ v1 的 `PluginContext` 提供以下能力（v2 的 `Context` 同样具备）：
 
 ## 日志
 
-`self.logger`（v1：`self.context.logger`）是宿主 `LogManager` 的 `Logger`，来源固定为 `插件:<id>`。它同时输出到彩色终端、滚动日志文件 `data/logs/shiritaibot.log` 和 WebUI「日志 → 运行日志」：
+`self.logger`（v1：`self.context.logger`）是宿主 `LogManager` 的 `Logger`，来源固定为 `插件:<id>`（全局默认语言为英文时是 `Plugin:<id>`）。它同时输出到彩色终端、滚动日志文件 `data/logs/shiritaibot.log` 和 WebUI「日志 → 运行日志」：
 
 ```python
 log = self.logger

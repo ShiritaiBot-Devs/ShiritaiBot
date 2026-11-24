@@ -1,0 +1,9 @@
+{
+  "deleted": "The chat was deleted",
+  "newChat": "New chat",
+  "defaultChat": "Default chat",
+  "log": {
+    "interrupted": "Marked unfinished {kind} {value} from last time as interrupted",
+    "source": "Activity"
+  }
+}

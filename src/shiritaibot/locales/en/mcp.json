@@ -1,0 +1,44 @@
+{
+  "noReason": "no reason given",
+  "missing": "The MCP server doesn't exist",
+  "toolError": "The MCP tool returned an error: ",
+  "toolNameConflict": "The tool name conflicts with an existing tool",
+  "schemaInvalid": "Invalid input schema",
+  "reconfigured": "The MCP server was reconfigured; call it again",
+  "log": {
+    "disconnected": "MCP server {key} disconnected",
+    "connectFailed": "MCP server {id} failed to connect: {error}",
+    "refreshFailed": "MCP server {id} failed to refresh its tools: {exc}",
+    "toolSkipped": "Tool {original} of MCP server {key} wasn't registered: {error}",
+    "connected_one": "MCP server {id} ({name}) connected: {count} tool",
+    "connected_other": "MCP server {id} ({name}) connected: {count} tools",
+    "toolsUpdated_one": "MCP server {id}'s tool list updated: {count} tool",
+    "toolsUpdated_other": "MCP server {id}'s tool list updated: {count} tools"
+  },
+  "connectFailed": "Connection failed ({name})",
+  "content": {
+    "binary": "[Binary resource {uri}, not shown]",
+    "hidden": "[{kind}: {value}, not shown]",
+    "resource": "[Resource {uri}]\n{text}",
+    "link": "[Resource link {name}: {uri}]"
+  },
+  "unavailable": "MCP server {id} isn't available: {error}",
+  "client": {
+    "unknownError": "unknown error",
+    "closed": "The MCP connection is closed",
+    "exited": "The MCP server process exited",
+    "disconnected": "The MCP server connection was closed",
+    "sessionExpired": "The MCP session expired. Reconnect.",
+    "invalidJson": "The MCP server returned invalid JSON",
+    "timeout": "MCP request {method} timed out",
+    "log": {
+      "nonJson": "MCP {name} printed a non-JSON line; ignored",
+      "tooLarge": "MCP {name} sent a message that's too large; the connection was closed"
+    },
+    "connectFailed": "Can't connect to the MCP server ({name})",
+    "http": "The MCP server returned HTTP {status_code}",
+    "startFailed": "Couldn't start the MCP server process ({name}). Check the command.",
+    "forbidden": "The MCP server refused access (HTTP {status_code}). Check the authentication headers.",
+    "serverError": "MCP server error: {value}"
+  }
+}

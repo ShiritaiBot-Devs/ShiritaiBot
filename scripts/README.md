@@ -1,5 +1,7 @@
 # 一键部署
 
+[English](README.en.md) · **简体中文**
+
 官网首页与快速开始文档提供可复制的系统命令。脚本准备运行环境、获取源码、
 安装依赖并构建管理后台，完成后在当前终端启动服务。
 
@@ -14,6 +16,8 @@ Windows PowerShell：
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1
 ```
+
+`install.sh` 的提示语跟随终端语言：`LC_ALL` / `LANG` 为英文时显示英文，其余情况显示中文。`install.ps1` 的提示语为英文。
 
 ## 选项
 

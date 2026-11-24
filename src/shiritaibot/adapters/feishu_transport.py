@@ -31,6 +31,7 @@ from lark_channel import (
 from lark_channel.ws import client as sdk_ws
 
 from shiritaibot.core.logs import get_logger
+from shiritaibot.i18n import t
 
 DOMAINS = {
     "feishu": ("https://open.feishu.cn", "https://accounts.feishu.cn"),
@@ -42,11 +43,11 @@ FILE_SCOPE = "im:resource"
 TEXT_CHUNK_LIMIT = 3500
 MENTION = re.compile(r"@_user_\d+|@_all")
 TOKEN_FAILURES = {
-    20002: "应用密钥无效",
-    20009: "应用尚未安装到租户",
-    20048: "应用不存在",
-    20069: "应用尚未启用",
-    20130: "应用认证失败",
+    20002: "adapters.feishu.token.20002",
+    20009: "adapters.feishu.token.20009",
+    20048: "adapters.feishu.token.20048",
+    20069: "adapters.feishu.token.20069",
+    20130: "adapters.feishu.token.20130",
 }
 
 # The SDK logger can contain credential-bearing WS URLs and server error bodies.
@@ -56,7 +57,7 @@ logging.getLogger("Lark").addFilter(
     lambda record: not record.pathname.replace("\\", "/").startswith(_SDK_DIRECTORY)
 )
 
-log = get_logger("飞书")
+log = get_logger("adapters.feishu.log.source")
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +79,7 @@ class FeishuSendError(RuntimeError):
     """Safe to log. An uncertain delivery may already have reached the recipient."""
 
     def __init__(self, code: int | str, *, uncertain: bool):
-        super().__init__(f"飞书消息发送失败（{code}）")
+        super().__init__(t("adapters.feishu.sendFailed", code=code))
         self.code = code
         self.uncertain = uncertain
 
@@ -102,7 +103,7 @@ async def _close_sdk_loop(loop: asyncio.AbstractEventLoop) -> None:
                 while loop.is_running():  # noqa: ASYNC110
                     await asyncio.sleep(0.05)
         except TimeoutError:
-            log.warning("飞书长连接未能及时停止")
+            log.warning("adapters.feishu.log.stopSlow")
             return
 
     async def drain() -> None:
@@ -231,7 +232,7 @@ class FeishuTransport:
         app_loop = asyncio.get_running_loop()
         previous_ws_loop = sdk_ws.loop
         if previous_ws_loop.is_running() and previous_ws_loop is not app_loop:
-            self.connection_error = "当前进程已有飞书长连接"
+            self.connection_error = t("adapters.feishu.alreadyConnected")
             log.warning(self.connection_error)
             return
         channel = FeishuChannel(
@@ -284,18 +285,18 @@ class FeishuTransport:
         # V1 uses a single Feishu transport and keeps its loop separate from
         # Uvicorn even when the SDK was first imported inside a running loop.
         ws_loop = asyncio.new_event_loop()
-        ws_loop.set_exception_handler(lambda _, __: log.warning("飞书长连接内部任务异常"))
+        ws_loop.set_exception_handler(lambda _, __: log.warning("adapters.feishu.log.taskError"))
         sdk_ws.loop = ws_loop
         try:
             await channel.connect_until_ready(timeout=None)
-            log.log("飞书长连接已建立")
+            log.log("adapters.feishu.log.connected")
             # The SDK keeps the transport alive and handles reconnects in the
             # background. The Hub owns cancellation of this task.
             await asyncio.Event().wait()
         except asyncio.CancelledError:
             raise
         except Exception:
-            self.connection_error = "飞书长连接未建立，请检查应用配置和网络"
+            self.connection_error = t("adapters.feishu.notConnected")
             log.warning(self.connection_error)
             await permissions
         finally:
@@ -305,7 +306,7 @@ class FeishuTransport:
             try:
                 await channel.disconnect()
             except Exception:
-                log.warning("飞书长连接关闭异常")
+                log.warning("adapters.feishu.log.closeError")
             await _close_sdk_loop(ws_loop)
             if ws_loop.is_closed():
                 sdk_ws.loop = previous_ws_loop
@@ -314,7 +315,7 @@ class FeishuTransport:
         self, text: str, *, chat_id: str = "", open_id: str = "", request_id: str = ""
     ) -> dict:
         if bool(chat_id) == bool(open_id) or not text.strip():
-            raise ValueError("飞书发送需要一个目标和非空文本")
+            raise ValueError(t("adapters.feishu.sendInvalid"))
         if len(text) > TEXT_CHUNK_LIMIT:
             raise FeishuSendError("text_too_long", uncertain=False)
         return await self._send(

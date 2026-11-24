@@ -1,5 +1,7 @@
 # MCP 服务（MCP Manager）
 
+[English](MCP.en.md) · **简体中文**
+
 ShiritaiBot 可以作为 MCP（Model Context Protocol）客户端接入 MCP 服务器，把服务器提供的工具
 交给 Agent 调用。
 

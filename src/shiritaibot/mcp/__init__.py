@@ -17,6 +17,7 @@ from jsonschema import Draft202012Validator
 from shiritaibot.config import McpServerConfig
 from shiritaibot.core import PublicError, Tool
 from shiritaibot.core.logs import get_logger
+from shiritaibot.i18n import Text, t
 
 from .client import HttpTransport, McpClient, McpError, StdioTransport
 
@@ -55,18 +56,18 @@ def render_result(result: dict) -> dict:
         if kind == "text":
             parts.append(str(item.get("text", "")))
         elif kind in {"image", "audio"}:
-            parts.append(f"[{kind}: {item.get('mimeType', 'unknown')}，未展示]")
+            parts.append(t("mcp.content.hidden", kind=kind, value=item.get('mimeType', 'unknown')))
         elif kind == "resource_link":
-            parts.append(f"[资源链接 {item.get('name', '')}: {item.get('uri', '')}]")
+            parts.append(t("mcp.content.link", name=item.get('name', ''), uri=item.get('uri', '')))
         elif kind == "resource":
             resource = item.get("resource") or {}
             if "text" in resource:
-                parts.append(f"[资源 {resource.get('uri', '')}]\n{resource['text']}")
+                parts.append(t("mcp.content.resource", uri=resource.get('uri', ''), text=resource['text']))
             else:
-                parts.append(f"[二进制资源 {resource.get('uri', '')}，未展示]")
+                parts.append(t("mcp.content.binary", uri=resource.get('uri', '')))
     text = "\n".join(parts)
     if result.get("isError"):
-        raise PublicError("MCP 工具返回错误：" + (text[:2000] or "未提供原因"))
+        raise PublicError(t("mcp.toolError") + (text[:2000] or t("mcp.noReason")))
     output: dict = {"content": text}
     if isinstance(result.get("structuredContent"), dict):
         output["structured"] = result["structuredContent"]
@@ -118,9 +119,9 @@ class McpManager:
             await client.close()
             server.status = "error"
             server.error = (
-                str(exc) if isinstance(exc, McpError) else f"连接失败（{type(exc).__name__}）"
+                str(exc) if isinstance(exc, McpError) else t("mcp.connectFailed", name=type(exc).__name__)
             )
-            log.error(f"MCP 服务 {cfg.id} 连接失败：{server.error}")
+            log.error(Text("mcp.log.connectFailed", id=cfg.id, error=server.error))
             if not isinstance(exc, Exception):
                 raise
             return
@@ -129,7 +130,7 @@ class McpManager:
         self._register(server, tools)
         server.status = "connected"
         name = client.server_info.get("name") or cfg.id
-        log.log(f"MCP 服务 {cfg.id}（{name}）已连接：{len(server.tools)} 个工具")
+        log.log(Text("mcp.log.connected", id=cfg.id, name=name, count=len(server.tools)))
         await self.store.activity("mcp.connected", cfg.id)
 
     def _register(self, server: McpServer, tools: list[dict]) -> None:
@@ -155,11 +156,11 @@ class McpManager:
             try:
                 schema = input_schema(item.get("inputSchema"))
                 if name in self.registry.tools:
-                    raise ValueError("工具名称与已有工具冲突")
+                    raise ValueError(t("mcp.toolNameConflict"))
                 title = item.get("title") or (item.get("annotations") or {}).get("title")
                 description = (
                     f"[MCP {key}] "
-                    + (f"{title}：" if title and title != original else "")
+                    + (title + t("common.colon") if title and title != original else "")
                     + (entry["description"] or original)
                 )
                 self.registry.add(
@@ -174,8 +175,8 @@ class McpManager:
                     )
                 )
             except Exception as exc:
-                entry["error"] = str(exc) if isinstance(exc, ValueError) else "输入 Schema 无效"
-                log.warning(f"MCP 服务 {key} 的工具 {original} 未注册：{entry['error']}")
+                entry["error"] = str(exc) if isinstance(exc, ValueError) else t("mcp.schemaInvalid")
+                log.warning(Text("mcp.log.toolSkipped", key=key, original=original, error=entry['error']))
 
     async def _refresh(self, server: McpServer) -> None:
         async with server.lock:
@@ -183,14 +184,14 @@ class McpManager:
                 return
             try:
                 self._register(server, await server.client.list_tools())
-                log.log(f"MCP 服务 {server.cfg.id} 的工具列表已更新：{len(server.tools)} 个")
+                log.log(Text("mcp.log.toolsUpdated", id=server.cfg.id, count=len(server.tools)))
             except McpError as exc:
-                log.warning(f"MCP 服务 {server.cfg.id} 刷新工具失败：{exc}")
+                log.warning(Text("mcp.log.refreshFailed", id=server.cfg.id, exc=exc))
 
     def _handler(self, server: McpServer, original: str):
         async def call(ctx, args):
             if self.servers.get(server.cfg.id) is not server:
-                raise PublicError("MCP 服务已重新配置，请重新调用")
+                raise PublicError("mcp.reconfigured")
             if not server.client or not server.client.alive:
                 # One reconnect attempt: stdio servers may have crashed or been restarted.
                 async with server.lock:
@@ -200,7 +201,7 @@ class McpManager:
                             server.client = None
                         await self._connect(server)
                 if not server.client:
-                    raise PublicError(f"MCP 服务 {server.cfg.id} 不可用：{server.error}")
+                    raise PublicError("mcp.unavailable", id=server.cfg.id, error=server.error)
             try:
                 result = await server.client.call_tool(original, args, seconds=server.cfg.timeout)
             except McpError as exc:
@@ -214,7 +215,7 @@ class McpManager:
         self.registry.remove_plugin(self.owner(key))
         if server and server.client:
             await server.client.close()
-            log.log(f"MCP 服务 {key} 已断开")
+            log.log(Text("mcp.log.disconnected", key=key))
 
     async def reload(self, force: set[str] | None = None) -> None:
         """Apply configuration: restart only changed servers (and those in force)."""
@@ -236,7 +237,7 @@ class McpManager:
 
     async def reconnect(self, key: str) -> list[dict]:
         if not any(cfg.id == key for cfg in self.config.value.mcp_servers):
-            raise PublicError("MCP 服务不存在")
+            raise PublicError("mcp.missing")
         await self.reload(force={key})
         return self.listing()
 

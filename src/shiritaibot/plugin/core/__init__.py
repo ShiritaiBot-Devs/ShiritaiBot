@@ -19,13 +19,14 @@ from shiritaibot.config import PluginConfig
 from shiritaibot.core import PublicError, uid
 from shiritaibot.core.logs import get_logger
 from shiritaibot.dependencies import RuntimeEnvironment
+from shiritaibot.i18n import Text, join_list, t
 from shiritaibot.plugin_api import PluginContext
 
 from .hooks import HOOK_TIMEOUT, Handler, HookBus, collect
 from .manifest import manifest_file, read_manifest
 from .packages import install_archive, remove_directory
 
-log = get_logger("插件")
+log = get_logger("plugins.log.source")
 
 
 class PluginManager:
@@ -82,19 +83,19 @@ class PluginManager:
 
     async def send_message(self, session: str, text: str) -> None:
         if self.adapters is None:
-            raise PublicError("消息通道尚未就绪")
+            raise PublicError("plugins.channelNotReady")
         await self.adapters.enqueue(session, text)
 
     async def notify_owner(self, text: str) -> None:
         if self.adapters is None:
-            raise PublicError("消息通道尚未就绪")
+            raise PublicError("plugins.channelNotReady")
         await self.adapters.notify_owner(text)
 
     async def llm_generate(
         self, prompt: str | None, messages: list[dict] | None, system: str, route: str
     ) -> str:
         if self.llm is None:
-            raise PublicError("模型服务尚未就绪")
+            raise PublicError("plugins.llmNotReady")
         history = list(messages or [])
         if prompt:
             history.append({"role": "user", "content": prompt})
@@ -104,7 +105,7 @@ class PluginManager:
 
     async def decide(self, state, questions: dict, route: str):
         if self.llm is None:
-            raise PublicError("模型服务尚未就绪")
+            raise PublicError("plugins.llmNotReady")
         return await self.llm.decide(route, state, questions)
 
     def plugin_list(self) -> list[dict]:
@@ -132,7 +133,7 @@ class PluginManager:
         settings = self.config.value.model_copy(deep=True)
         entry = next((p for p in settings.plugins if p.id == plugin), None)
         if entry is None:
-            raise PublicError("插件尚未配置")
+            raise PublicError("plugins.notConfigured")
         entry.settings = deepcopy(values)
         settings = await self.vault.protect_settings(settings, await self.schemas())
         await self.config.save(settings)
@@ -157,7 +158,7 @@ class PluginManager:
                 try:
                     result = rewrite(command)
                 except Exception as error:  # A broken filter must not block the shell.
-                    log.log(f"插件 {key} 的 shell 过滤器出错，已忽略：{error!r}")
+                    log.log(Text("plugins.log.shellFilterError", key=key, error=error))
                     continue
                 if isinstance(result, str) and result:
                     command = result
@@ -221,7 +222,7 @@ class PluginManager:
             cfg = configs.get(key, PluginConfig(id=key))
             error = meta.get("error") or self.errors.get(key, "") or dependency_errors.get(key, "")
             if not error and plan and not plan.supports(key, current):
-                error = "插件依赖已准备完成，请重启 ShiritaiBot 后启用"
+                error = t("plugins.restartNeeded")
             status = "loaded" if key in self.loaded else "disabled"
             if error:
                 status = "error"
@@ -269,20 +270,20 @@ class PluginManager:
     async def install(self, key: str, archive: bytes) -> list[dict]:
         async with self.manage_lock:
             if any(p["id"] == key for p in await self.discover()):
-                raise PublicError("同名插件已存在，请先移除或手动更新后重载")
+                raise PublicError("plugins.exists")
             await asyncio.to_thread(install_archive, self.home / "plugins", key, archive)
-            log.log(f"已安装插件 {key}")
+            log.log(Text("plugins.log.installed", key=key))
             await self.sync_config()
             try:
                 plan = await self.dependencies.prepare(required=key)
                 if not plan.supports(key, self.dependencies.running_state()):
-                    raise PublicError("插件依赖已准备完成，请重启 ShiritaiBot 后启用")
+                    raise PublicError("plugins.restartNeeded")
                 await self.reload(key)
             except Exception as exc:
                 # Keep code so a declaration can be fixed or a prepared environment activated.
                 if isinstance(exc, PublicError):
                     self.errors[key] = str(exc)
-                log.error(f"插件 {key} 安装后未加载：{self.errors.get(key, '插件加载失败')}")
+                log.error(Text("plugins.log.notLoaded", key=key, reason=self.errors.get(key, t("plugins.loadFailed"))))
             return await self.listing()
 
     async def remove(self, key: str) -> list[dict]:
@@ -290,7 +291,7 @@ class PluginManager:
             metadata = next((p for p in await self.discover() if p["id"] == key), None)
             cfg = next((p for p in self.config.value.plugins if p.id == key), None)
             if metadata is None and cfg is None:
-                raise PublicError("插件不存在")
+                raise PublicError("plugins.missing")
             async with self.locks.setdefault(key, asyncio.Lock()):
                 old = self.loaded.get(key)
                 if old:
@@ -306,15 +307,15 @@ class PluginManager:
                 settings.plugins = [p for p in settings.plugins if p.id != key]
                 await self.config.save(settings)
                 self.errors.pop(key, None)
-                log.log(f"已移除插件 {key}")
+                log.log(Text("plugins.log.removed", key=key))
                 await self.store.activity("plugin.removed", key)
             await self.sync_config()
             # Keep installed packages until restart; removal never mutates a live venv.
             try:
                 await self.dependencies.prepare()
-                log.log("插件依赖清单已更新，环境清理将在重启后生效")
+                log.log("plugins.log.depsUpdated")
             except PublicError as exc:
-                log.error(f"插件已移除，依赖清理将在下次启动重试：{exc}")
+                log.error(Text("plugins.log.depsCleanupRetry", exc=exc))
             return await self.listing()
 
     def _forget_modules(self, key: str, keep: str = "") -> None:
@@ -339,41 +340,41 @@ class PluginManager:
             message = (
                 str(exc)
                 if isinstance(exc, PublicError)
-                else f"缺少 Python 模块 {exc.name}，请检查插件依赖声明并重载"
+                else t("plugins.missingModule", name=exc.name)
                 if isinstance(exc, ModuleNotFoundError)
                 and exc.name
                 and re.fullmatch(r"[A-Za-z_][\w.]{0,199}", exc.name)
-                else f"插件加载失败（{type(exc).__name__}）"
+                else t("plugins.loadFailedNamed", name=type(exc).__name__)
             )
             self.errors[key] = message
-            log.error(f"插件 {key} 加载失败：{message}")
+            log.error(Text("plugins.log.loadFailed", key=key, message=message))
             # Tracebacks may quote plugin settings, so they only appear at debug level.
-            log.debug(f"插件 {key} 加载失败详情", exc=exc)
+            log.debug(Text("plugins.log.loadFailedDetail", key=key), exc=exc)
             await self.store.activity("plugin.failed", f"{key}: {type(exc).__name__}")
             raise
 
     async def _reload(self, key: str) -> None:
         cfg = next((p for p in self.config.value.plugins if p.id == key), None)
         if not cfg:
-            raise PublicError("插件尚未配置")
+            raise PublicError("plugins.notConfigured")
         lock = self.locks.setdefault(key, asyncio.Lock())
         async with lock:
             metadata = next((p for p in await self.discover() if p["id"] == key), None)
             if not metadata:
-                raise PublicError("未找到插件清单")
+                raise PublicError("plugins.manifestMissing")
             if not cfg.enabled:
                 old = self.loaded.pop(key, None)
                 self.unregister(key)
                 if old:
                     await self._stop(old)
-                    log.log(f"插件 {key} 已停用")
+                    log.log(Text("plugins.log.disabled", key=key))
                 self._forget_modules(key)
                 return
             if metadata["error"]:
                 raise PublicError(metadata["error"])
             plan = await self.dependencies.prepare(required=key)
             if not plan.supports(key, self.dependencies.running_state()):
-                raise PublicError("插件依赖已准备完成，请重启 ShiritaiBot 后启用")
+                raise PublicError("plugins.restartNeeded")
             plugin_settings = deepcopy({**metadata["defaults"], **cfg.settings})
             invalid = list(
                 Draft202012Validator(metadata["settings_schema"]).iter_errors(plugin_settings)
@@ -382,7 +383,7 @@ class PluginManager:
                 fields = sorted(
                     {".".join(map(str, error.absolute_path)) or "settings" for error in invalid}
                 )
-                raise PublicError("插件配置不符合定义：" + "、".join(fields))
+                raise PublicError(t("plugins.settingsInvalid") + join_list(fields))
             directory = Path(metadata["path"])
             module_name = f"shiritaibot_plugin_{key}_{uid()}"
 
@@ -425,6 +426,7 @@ class PluginManager:
                 context._resolve_interaction = self.resolve_interaction
                 context.get_event = self.get_event
                 context.workspaces = self.home / "workspaces"
+                context.directory = directory
                 if isinstance(context, Context):
                     plugin = self._instantiate(module, context)
                     handlers = collect(key, plugin, self.hooks.counter)
@@ -434,7 +436,7 @@ class PluginManager:
                     await plugin.initialize()
                     clashes = self.hooks.command_conflicts(key, handlers)
                     if clashes:
-                        raise PublicError("插件指令与已有指令冲突：" + "、".join(clashes))
+                        raise PublicError(t("plugins.commandConflict") + join_list(clashes))
                 else:
                     plugin = module.Entry(context)
                     await plugin.start()
@@ -443,14 +445,14 @@ class PluginManager:
                     t.name in self.registry.tools and self.registry.tools[t.name].plugin != key
                     for t in context.tools
                 ):
-                    raise PublicError("插件工具名称冲突")
+                    raise PublicError("plugins.toolConflict")
                 if any(
                     name in values
                     for other, values in self.process_env.items()
                     if other != key
                     for name in context.process_env
                 ):
-                    raise PublicError("插件环境变量与其他插件冲突")
+                    raise PublicError("plugins.envConflict")
                 for tool in context.tools:
                     self.registry.validate(tool)
             except BaseException:
@@ -476,7 +478,7 @@ class PluginManager:
                 async def guarded(*args):
                     async with lock:
                         if self.loaded.get(key) is not plugin:
-                            raise PublicError("插件已重载，请重新调用")
+                            raise PublicError("plugins.reloaded")
                         return await handler(*args)
 
                 return guarded
@@ -508,11 +510,10 @@ class PluginManager:
             commands = sum(h.kind == "command" for h in handlers)
             hooks = sum(h.kind not in {"command", "llm_tool"} for h in handlers)
             log.log(
-                f"插件 {metadata['name']}（{key}）已{'重新' if old else ''}加载："
-                f"{len(context.tools)} 个工具"
-                + (f"，{commands} 个指令" if commands else "")
-                + (f"，{hooks} 个 hook" if hooks else "")
-                + (f"，{len(channels)} 个通知渠道" if channels else "")
+                t("plugins.loadedSummary", name=metadata['name'], key=key, again=t("plugins.again") if old else '', count=len(context.tools))
+                + (t("plugins.commandsSummary", count=commands) if commands else "")
+                + (t("plugins.hooksSummary", count=hooks) if hooks else "")
+                + (t("plugins.channelsSummary", count=len(channels)) if channels else "")
             )
             await self.store.activity("plugin.loaded", key)
             if self.ready:
@@ -533,7 +534,7 @@ class PluginManager:
             cls for cls in defined if not any(o is not cls and issubclass(o, cls) for o in defined)
         ]
         if len(leaves) != 1:
-            raise PublicError("main.py 中需要恰好定义一个 Plugin 子类")
+            raise PublicError("plugins.onePluginClass")
         cls = leaves[0]
         try:
             inspect.signature(cls).bind(context, context.settings)
@@ -553,7 +554,7 @@ class PluginManager:
                 handler.func, options["description"], options["parameters"]
             )
         except ValueError as exc:
-            raise PublicError(f"工具 {options['name']} 的参数定义无效：{exc}") from None
+            raise PublicError("plugins.toolSchemaInvalid", name=options['name'], exc=exc) from None
         method = handler.func
 
         async def call(ctx, args):

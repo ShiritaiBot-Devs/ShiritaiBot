@@ -1,0 +1,47 @@
+{
+  "status": {
+    "completed": "完成",
+    "failed": "失败",
+    "needs_input": "等待输入"
+  },
+  "log": {
+    "source": "子代理",
+    "cancelled": "{id} 已取消",
+    "started": "{id} 开始运行",
+    "timeout": "{id} 运行超时",
+    "queuedDynamic": "已排队动态子代理 {label}：{brief}",
+    "failed": "{id} 运行失败（{name}）",
+    "queued": "已排队 {instance}（{kind}）：{brief}",
+    "resumed": "续接 {id}（第 {round} 轮）：{brief}"
+  },
+  "queueFull": "子代理队列已满",
+  "needsInputDefault": "子代理请求补充输入",
+  "dynamicDisabled": "动态内置子代理未启用",
+  "missing": "子代理实例不存在或未启用",
+  "runnerMissing": "内置子代理运行器未初始化",
+  "taskMissing": "当前会话不存在该子代理任务",
+  "dynamicConfigMissing": "动态子代理配置缺失，请新建任务",
+  "noModelOverride": "当前策略不允许动态子代理指定模型",
+  "kindChanged": "子代理实例类型已变更，请新建任务",
+  "resumeOwnerOnly": "仅任务发起人或主人可以续接此子代理",
+  "outputTooLong": "子进程输出过长，未能取得最终结果。",
+  "stillRunning": "子代理任务仍在运行，请等它停下后再发送",
+  "genericNoResume": "generic 类型的子代理不支持续接",
+  "antigravity": {
+    "noResult": "Antigravity CLI 未返回最终结果。",
+    "status": "Antigravity CLI 状态为 {status}。"
+  },
+  "exitCode": "（退出码 {exit_code}）",
+  "timeout": "运行超过 {timeout} 秒，已终止",
+  "availableModels": "；可用模型：{models}",
+  "modelInvalid": "模型 {model} 不存在、未启用或不是文本生成模型{hint}",
+  "noResume": "该子代理任务没有可续接的原生会话（generic 类型或启动即失败）",
+  "event": {
+    "title": "子代理 {id}: {value}"
+  },
+  "sourceChanged": "来源会话绑定已变更",
+  "contextFull": "子代理上下文达到上限",
+  "noResult": "模型未返回子代理任务结果",
+  "repeatLimit": "子代理重复调用同一工具已达上限",
+  "stepLimit": "子代理已达到本轮步数限制（{max_steps} 步）"
+}

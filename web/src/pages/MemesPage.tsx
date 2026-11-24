@@ -10,7 +10,7 @@ import { Pagination } from "../components/Pagination";
 import { QueryErrorNotice } from "../components/QueryErrorNotice";
 import { MEME_FIELDS } from "../config/schema";
 import type { Action, ConfigPageProps } from "./common";
-import i18n, { tx } from "../i18n";
+import i18n, { currentLocale, tx } from "../i18n";
 
 const PAGE_SIZE = 24;
 const CATEGORY_NAME = /^[a-z][a-z0-9_]{0,31}$/;
@@ -344,7 +344,7 @@ function MemeCard({
         <code>{row.id}</code>
         <span className="muted">
           {tx(SOURCES[row.source] ?? row.source)} ·{" "}
-          {new Date(row.created).toLocaleDateString()}
+          {new Date(row.created).toLocaleDateString(currentLocale())}
         </span>
       </div>
       <select

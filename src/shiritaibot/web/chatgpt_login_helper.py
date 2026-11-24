@@ -1,5 +1,6 @@
 """Run on the computer opening the browser. Uses only the Python standard library."""
 
+import json
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from secrets import compare_digest
@@ -7,6 +8,21 @@ from threading import Event
 from time import monotonic
 from urllib.parse import parse_qs, urlsplit
 from webbrowser import open as open_browser
+
+# The WebUI replaces this line with the viewer's language when it serves the script.
+TEXT = {"lang": "zh-CN", "title": "返回 ShiritaiBot", "intro": "复制下面的一次性回调地址，粘贴回 WebUI 的 ChatGPT 授权面板。", "label": "一次性回调地址", "copy": "复制回调地址", "copied": "已复制", "manual": "请使用键盘复制"}  # i18n: ok
+
+
+def script_text(value: str) -> str:
+    """A JavaScript string literal that is safe inside <script>. HTML entities are not
+    decoded there, so html.escape would break the script; escaping <, > and & keeps
+    "</script>" from ending it early."""
+    return (
+        json.dumps(value, ensure_ascii=False)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
 
 
 def main(authorization_url: str) -> None:
@@ -44,28 +60,28 @@ def main(authorization_url: str) -> None:
                 return
             callback_url = redirect._replace(query=uri.query).geturl()
             page = f"""<!doctype html>
-<html lang="zh-CN"><meta charset="utf-8">
+<html lang="{escape(TEXT['lang'])}"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>返回 ShiritaiBot</title>
+<title>{escape(TEXT['title'])}</title>
 <style>
 body {{max-width: 42rem; margin: 12vh auto; padding: 1rem; font: 1rem/1.65 system-ui, sans-serif}}
 textarea {{box-sizing: border-box; width: 100%; padding: .65rem; margin-bottom: .75rem}}
 button {{font: inherit; padding: .35rem .7rem}}
 </style>
-<h1>返回 ShiritaiBot</h1>
-<p>复制下面的一次性回调地址，粘贴回 WebUI 的 ChatGPT 授权面板。</p>
-<textarea id="callback" rows="4" readonly aria-label="一次性回调地址">{escape(callback_url)}</textarea>
-<button id="copy">复制回调地址</button>
+<h1>{escape(TEXT['title'])}</h1>
+<p>{escape(TEXT['intro'])}</p>
+<textarea id="callback" rows="4" readonly aria-label="{escape(TEXT['label'])}">{escape(callback_url)}</textarea>
+<button id="copy">{escape(TEXT['copy'])}</button>
 <script>
 history.replaceState(null, "", location.pathname);
 document.querySelector("#copy").onclick = async (event) => {{
   const field = document.querySelector("#callback");
   try {{
     await navigator.clipboard.writeText(field.value);
-    event.target.textContent = "已复制";
+    event.target.textContent = {script_text(TEXT['copied'])};
   }} catch {{
     field.select();
-    event.target.textContent = "请使用键盘复制";
+    event.target.textContent = {script_text(TEXT['manual'])};
   }}
 }};
 </script></html>""".encode("utf-8")

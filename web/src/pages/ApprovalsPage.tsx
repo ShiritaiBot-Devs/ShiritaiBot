@@ -440,7 +440,10 @@ export function ApprovalsPage({
               <option value="all">{i18n.t("approvals:allRisks")}</option>
               {RISK_ORDER.map((level) => (
                 <option key={level} value={level}>
-                  {RISK_META[level].label}（{level}）
+                  {i18n.t("withDetail", {
+                    label: RISK_META[level].label,
+                    detail: level,
+                  })}
                 </option>
               ))}
             </select>

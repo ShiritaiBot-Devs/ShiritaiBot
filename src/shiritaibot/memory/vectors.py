@@ -11,13 +11,14 @@ import numpy as np
 
 from shiritaibot.core import PublicError, fingerprint
 from shiritaibot.core.logs import get_logger
+from shiritaibot.i18n import Text
 
-log = get_logger("记忆")
+log = get_logger("memory.log.vectorsSource")
 BATCH = 32
 
 
 # Table -> what a degraded search log line calls it.
-TABLES = {"mem_vector": "记忆", "meme_vector": "表情", "kb_vector": "知识库"}
+TABLES = {"mem_vector": "memory.vectors.tables.mem", "meme_vector": "memory.vectors.tables.meme", "kb_vector": "memory.vectors.tables.kb"}
 
 
 class VectorIndex:
@@ -83,7 +84,7 @@ class VectorIndex:
         try:
             used, vectors = await self.llm.embed([text], query=True)
         except PublicError:
-            log.warning(f"Embedding 不可用，本次{TABLES[self.table]}检索只用关键词")
+            log.warning(Text("memory.log.noEmbedding", table=Text(TABLES[self.table])))
             return []
         if used not in self.cache:
             rows = await self.store.query(f"SELECT id,vec FROM {self.table} WHERE model=?", (used,))

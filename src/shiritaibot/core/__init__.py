@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal, Protocol
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
-from shiritaibot.i18n import t
+from shiritaibot.i18n import Locale, Text, localize, t
 
 if TYPE_CHECKING:
     from shiritaibot.auth.menu import ApprovalMenu
@@ -135,7 +135,7 @@ class Context:
 @dataclass(slots=True)
 class Tool:
     name: str
-    description: str
+    description: str | Text  # plain text, a catalog key, or lazy Text
     schema: dict[str, Any]
     handler: Callable[[Context, dict[str, Any]], Awaitable[Any]]
     risk: str
@@ -152,12 +152,13 @@ class Tool:
         return self.risk == "safe"
 
     def spec(self) -> dict[str, Any]:
+        """The model-facing definition, in the active locale (descriptions may be keys)."""
         return {
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": self.description,
-                "parameters": self.schema,
+                "description": t(self.description),
+                "parameters": localize(self.schema),
             },
         }
 
@@ -178,6 +179,8 @@ class Provider(Protocol):
 
 class RuntimePort(Protocol):
     async def submit(self, ctx: Context, text: str) -> str: ...
+
+    async def session_locale(self, session: str) -> tuple[Locale, bool]: ...
 
     async def handoff(self, session: str, text: str, send) -> None: ...
 

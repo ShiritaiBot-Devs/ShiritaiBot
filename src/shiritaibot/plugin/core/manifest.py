@@ -35,6 +35,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from shiritaibot import __version__
+from shiritaibot.i18n import DEFAULT_LOCALE, is_locale_map, pick, t
 
 TYPES = {
     "string": "string",
@@ -67,18 +68,27 @@ class ManifestError(ValueError):
     pass
 
 
+def localized(target: dict, field: str, value: Any) -> Any:
+    """Plain default text for ``field``; a per-language map (``{"zh-CN": ..., "en": ...}``)
+    is also kept under ``x-l10n`` so the API can show the viewer's language."""
+    if is_locale_map(value):
+        target.setdefault("x-l10n", {})[field] = dict(value)
+        value = pick(value, DEFAULT_LOCALE)
+    return [str(item) for item in value] if isinstance(value, list) else str(value)
+
+
 def convert_field(name: str, spec: Any, path: str = "") -> dict:
     where = f"{path}{name}"
     if not isinstance(spec, dict):
-        raise ManifestError(f"配置项 {where} 必须是对象")
+        raise ManifestError(t("plugins.manifest.objectRequired", where=where))
     kind = spec.get("type")
     if kind not in TYPES:
-        raise ManifestError(f"配置项 {where} 的类型 {kind!r} 不受支持")
+        raise ManifestError(t("plugins.manifest.typeUnsupported", where=where, kind=kind))
     result: dict[str, Any] = {"type": TYPES[kind]}
     if spec.get("description"):
-        result["title"] = str(spec["description"])
+        result["title"] = localized(result, "title", spec["description"])
     if spec.get("hint"):
-        result["description"] = str(spec["hint"])
+        result["description"] = localized(result, "description", spec["hint"])
     if spec.get("obvious_hint"):
         result["x-obvious-hint"] = True
     if spec.get("invisible"):
@@ -108,26 +118,27 @@ def convert_field(name: str, spec: Any, path: str = "") -> dict:
     options = spec.get("options")
     if options is not None:
         if not isinstance(options, list) or not options:
-            raise ManifestError(f"配置项 {where} 的 options 必须是非空数组")
+            raise ManifestError(t("plugins.manifest.optionsRequired", where=where))
         target = result
         if kind == "list":
             result["items"] = {"type": "string"}
             target = result["items"]
         target["enum"] = list(options)
         for key, extension in (("labels", "x-labels"), ("subtitles", "x-subtitles")):
-            if isinstance(spec.get(key), list):
-                result[extension] = [str(item) for item in spec[key]]
+            value = spec.get(key)
+            if isinstance(value, list) or (is_locale_map(value) and isinstance(pick(value), list)):
+                result[extension] = localized(result, extension, value)
     if spec.get("secret"):
         if kind == "string":
             result["writeOnly"] = True
         elif kind == "list":
             result["items"] = {**result.get("items", {"type": "string"}), "writeOnly": True}
         else:
-            raise ManifestError(f"配置项 {where} 只有 string 或 list 可以设为 secret")
+            raise ManifestError(t("plugins.manifest.secretTypes", where=where))
     if kind == "object":
         items = spec.get("items")
         if not isinstance(items, dict):
-            raise ManifestError(f"配置项 {where} 是 object，必须用 items 声明子项")
+            raise ManifestError(t("plugins.manifest.objectItems", where=where))
         result["properties"] = {
             key: convert_field(key, value, where + ".") for key, value in items.items()
         }
@@ -144,12 +155,12 @@ def convert_field(name: str, spec: Any, path: str = "") -> dict:
     elif kind == "template_list":
         templates = spec.get("templates")
         if not isinstance(templates, dict) or not templates:
-            raise ManifestError(f"配置项 {where} 是 template_list，必须声明 templates")
+            raise ManifestError(t("plugins.manifest.templatesRequired", where=where))
         result["x-widget"] = "template_list"
         result["x-templates"] = {}
         for key, template in templates.items():
             if not isinstance(template, dict) or not isinstance(template.get("items"), dict):
-                raise ManifestError(f"配置项 {where} 的模板 {key} 必须用 items 声明字段")
+                raise ManifestError(t("plugins.manifest.templateItems", where=where, key=key))
             result["x-templates"][key] = {
                 "name": str(template.get("name", key)),
                 "hint": str(template.get("hint", "")),
@@ -180,7 +191,7 @@ def field_default(kind: str, spec: dict, converted: dict) -> Any:
 def convert_schema(conf: Any) -> dict:
     """``_conf_schema.json`` (a mapping of field name → spec) as a JSON Schema object."""
     if not isinstance(conf, dict):
-        raise ManifestError("_conf_schema.json 必须是对象")
+        raise ManifestError(t("plugins.manifest.confSchemaObject"))
     schema = {
         "type": "object",
         "properties": {name: convert_field(name, spec) for name, spec in conf.items()},
@@ -208,7 +219,7 @@ def version_matches(spec: str, current: str = __version__) -> bool:
     for clause in filter(None, (part.strip() for part in spec.split(","))):
         match = re.fullmatch(r"(>=|<=|==|!=|>|<)\s*v?([0-9][0-9.]*)", clause)
         if not match:
-            raise ManifestError(f"无法识别的版本范围 {clause!r}")
+            raise ManifestError(t("plugins.manifest.versionRange", clause=clause))
         operator, raw = match.groups()
         want = _version(raw)
         width = max(len(have), len(want))
@@ -229,44 +240,48 @@ def version_matches(spec: str, current: str = __version__) -> bool:
 def read_v2(directory: Path) -> dict:
     meta = yaml.safe_load((directory / "metadata.yaml").read_text(encoding="utf-8")) or {}
     if not isinstance(meta, dict):
-        raise ManifestError("metadata.yaml 必须是映射")
+        raise ManifestError(t("plugins.manifest.metadataMapping"))
     if not (directory / "main.py").is_file():
-        raise ManifestError("缺少 main.py 入口")
+        raise ManifestError(t("plugins.manifest.noMain"))
     required = meta.get("shiritaibot_version")
     if required and not version_matches(str(required)):
-        raise ManifestError(f"插件要求 ShiritaiBot {required}，当前版本 {__version__}")
+        raise ManifestError(t("plugins.manifest.versionRequired", required=required, version=__version__))
     platforms = meta.get("support_platforms") or []
     if not isinstance(platforms, list) or not set(map(str, platforms)) <= PLATFORMS:
-        raise ManifestError("support_platforms 只能包含 qq、web")
+        raise ManifestError(t("plugins.manifest.platforms"))
     conf_path = directory / "_conf_schema.json"
     conf = json.loads(conf_path.read_text(encoding="utf-8")) if conf_path.is_file() else {}
     schema = convert_schema(conf)
-    return {
-        "api": 2,
-        "name": str(meta.get("display_name") or meta.get("name") or directory.name),
-        "description": str(meta.get("desc") or meta.get("short_desc") or ""),
-        "short_description": str(meta.get("short_desc") or ""),
-        "version": str(meta.get("version") or ""),
-        "author": str(meta.get("author") or ""),
-        "repo": str(meta.get("repo") or ""),
-        "support_platforms": [str(item) for item in platforms],
-        "settings_schema": schema,
-        "defaults": schema_defaults(schema),
-    }
+    result: dict[str, Any] = {}
+    result.update(
+        {
+            "api": 2,
+            "name": localized(result, "name", meta.get("display_name") or meta.get("name") or directory.name),
+            "description": localized(result, "description", meta.get("desc") or meta.get("short_desc") or ""),
+            "short_description": localized(result, "short_description", meta.get("short_desc") or ""),
+            "version": str(meta.get("version") or ""),
+            "author": str(meta.get("author") or ""),
+            "repo": str(meta.get("repo") or ""),
+            "support_platforms": [str(item) for item in platforms],
+            "settings_schema": schema,
+            "defaults": schema_defaults(schema),
+        }
+    )
+    return result
 
 
 def read_v1(directory: Path) -> dict:
     meta = tomllib.loads((directory / "plugin.toml").read_text(encoding="utf-8"))
     if meta.get("api") != 1:
-        raise ManifestError("不支持的插件 API 版本")
+        raise ManifestError(t("plugins.manifest.apiVersion"))
     if not (directory / "main.py").is_file():
-        raise ManifestError("缺少 main.py 入口")
+        raise ManifestError(t("plugins.manifest.noMain"))
     if not isinstance(meta.get("settings", {}), dict):
-        raise ManifestError("settings 必须是配置表")
+        raise ManifestError(t("plugins.manifest.settingsTable"))
     schema = meta.get("settings_schema", {"type": "object"})
     Draft202012Validator.check_schema(schema)
     if schema.get("type") != "object":
-        raise ManifestError("settings_schema 必须描述对象")
+        raise ManifestError(t("plugins.manifest.settingsSchema"))
     return {
         "api": 1,
         "name": str(meta.get("name", directory.name)),
@@ -311,9 +326,9 @@ def read_manifest(directory: Path) -> dict:
     try:
         entry.update(read_v2(directory) if entry["api"] == 2 else read_v1(directory))
     except ManifestError as exc:
-        entry["error"] = f"插件清单无效：{exc}"
+        entry["error"] = t("plugins.manifest.invalid", exc=exc)
     except (OSError, ValueError, yaml.YAMLError) as exc:
-        entry["error"] = f"插件清单无效（{type(exc).__name__}）"
+        entry["error"] = t("plugins.manifest.invalidNamed", name=type(exc).__name__)
     except Exception:
-        entry["error"] = "插件配置 schema 无效"
+        entry["error"] = t("plugins.manifest.schemaInvalid")
     return entry

@@ -20,18 +20,13 @@ from shiritaibot.adapters.onebot11 import qq_download_url
 from shiritaibot.core import PublicError, canonical
 from shiritaibot.core.logs import get_logger
 from shiritaibot.core.text import IMAGE_REF
-from shiritaibot.i18n import DEFAULT_LOCALE, current_locale
+from shiritaibot.i18n import DEFAULT_LOCALE, Text, active_locale, t
 from shiritaibot.prompts import prompt
 
-log = get_logger("模型")
+log = get_logger("llm.log.mediaSource")
 
 # meme_view results carry this marker; rendering attaches the image or reports an error.
-MEME_VIEW = re.compile(r"\[表情图片 meme=([0-9a-f]{16})\]")
-NO_VISION = canonical(
-    {
-        "error": "当前模型不支持图像输入，meme_view 无法查看表情图片；请改用 meme_search 返回的文字描述"
-    }
-)
+MEME_VIEW = re.compile(r"\[(?:表情图片|Sticker image) meme=([0-9a-f]{16})\]")  # i18n: ok
 # Base64 of this stays within the strictest provider per-image limit (5 MB).
 MAX_IMAGE_BYTES = 3_750_000
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
@@ -54,7 +49,7 @@ def image_part(url: str) -> dict:
 
 
 def view_marker(key: str) -> str:
-    return f"[表情图片 meme={key}]"
+    return t("markers.stickerImage", key=key)
 
 
 def prepare_image(data: bytes) -> bytes | None:
@@ -165,7 +160,7 @@ class ImageResolver:
             try:
                 await asyncio.to_thread(cache)
             except OSError:
-                log.warning("QQ 图片缓存写入失败")
+                log.warning("llm.media.log.cacheFailed")
         return await asyncio.to_thread(model_image, data)
 
     async def _download(self, url: str) -> bytes | None:
@@ -178,20 +173,23 @@ class ImageResolver:
                 async for chunk in response.aiter_bytes(65536):
                     size += len(chunk)
                     if size > MAX_DOWNLOAD_BYTES:
-                        log.warning("QQ 图片超过下载上限")
+                        log.warning("llm.media.log.tooLarge")
                         return None
                     chunks.append(chunk)
         except httpx.HTTPError as exc:
             status = getattr(getattr(exc, "response", None), "status_code", None)
             log.warning(
-                f"图片下载失败（{type(exc).__name__}）"
-                + (f" HTTP {status}" if status else "")
-                + f": {url[:200]}"
+                Text(
+                    "llm.media.log.downloadFailed",
+                    name=type(exc).__name__,
+                    status=f" HTTP {status}" if status else "",
+                    url=url[:200],
+                )
             )
             return None
         prepared = await asyncio.to_thread(prepare_image, b"".join(chunks))
         if prepared is None:
-            log.warning("QQ 图片无法转换成受支持的图像")
+            log.warning("llm.media.log.unsupported")
         return prepared
 
     async def caption(self, ref: str) -> str | None:
@@ -203,7 +201,7 @@ class ImageResolver:
 
     async def _caption(self, ref: str) -> str | None:
         # Captions are written in the conversation's language (docs/I18N.md).
-        locale = current_locale.get()
+        locale = active_locale()
         cached = await self.llm.store.get("image_caption", ref)
         if (
             cached
@@ -231,7 +229,7 @@ class ImageResolver:
                 settings=self.cfg,
             )
         except PublicError as exc:
-            log.warning(f"图像转述失败：{exc}", "vision")
+            log.warning(Text("llm.media.log.captionFailed", exc=exc), "vision")
             return None
         text = " ".join(reply.text.split())[:1000]
         if text:
@@ -274,7 +272,7 @@ class ImageResolver:
                 ref = match[1]
                 text += content[end : match.start()]
                 end = match.end()
-                label = f"[图片 ref={ref}]"
+                label = t("markers.imageLabel", ref=ref)
                 if ref in rendered_refs:
                     text += label
                     continue
@@ -289,7 +287,7 @@ class ImageResolver:
                         text = ""
                     continue
                 caption = await self.caption(ref)
-                text += f"[图片 ref={ref}：{caption or '未附带图片'}]"
+                text += t("markers.imageCaption", ref=ref, caption=caption or t("llm.media.noImage"))
             text += content[end:]
             if not parts:
                 return text
@@ -303,19 +301,21 @@ class ImageResolver:
                 flush()
             if message["role"] == "tool" and isinstance(content, str) and MEME_VIEW.search(content):
                 if not native:
-                    result.append({**message, "content": NO_VISION})
+                    result.append({**message, "content": canonical({"error": t("llm.media.noVision")})})
                     continue
+                notes: dict[str, str] = {}
                 for key in dict.fromkeys(MEME_VIEW.findall(content)):
                     url = await self.meme(key) if key in recent_views else None
                     if url:
-                        note = f"[表情图片 meme={key}，图片附在随后的消息中]"
+                        notes[key] = t("markers.stickerAttached", key=key)
                         attached += [
-                            {"type": "text", "text": f"[meme_view 查看的表情 meme={key}]"},
+                            {"type": "text", "text": t("markers.stickerViewed", key=key)},
                             image_part(url),
                         ]
                     else:
-                        note = f"[表情图片 meme={key}，图片已不再附带]"
-                    content = content.replace(view_marker(key), note)
+                        notes[key] = t("markers.stickerDropped", key=key)
+                # Replace the stored marker in whichever language it was written.
+                content = MEME_VIEW.sub(lambda match: notes[match[1]], content)
                 result.append({**message, "content": content})
                 continue
             if (

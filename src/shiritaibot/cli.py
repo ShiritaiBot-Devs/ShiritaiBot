@@ -13,6 +13,11 @@ import uvicorn
 from uvicorn.config import LOGGING_CONFIG
 from uvicorn.logging import DefaultFormatter
 
+from shiritaibot.i18n import DEFAULT_LOCALE, normalize, t
+
+# The CLI runs before any settings load, so it follows the terminal's language.
+CLI_LOCALE = normalize(os.environ.get("LC_ALL") or os.environ.get("LANG") or "") or DEFAULT_LOCALE
+
 cli = typer.Typer(help="ShiritaiBot · Personal agent runtime")
 
 
@@ -69,13 +74,13 @@ def run(
     home: Path = Path("data"),
     port: int = 8765,
     allowed_host: list[str] = typer.Option(
-        [], help="额外允许的 Host（内网穿透/反向代理域名），可重复；支持 *.example.com"
+        [], help=t("cli.allowedHost", locale=CLI_LOCALE)
     ),
     log_level: str | None = typer.Option(
         None,
-        help="本次运行的 Bot 日志级别：debug / info / warning / error；不填则使用 WebUI 中保存的级别",
+        help=t("cli.logLevel", locale=CLI_LOCALE),
     ),
-    extra: list[str] = typer.Option([], help="启用 Core 可选依赖，例如 --extra learn；可重复"),
+    extra: list[str] = typer.Option([], help=t("cli.extra", locale=CLI_LOCALE)),
 ):
     """Run the local control plane and configured adapters."""
     home = home.resolve()
@@ -88,10 +93,7 @@ def run(
 
     if _port_in_use(port):
         typer.echo(
-            f"端口 {port} 已被占用，可能已经有一个 ShiritaiBot 实例在运行。\n"
-            f"· 打开 http://127.0.0.1:{port} 查看是否就是它；\n"
-            "· 需要停掉旧实例时，关闭运行它的窗口或结束对应的 python/shiritaibot 进程；\n"
-            f"· 或换端口启动：shiritaibot run --port {port + 1}",
+            t("cli.portBusy", locale=CLI_LOCALE, port=port, port2=port, value=port + 1),
             err=True,
         )
         raise typer.Exit(1)
@@ -105,7 +107,7 @@ def run(
 
     try:
         environment = RuntimeEnvironment(home, extras=extra)
-        typer.echo("正在检查 Core 与插件依赖，首次准备运行环境可能需要几分钟……")
+        typer.echo(t("cli.checkingDeps", locale=CLI_LOCALE))
         plan = asyncio.run(environment.prepare(repair=True))
     except PublicError as error:
         typer.echo(str(error), err=True)
@@ -187,8 +189,7 @@ def run(
     except SystemExit:
         if _port_in_use(port):
             typer.echo(
-                f"端口 {port} 已被占用，可能已经有一个 ShiritaiBot 实例在运行。"
-                f"请先关闭旧实例，或换端口启动：shiritaibot run --port {port + 1}",
+                t("cli.portBusyShort", locale=CLI_LOCALE, port=port, value=port + 1),
                 err=True,
             )
             raise typer.Exit(1) from None
@@ -206,7 +207,7 @@ def run(
 @cli.command()
 def sync(
     home: Path = Path("data"),
-    extra: list[str] = typer.Option([], help="启用 Core 可选依赖，例如 --extra learn；可重复"),
+    extra: list[str] = typer.Option([], help=t("cli.extra", locale=CLI_LOCALE)),
 ):
     """Prepare the combined runtime without starting the Bot."""
     import asyncio
@@ -219,7 +220,7 @@ def sync(
     except PublicError as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(1) from None
-    typer.echo(f"运行环境已准备：{plan.directory}")
+    typer.echo(t("cli.runtimeReady", locale=CLI_LOCALE, directory=plan.directory))
     for message in plan.state["errors"].values():
         typer.echo(message, err=True)
 
@@ -227,7 +228,7 @@ def sync(
 @cli.command()
 def token(
     home: Path = Path("data"),
-    create: bool = typer.Option(False, help="目录尚未启动过时生成新令牌"),
+    create: bool = typer.Option(False, help=t("cli.newToken", locale=CLI_LOCALE)),
 ):
     """Display the local admin token for signing into WebUI."""
     from shiritaibot.web import ensure_token
@@ -241,10 +242,10 @@ def token(
         value = path.read_text(encoding="utf-8").strip()
     except OSError as error:
         raise typer.BadParameter(
-            f"无法读取管理令牌：{path}（{error.strerror}）。请使用启动时的 --home 目录。"
+            t("cli.tokenUnreadable", locale=CLI_LOCALE, path=path, strerror=error.strerror)
         ) from error
     if not value:
-        raise typer.BadParameter(f"管理令牌文件为空：{path}")
+        raise typer.BadParameter(t("cli.tokenEmpty", locale=CLI_LOCALE, path=path))
     typer.echo(value)
 
 
@@ -258,7 +259,7 @@ def doctor():
     typer.echo(f"Python {sys.version.split()[0]} · SQLite {sqlite3.sqlite_version}")
     for name in ["bash", "codex", "claude", "dsh", "lark-cli", "node"]:
         typer.echo(f"{name}: {shutil.which(name) or 'not found'}")
-    typer.echo("Windows 的 .cmd/.ps1 入口须改用原生 executable 或 node + CLI.js。")
+    typer.echo(t("cli.windowsEntry", locale=CLI_LOCALE))
 
 
 if __name__ == "__main__":
