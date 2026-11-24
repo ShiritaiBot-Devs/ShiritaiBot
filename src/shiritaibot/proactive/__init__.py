@@ -547,6 +547,15 @@ class ProactiveEngine:
         event = row["event"]
         ctx = Context(PREPARE_SESSION + key, "owner", "agent", True, background=True)
         scoped_routine = False
+        scoped_subagent = False
+        if delegated(event):
+            # Results go back to the session that spawned the run; owner-origin runs
+            # keep the classic background loop and notify the owner.
+            if target := await self.subagent_target(event):
+                origin_ctx = await self.routine_context(target, "", key)
+                if origin_ctx is not None:
+                    ctx = origin_ctx
+                    scoped_subagent = True
         if event["source"] == "routine" and event["kind"] in ROUTINE_KINDS:
             session, actor = await self.routine_origin(row)
             if session != "owner":
@@ -559,7 +568,7 @@ class ProactiveEngine:
                     await self.short_term.record(key, "discarded", reason)
                     return
                 ctx = origin_ctx
-        recipient = "原会话" if scoped_routine else "主人"
+        recipient = "原会话" if scoped_routine or scoped_subagent else "主人"
         must = (
             f"这件事重要性最高，处理完必须通知{recipient}。"
             if decision.importance == 4
@@ -579,19 +588,19 @@ class ProactiveEngine:
         if delegated(event) and event["kind"] == "subagent.needs_input":
             run = event["payload"].get("run_id", "")
             prompt += (
-                "\n\n这是主人委派给子代理的任务，子代理停下来请求输入（见 question）。"
+                f"\n\n这是{recipient}委派给子代理的任务，子代理停下来请求输入（见 question）。"
                 "如果凭任务原文、已有记忆和你能用的工具就能可靠回答，且不涉及只能由主人决定的事"
                 "（花钱、删除或覆盖数据、对外发布或发送、放宽权限、主人的个人偏好），"
                 f"就调用 subagent_send（id={run}）直接回复让它继续，"
-                "再在 proactive_report 里简短告诉主人你替它回答了什么、它已继续运行。"
-                "否则用人设口吻把子代理的问题和已完成的进展转告主人，并说明主人回复后会继续该任务；"
+                f"再在 proactive_report 里简短告诉{recipient}你替它回答了什么、它已继续运行。"
+                f"否则用人设口吻把子代理的问题和已完成的进展转告{recipient}，并说明回复后会继续该任务；"
                 "如果是权限不足，告诉主人可以在子代理配置里放宽哪项权限后再让它继续。"
             )
         elif delegated(event):
             prompt += (
-                "\n\n这是主人刚才在对话中委派给子代理的任务，主人正在等结果。"
+                f"\n\n这是{recipient}刚才在对话中委派给子代理的任务，{recipient}正在等结果。"
                 "无需再用 subagent_list 或 shell 核查，直接根据上面的任务和结果，"
-                "用人设口吻把结论整理好转告主人（失败时说明情况）。"
+                f"用人设口吻把结论整理好转告{recipient}（失败时说明情况）。"
             )
         if event["source"] == "routine" and event["kind"] == "routine.job":
             instructions = event["payload"].get("routine_title", event["title"])
@@ -608,6 +617,17 @@ class ProactiveEngine:
         except Exception as exc:
             event_log(key).error(f"无法启动 Proactive Agent（{type(exc).__name__}）", exc=exc)
             await self.finish(row, "", failed=True)
+
+    async def subagent_target(self, event: dict) -> str:
+        """Session that spawned a delegated subagent run; "" keeps the owner-bound path."""
+        origin = event.get("payload", {}).get("session", "")
+        if not origin or not MAIN_SESSION.fullmatch(origin):
+            return ""
+        cfg = self.config.value
+        owner = origin.startswith("web:") or any(
+            adapter.enabled and origin == adapter.owner_session() for adapter in cfg.adapters
+        )
+        return "" if owner else origin
 
     async def queue(
         self, key: str, source: str, decision: Decision, message: str, *, session: str = ""
@@ -718,6 +738,8 @@ class ProactiveEngine:
         )
         scheduled = row["event"]["source"] == "routine" and row["event"]["kind"] in ROUTINE_KINDS
         session, _ = await self.routine_origin(row) if scheduled else ("", "")
+        if not session:
+            session = await self.subagent_target(row["event"])
         if self.hooks is not None and self.hooks.has("proactive_done"):
             event = row["event"]
             protected = delegated(event) or scheduled
