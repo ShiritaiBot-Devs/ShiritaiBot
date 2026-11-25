@@ -345,7 +345,7 @@ class PluginConfig(Instance):
     settings: dict = Field(default_factory=dict)
 
 
-OFFICIAL_PLUGIN_MARKET = "https://plugin.shiritaibot.dev/api/v1/plugins.json"
+OFFICIAL_PLUGIN_MARKET = "https://plugin.shiritaibot.com/api/v1/plugins.json"
 # https anywhere; plain http only on this machine, for trying a local store.
 MARKET_SOURCE = re.compile(r"(?:https://[^\s/]+|http://(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?)(?:/\S*)?")
 

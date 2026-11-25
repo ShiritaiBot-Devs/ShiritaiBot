@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Download, ExternalLink, RefreshCw } from "lucide-react";
+import { Download, ExternalLink, Info, RefreshCw } from "lucide-react";
 import type { ApiClient } from "../api/client";
 import type {
   IndexText,
@@ -14,7 +14,7 @@ import { EmptyState } from "./EmptyState";
 import { LoadingBar } from "./LoadingBar";
 import { TextFieldList } from "./TextFieldList";
 
-export const OFFICIAL_STORE = "https://plugin.shiritaibot.dev";
+export const OFFICIAL_STORE = "https://plugin.shiritaibot.com";
 export const OFFICIAL_INDEX = OFFICIAL_STORE + "/api/v1/plugins.json";
 const KINDS = new Set([
   "data_sharing",
@@ -117,7 +117,7 @@ function InstallDialog({
         aria-label={i18n.t("market:confirm.notices")}
       >
         <h4>
-          {entry.disclosures.length > 0 && <AlertTriangle size={15} />}
+          {entry.disclosures.length > 0 && <Info size={14} />}
           {i18n.t("market:confirm.notices")}
         </h4>
         {entry.disclosures.length ? (
@@ -303,15 +303,15 @@ export function PluginMarket({
                       {i18n.t("market:by", { author: entry.author })}
                     </span>
                     {entry.disclosures.length > 0 && (
-                      <span className="tag market-notice-tag">
-                        <AlertTriangle size={12} />
+                      <span className="tag market-info-tag">
+                        <Info size={11} />
                         {i18n.t("market:notices", {
                           count: entry.disclosures.length,
                         })}
                       </span>
                     )}
                     {!entry.compatible && (
-                      <span className="tag market-notice-tag">
+                      <span className="tag market-warning-tag">
                         {i18n.t("market:incompatible", {
                           range: entry.shiritaibot_version,
                         })}

@@ -1697,10 +1697,14 @@ button.subscription-sign-in:hover:not(:disabled) {
   font-size: 12px;
 }
 
-.tag.market-notice-tag {
+/* Notices are information: a plain tag. Only an incompatible version is a warning. */
+.tag.market-info-tag {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.tag.market-warning-tag {
   color: var(--warning-ink);
   border-color: var(--warning-solid);
 }
@@ -1718,7 +1722,11 @@ button.subscription-sign-in:hover:not(:disabled) {
 }
 
 .market-notices.has-notices {
-  border-left: 3px solid var(--warning-solid);
+  border-left: 3px solid var(--border-strong);
+}
+
+.market-notices h4 svg {
+  color: var(--muted);
 }
 
 .market-notices h4 {

@@ -32,7 +32,7 @@ Plugins run in the same process and count as trusted local code; this is not a s
 
 ## Plugin market
 
-**Plugins → Market** lists plugins from plugin markets. The official market is [plugin.shiritaibot.dev](https://plugin.shiritaibot.dev): an AI reviews the code of every listed version and a maintainer approves it. Submitting and publishing happen on the website; the WebUI only lists and installs.
+**Plugins → Market** lists plugins from plugin markets. The official market is [plugin.shiritaibot.com](https://plugin.shiritaibot.com): an AI reviews the code of every listed version and a maintainer approves it. Submitting and publishing happen on the website; the WebUI only lists and installs.
 
 - **Browsing**: search by name, description, author and tag; installed plugins show the installed version. Plugin details follow the interface language.
 - **Notices before installing**: **Install** first shows the notices from the review (for example, conversation data sent to a third-party server, or an external account required) and the reminder that plugins have no sandbox. Nothing is installed until you confirm.

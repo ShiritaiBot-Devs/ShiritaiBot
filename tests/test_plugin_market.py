@@ -44,7 +44,7 @@ def entry(**changes):
                 "location": "main.py:16",
             }
         ],
-        "page": "https://plugin.shiritaibot.dev/plugins/weather",
+        "page": "https://plugin.shiritaibot.com/plugins/weather",
     }
     return {**base, **changes}
 
@@ -54,7 +54,7 @@ def index(*entries):
         "format": "shiritaibot-plugin-index",
         "version": 1,
         "generated_at": "2026-11-25T08:00:00Z",
-        "store": "https://plugin.shiritaibot.dev",
+        "store": "https://plugin.shiritaibot.com",
         "plugins": list(entries),
     }
 
@@ -138,7 +138,7 @@ def test_index_validation_keeps_good_entries_and_drops_bad_ones():
 def test_sources_are_cached_merged_and_fall_back_to_the_last_good_copy(tmp_path, monkeypatch):
     web = FakeWeb()
     web.install(monkeypatch)
-    first = "https://plugin.shiritaibot.dev/api/v1/plugins.json"
+    first = "https://plugin.shiritaibot.com/api/v1/plugins.json"
     second = "https://mirror.example/plugins.json"
     web.indexes[first] = index(entry())
     web.indexes[second] = index(entry(name="Mirror copy"), entry(id="calendar", name="Calendar"))
