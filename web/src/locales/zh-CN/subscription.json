@@ -17,6 +17,7 @@
   "redownload": "重新下载授权助手",
   "limitHit": "最近一次调用达到使用上限，请在 ChatGPT 查看适用的限额。",
   "saveFirst": "保存配置后即可连接部署者的 ChatGPT 账号。",
+  "accountWarning": "尽管我们使用的是ChatGPT官方的第三方Agent接口，ShiritaiBot仍然不能保证不会存在被OpenAI误封号的可能性。我们强烈建议仅将OpenAI Subscription提供商的模型限定在你自己的私聊内部使用。",
   "viewUsage": "查看 ChatGPT 用量",
   "disconnected": "未连接",
   "expired": "授权已失效，请重新连接",

@@ -18,6 +18,7 @@
   "redownload": "Download the authorization helper again",
   "limitHit": "The latest call hit a usage limit. Check which limits apply in ChatGPT.",
   "saveFirst": "Save the settings first, then connect the deployer's ChatGPT account.",
+  "accountWarning": "Although ShiritaiBot uses ChatGPT's official interface for third-party agents, OpenAI may still suspend your account by mistake. We strongly recommend using models from the OpenAI Subscription provider only in your own private chats.",
   "viewUsage": "View ChatGPT usage",
   "disconnected": "Not connected",
   "expired": "Authorization expired. Reconnect.",
