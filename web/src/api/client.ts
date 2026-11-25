@@ -26,6 +26,7 @@ import type {
   ModelTestResult,
   McpServerStatus,
   PluginInfo,
+  PluginMarketListing,
   ProviderConfig,
   RecordKind,
   RecordMap,
@@ -187,7 +188,12 @@ export interface ApiClient {
   reloadPlugins(): Promise<PluginInfo[]>;
   reloadPlugin(id: string): Promise<PluginInfo[]>;
   installPluginZip(id: string, file: File): Promise<PluginInfo[]>;
-  installPluginGithub(id: string, url: string): Promise<PluginInfo[]>;
+  installPluginGithub(
+    id: string,
+    url: string,
+    commit?: string,
+  ): Promise<PluginInfo[]>;
+  pluginMarket(refresh?: boolean): Promise<PluginMarketListing>;
   removePlugin(id: string): Promise<PluginInfo[]>;
   skills(): Promise<SkillInfo[]>;
   skill(name: string): Promise<SkillDetail>;
@@ -547,8 +553,16 @@ export function createClient(getToken: () => string): ApiClient {
         "POST",
         file,
       ),
-    installPluginGithub: (id, url) =>
-      request<PluginInfo[]>("/plugins/install/github", "POST", { id, url }),
+    installPluginGithub: (id, url, commit) =>
+      request<PluginInfo[]>(
+        "/plugins/install/github",
+        "POST",
+        commit ? { id, url, commit } : { id, url },
+      ),
+    pluginMarket: (refresh = false) =>
+      request<PluginMarketListing>(
+        "/plugins/market" + (refresh ? "?refresh=true" : ""),
+      ),
     removePlugin: (id) =>
       request<PluginInfo[]>("/plugins/" + encodeURIComponent(id), "DELETE"),
     skills: () => request<SkillInfo[]>("/skills"),

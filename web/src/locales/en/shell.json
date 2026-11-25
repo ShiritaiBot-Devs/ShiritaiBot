@@ -90,7 +90,7 @@
     },
     "plugins": {
       "label": "Plugins",
-      "subtitle": "Turn plugins on or off, configure them, and reload them."
+      "subtitle": "Install plugins from the market, turn them on or off, configure them, and reload them."
     },
     "approvals": {
       "label": "Capabilities & Permissions",

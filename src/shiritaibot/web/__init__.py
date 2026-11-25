@@ -41,6 +41,7 @@ from shiritaibot.i18n import Text, localize, normalize, t, use_locale
 from shiritaibot.llm.subscription import LOGIN_SECONDS
 from shiritaibot.llm.subscription import PROTOCOL as SUBSCRIPTION_PROTOCOL
 from shiritaibot.meme.core import MAX_MEME_BYTES
+from shiritaibot.plugin.core.market import MARKET_ERRORS, PluginMarket
 from shiritaibot.plugin.core.packages import MAX_ARCHIVE, download_github, validate_id
 from shiritaibot.routine import RoutineItem
 from shiritaibot.skill import MAX_ARCHIVE as MAX_SKILL_ARCHIVE
@@ -115,6 +116,8 @@ class UpdateInput(Model):
 class PluginRepositoryInput(Model):
     id: str = Field(pattern=r"^[a-z0-9_]{1,64}$")
     url: str = Field(max_length=300)
+    # A pinned commit, as the plugin market lists it; without one the default branch is used.
+    commit: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
 
 
 def ensure_token(home: Path) -> str:
@@ -164,6 +167,7 @@ def create_app(
     manager = logs.LogManager(home, log_level)
     web_log = logs.get_logger("WebUI")
     exchange_rates = ExchangeRates()
+    market = PluginMarket(home)
     instance_id = secrets.token_hex(16)
     restarting = False
 
@@ -903,10 +907,17 @@ def create_app(
         async with runtime.configure_lock:
             return await runtime.plugins.reload_all()
 
+    @api.get("/api/plugins/market", dependencies=protected)
+    async def plugin_market(refresh: bool = False):
+        result = await market.listing(runtime.config.value.plugin_market.sources, refresh)
+        for source in result["sources"]:
+            source["error"] = t(MARKET_ERRORS[source["error"]]) if source["error"] else ""
+        return result
+
     @api.post("/api/plugins/install/github", dependencies=protected)
     async def install_github_plugin(body: PluginRepositoryInput):
         validate_id(body.id)
-        archive = await download_github(body.url)
+        archive = await download_github(body.url, body.commit)
         async with runtime.configure_lock:
             return await runtime.plugins.install(body.id, archive)
 

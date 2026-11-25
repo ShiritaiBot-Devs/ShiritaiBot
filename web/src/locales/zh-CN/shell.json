@@ -90,7 +90,7 @@
     },
     "plugins": {
       "label": "插件",
-      "subtitle": "插件启停、配置和重载。"
+      "subtitle": "从插件市场安装插件，启停、配置和重载。"
     },
     "approvals": {
       "label": "能力与权限",

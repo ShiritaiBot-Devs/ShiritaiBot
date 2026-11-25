@@ -42,5 +42,7 @@
   "memoryProfiles": {
     "default": "Default memory",
     "feishu": "Feishu memory"
-  }
+  },
+  "marketSource": "Plugin market sources must be https URLs (http://127.0.0.1 for local testing): {url}",
+  "marketSourceCount": "At most 10 plugin market sources"
 }

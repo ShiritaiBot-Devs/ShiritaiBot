@@ -42,5 +42,7 @@
   "memoryProfiles": {
     "default": "默认记忆库",
     "feishu": "飞书记忆库"
-  }
+  },
+  "marketSource": "插件市场来源必须是 https 地址（本机测试可用 http://127.0.0.1）：{url}",
+  "marketSourceCount": "插件市场来源最多 10 个"
 }

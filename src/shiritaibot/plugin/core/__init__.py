@@ -29,6 +29,13 @@ from .packages import install_archive, remove_directory
 log = get_logger("plugins.log.source")
 
 
+def error_text(exc: PublicError) -> Text:
+    """A PublicError as Text, so it renders in the language of whoever reads it later."""
+    if len(exc.args) == 1 and isinstance(exc.args[0], str):
+        return Text(exc.args[0], **exc.params)
+    return Text(str(exc))
+
+
 class PluginManager:
     def __init__(self, home, config, registry, vault, store, emit):
         self.home, self.config, self.registry, self.vault, self.store, self.emit = (
@@ -41,7 +48,8 @@ class PluginManager:
         )
         self.loaded: dict = {}
         self.locks: dict[str, asyncio.Lock] = {}
-        self.errors: dict[str, str] = {}
+        # Rendered when listed, so each viewer reads them in their own language.
+        self.errors: dict[str, Text] = {}
         self.modules: dict[str, str] = {}
         self.manage_lock = asyncio.Lock()
         self.dependencies = RuntimeEnvironment(self.home)
@@ -220,7 +228,7 @@ class PluginManager:
         for meta in await self.discover():
             key = meta["id"]
             cfg = configs.get(key, PluginConfig(id=key))
-            error = meta.get("error") or self.errors.get(key, "") or dependency_errors.get(key, "")
+            error = meta.get("error") or str(self.errors.get(key, "")) or dependency_errors.get(key, "")
             if not error and plan and not plan.supports(key, current):
                 error = t("plugins.restartNeeded")
             status = "loaded" if key in self.loaded else "disabled"
@@ -282,7 +290,7 @@ class PluginManager:
             except Exception as exc:
                 # Keep code so a declaration can be fixed or a prepared environment activated.
                 if isinstance(exc, PublicError):
-                    self.errors[key] = str(exc)
+                    self.errors[key] = error_text(exc)
                 log.error(Text("plugins.log.notLoaded", key=key, reason=self.errors.get(key, t("plugins.loadFailed"))))
             return await self.listing()
 
@@ -338,13 +346,13 @@ class PluginManager:
         except Exception as exc:
             # Never expose arbitrary exception text, which may contain plugin credentials.
             message = (
-                str(exc)
+                error_text(exc)
                 if isinstance(exc, PublicError)
-                else t("plugins.missingModule", name=exc.name)
+                else Text("plugins.missingModule", name=exc.name)
                 if isinstance(exc, ModuleNotFoundError)
                 and exc.name
                 and re.fullmatch(r"[A-Za-z_][\w.]{0,199}", exc.name)
-                else t("plugins.loadFailedNamed", name=type(exc).__name__)
+                else Text("plugins.loadFailedNamed", name=type(exc).__name__)
             )
             self.errors[key] = message
             log.error(Text("plugins.log.loadFailed", key=key, message=message))

@@ -1,0 +1,60 @@
+{
+  "tabs": {
+    "label": "Plugins",
+    "installed": "Installed",
+    "market": "Market"
+  },
+  "title": "Plugin market",
+  "intro": "Plugins that passed an AI code review and a maintainer's approval. Installing downloads the approved commit from GitHub. To submit or publish a plugin, use the plugin store website.",
+  "website": "Open the plugin store",
+  "refresh": "Refresh",
+  "refreshed": "Plugin market refreshed",
+  "loading": "Loading the plugin market…",
+  "search": "Search plugins",
+  "searchPlaceholder": "Name, description, author or tag",
+  "empty": "The plugin market has no plugins yet.",
+  "noMatch": "No plugins match “{query}”.",
+  "count_one": "{count} plugin",
+  "count_other": "{count} plugins",
+  "by": "by {author}",
+  "installedTag": "Installed {version}",
+  "notices_one": "{count} notice",
+  "notices_other": "{count} notices",
+  "incompatible": "Needs framework {range}",
+  "install": "Install",
+  "viewPage": "View on the website",
+  "installed": "Plugin installed. Configure and enable it under Installed.",
+  "confirm": {
+    "dialog": "Confirm plugin install",
+    "title": "Install {name}?",
+    "source": "Downloads {repo} at commit {commit} (version {version}) from GitHub and installs it as {id}.",
+    "notices": "Before you install",
+    "noticesLead": "The review found the behaviour below. It isn't necessarily harmful, but you may want to know first.",
+    "noNotices": "The review found nothing users need to be told about.",
+    "sandbox": "Plugins run inside the bot's process with no sandbox and the same permissions as the bot. Only install plugins you trust.",
+    "incompatible": "This plugin needs framework version {range}; this version may not be able to load it.",
+    "location": "Where: {location}",
+    "install": "Install",
+    "cancel": "Cancel"
+  },
+  "kinds": {
+    "data_sharing": "Data sent to a third party",
+    "telemetry": "Telemetry",
+    "external_account": "External account required",
+    "paid_service": "Paid service",
+    "file_access": "Files outside its folder",
+    "network": "Network access",
+    "system": "System changes",
+    "other": "Other"
+  },
+  "sources": {
+    "title": "Plugin sources",
+    "label": "Plugin index URLs",
+    "hint": "One plugin index URL per line; takes effect once saved. When two sources list the same ID, the one higher up wins. Whatever the source, plugin code is only downloaded from GitHub.",
+    "reset": "Use the official source",
+    "stale": "Couldn't read {url} ({error}); showing the copy cached at {time}.",
+    "failed": "Couldn't read {url} ({error}), and there is no cached copy.",
+    "dropped_one": "{count} entry in {url} has the wrong format and was skipped.",
+    "dropped_other": "{count} entries in {url} have the wrong format and were skipped."
+  }
+}

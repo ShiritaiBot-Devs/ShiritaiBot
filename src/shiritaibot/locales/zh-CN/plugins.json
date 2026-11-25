@@ -87,6 +87,16 @@
     "invalid": "插件 ZIP 无效，请检查清单、配置定义和 Python 入口",
     "githubFailed": "GitHub 下载失败，请检查仓库是否公开、网络连接和 API 访问限额",
     "layout": "ZIP 中应包含一个插件及其 metadata.yaml 或 plugin.toml",
-    "githubUrl": "请填写公开 GitHub 仓库地址：https://github.com/作者/仓库"
+    "githubUrl": "请填写公开 GitHub 仓库地址：https://github.com/作者/仓库",
+    "githubCommit": "提交必须是 40 位小写十六进制的 Git 提交 ID"
+  },
+  "market": {
+    "network": "无法连接",
+    "http": "服务器返回错误",
+    "json": "返回的内容不是 JSON",
+    "index_format": "不是 ShiritaiBot 插件索引",
+    "index_version": "索引版本不受支持，请更新 ShiritaiBot",
+    "index_size": "索引超过 5 MiB",
+    "cache": "无法写入本地缓存"
   }
 }

@@ -107,18 +107,23 @@ def remove_directory(root: Path, key: str) -> None:
         shutil.rmtree(directory)
 
 
-async def download_github(url: str) -> bytes:
+async def download_github(url: str, commit: str | None = None) -> bytes:
+    """The ZIP of a public GitHub repository: its default branch, or ``commit`` when given
+    (the plugin market pins the reviewed commit). Only github.com URLs are accepted."""
     match = re.fullmatch(
         r"https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?", url.strip()
     )
     if not match or any(p in {".", ".."} for p in match.groups()):
         raise PublicError("plugins.packages.githubUrl")
+    if commit is not None and not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise PublicError("plugins.packages.githubCommit")
     owner, repo = match.groups()
+    ref = f"/{commit}" if commit else ""
     try:
         async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
             async with client.stream(
                 "GET",
-                f"https://api.github.com/repos/{owner}/{repo}/zipball",
+                f"https://api.github.com/repos/{owner}/{repo}/zipball{ref}",
                 headers={"Accept": "application/vnd.github+json"},
             ) as response:
                 response.raise_for_status()

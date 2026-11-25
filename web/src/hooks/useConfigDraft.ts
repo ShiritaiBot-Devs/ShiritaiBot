@@ -63,6 +63,8 @@ export function useConfigDraft(client: ApiClient | null) {
       ["knowledge-document"],
       ["history"],
       ["memory-detail"],
+      // The market lists the saved sources.
+      ["plugin-market"],
     ];
     await Promise.all(
       keys.map((queryKey) => queryClient.cancelQueries({ queryKey })),

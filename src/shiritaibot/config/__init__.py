@@ -345,6 +345,27 @@ class PluginConfig(Instance):
     settings: dict = Field(default_factory=dict)
 
 
+OFFICIAL_PLUGIN_MARKET = "https://plugin.shiritaibot.dev/api/v1/plugins.json"
+# https anywhere; plain http only on this machine, for trying a local store.
+MARKET_SOURCE = re.compile(r"(?:https://[^\s/]+|http://(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?)(?:/\S*)?")
+
+
+class PluginMarketConfig(Model):
+    # Plugin index URLs (docs/PLUGINS.md "Plugin market"); the first source wins on duplicate IDs.
+    sources: list[str] = Field(default_factory=lambda: [OFFICIAL_PLUGIN_MARKET])
+
+    @field_validator("sources")
+    @classmethod
+    def sources_valid(cls, value: list[str]) -> list[str]:
+        value = list(dict.fromkeys(item.strip() for item in value if item.strip()))
+        if len(value) > 10:
+            raise ValueError(t("config.marketSourceCount"))
+        for item in value:
+            if len(item) > 500 or not MARKET_SOURCE.fullmatch(item):
+                raise ValueError(t("config.marketSource", url=item))
+        return value
+
+
 SKILL_NAME = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 ToolRisk = Literal["safe", "normal", "sensitive", "dangerous"]
 
@@ -868,6 +889,7 @@ class Settings(Model):
     adapters: list[AdapterConfig] = Field(default_factory=list)
     subagents: list[SubagentConfig] = Field(default_factory=list)
     plugins: list[PluginConfig] = Field(default_factory=list)
+    plugin_market: PluginMarketConfig = Field(default_factory=PluginMarketConfig)
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
     mcp_servers: list[McpServerConfig] = Field(default_factory=list)
     policy: Policy = Field(default_factory=Policy)

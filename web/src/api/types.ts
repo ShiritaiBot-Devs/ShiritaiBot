@@ -204,6 +204,59 @@ export interface SkillsConfig {
   disabled: string[];
 }
 
+export interface PluginMarketConfig {
+  /** Plugin index URLs; the first source wins when two list the same ID. */
+  sources: string[];
+}
+
+/** Text in a plugin index: plain, or per language (`{"zh-CN": …, "en": …}`). */
+export type IndexText = string | Record<string, string>;
+
+export interface MarketDisclosure {
+  kind: string;
+  text: IndexText;
+  location: string;
+}
+
+/** One approved plugin version from a market index (docs/PLUGINS.md "Plugin market"). */
+export interface MarketPlugin {
+  id: string;
+  name: IndexText;
+  description: IndexText;
+  short_description: IndexText;
+  author: string;
+  owner: string;
+  repo: string;
+  version: string;
+  tag: string;
+  commit: string;
+  api: 1 | 2;
+  tags: string[];
+  support_platforms: string[];
+  shiritaibot_version: string;
+  /** Whether this bot's version is in `shiritaibot_version`. */
+  compatible: boolean;
+  updated_at: string;
+  disclosures: MarketDisclosure[];
+  page: string;
+  source: string;
+}
+
+export interface MarketSource {
+  url: string;
+  count: number;
+  dropped: number;
+  fetched_at: string;
+  /** The source failed and its last cached copy (if any) is shown. */
+  stale: boolean;
+  error: string;
+}
+
+export interface PluginMarketListing {
+  plugins: MarketPlugin[];
+  sources: MarketSource[];
+}
+
 export type ToolRisk = "safe" | "normal" | "sensitive" | "dangerous";
 
 export interface McpServerConfig extends Instance {
@@ -530,6 +583,7 @@ export interface Settings {
   adapters: AdapterConfig[];
   subagents: SubagentConfig[];
   plugins: PluginConfig[];
+  plugin_market: PluginMarketConfig;
   skills: SkillsConfig;
   mcp_servers: McpServerConfig[];
   policy: Policy;

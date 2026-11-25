@@ -1,0 +1,57 @@
+{
+  "tabs": {
+    "label": "插件",
+    "installed": "已安装",
+    "market": "插件市场"
+  },
+  "title": "插件市场",
+  "intro": "这里列出经过 AI 代码审查和维护者批准的插件，点击安装会从 GitHub 下载批准的那个提交。提交和发布插件请前往插件市场网站。",
+  "website": "打开插件市场网站",
+  "refresh": "刷新",
+  "refreshed": "插件市场已刷新",
+  "loading": "正在读取插件市场…",
+  "search": "搜索插件",
+  "searchPlaceholder": "名称、简介、作者或标签",
+  "empty": "插件市场里还没有插件。",
+  "noMatch": "没有符合「{query}」的插件。",
+  "count_other": "共 {count} 个插件",
+  "by": "作者 {author}",
+  "installedTag": "已安装 {version}",
+  "notices_other": "{count} 项须知",
+  "incompatible": "需要框架 {range}",
+  "install": "安装",
+  "viewPage": "在网站上查看",
+  "installed": "插件已安装。请到「已安装」里配置并启用它。",
+  "confirm": {
+    "dialog": "确认安装插件",
+    "title": "安装 {name}？",
+    "source": "将从 GitHub 下载 {repo} 在提交 {commit} 上的代码（版本 {version}），安装为 {id}。",
+    "notices": "安装前须知",
+    "noticesLead": "审查发现了下面这些行为。它们本身不一定有害，但你可能想先了解。",
+    "noNotices": "审查没有发现需要特别告知的行为。",
+    "sandbox": "插件在机器人进程里运行，没有沙箱，拥有和机器人相同的权限。只安装你信任的插件。",
+    "incompatible": "这个插件要求框架版本 {range}，当前版本可能无法加载它。",
+    "location": "代码位置：{location}",
+    "install": "确认安装",
+    "cancel": "取消"
+  },
+  "kinds": {
+    "data_sharing": "数据发往第三方",
+    "telemetry": "遥测",
+    "external_account": "需要外部账号",
+    "paid_service": "付费服务",
+    "file_access": "访问插件目录外的文件",
+    "network": "网络访问",
+    "system": "系统操作",
+    "other": "其他"
+  },
+  "sources": {
+    "title": "插件来源",
+    "label": "插件索引地址",
+    "hint": "每行一个插件索引地址，保存后生效。多个来源有相同 ID 时使用排在前面的。不论来源是哪里，插件代码都只从 GitHub 下载。",
+    "reset": "恢复官方来源",
+    "stale": "{url} 暂时无法读取（{error}），显示的是 {time} 的缓存。",
+    "failed": "{url} 无法读取（{error}），也没有缓存。",
+    "dropped_other": "{url} 中有 {count} 个条目格式不对，已忽略。"
+  }
+}

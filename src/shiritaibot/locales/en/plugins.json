@@ -91,6 +91,16 @@
     "invalid": "Invalid plugin ZIP. Check the manifest, settings definition, and Python entry point.",
     "githubFailed": "GitHub download failed. Check that the repository is public, the network connection, and the API rate limit.",
     "layout": "The ZIP should contain one plugin with its metadata.yaml or plugin.toml",
-    "githubUrl": "Enter a public GitHub repository URL: https://github.com/owner/repo"
+    "githubUrl": "Enter a public GitHub repository URL: https://github.com/owner/repo",
+    "githubCommit": "The commit must be a 40-character lowercase hexadecimal Git commit ID"
+  },
+  "market": {
+    "network": "Couldn't connect",
+    "http": "The server returned an error",
+    "json": "The response isn't JSON",
+    "index_format": "Not a ShiritaiBot plugin index",
+    "index_version": "Unsupported index version; update ShiritaiBot",
+    "index_size": "The index is larger than 5 MiB",
+    "cache": "Couldn't write the local cache"
   }
 }

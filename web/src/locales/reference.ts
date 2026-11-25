@@ -15,6 +15,7 @@ import feishu from "./zh-CN/feishu.json";
 import fields from "./zh-CN/fields.json";
 import knowledge from "./zh-CN/knowledge.json";
 import logs from "./zh-CN/logs.json";
+import market from "./zh-CN/market.json";
 import mcp from "./zh-CN/mcp.json";
 import memes from "./zh-CN/memes.json";
 import memory from "./zh-CN/memory.json";
@@ -44,6 +45,7 @@ export const reference = {
   fields,
   knowledge,
   logs,
+  market,
   mcp,
   memes,
   memory,
