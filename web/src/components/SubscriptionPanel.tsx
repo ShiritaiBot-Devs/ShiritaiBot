@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { TriangleAlert } from "lucide-react";
 import { Trans } from "react-i18next";
 import type { ApiClient } from "../api/client";
 import type { SubscriptionUsage } from "../api/types";
@@ -108,6 +109,10 @@ export function SubscriptionPanel({
           <a href={USAGE_URL} target="_blank" rel="noreferrer">
             {i18n.t("subscription:viewUsage")}
           </a>
+        </div>
+        <div className="subscription-warning" role="note">
+          <TriangleAlert size={16} aria-hidden="true" />
+          <p>{i18n.t("subscription:accountWarning")}</p>
         </div>
         {query.isError && <QueryErrorNotice message={query.error.message} />}
         {query.data?.saved === false && (

@@ -747,6 +747,29 @@
   overflow-wrap: anywhere;
 }
 
+.subscription-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--warning-solid);
+  border-radius: var(--radius-sm);
+  background: #fefce8;
+  color: var(--warning-ink);
+}
+
+.subscription-warning svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+.subscription-warning p {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 button.subscription-sign-in {
   min-height: 36px;
   gap: 9px;

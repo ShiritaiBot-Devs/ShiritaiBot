@@ -59,7 +59,10 @@ export function AppShell({
             <img src="/icon.png" alt="" />
           </span>
           <span>
-            ShiritaiBot<small>{t("brand.console")}</small>
+            <span className="brand-name">
+              Shiritai<span>Bot</span>
+            </span>
+            <small>{t("brand.console")}</small>
           </span>
         </a>
         <nav aria-label={t("nav.main")}>

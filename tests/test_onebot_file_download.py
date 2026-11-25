@@ -14,8 +14,11 @@ from shiritaibot.core import PublicError, session_dir
 from shiritaibot.tools import qq
 
 
-def test_download_napcat_file_from_base64_without_a_usable_url(tmp_path, monkeypatch):
+@pytest.mark.parametrize("with_filename", [False, True], ids=["bare-id", "id-and-filename"])
+def test_download_napcat_file_from_base64_without_a_usable_url(tmp_path, monkeypatch, with_filename):
     session = "private:qq:42"
+    ref_id = "ff69cd8d2a4044cebff91d59def38162"
+    ref = f" {ref_id}: attachment.csv " if with_filename else ref_id
     payload = b"test QQ attachment\n" * 75000
     encoded = base64.b64encode(payload).decode("ascii")
     config = SimpleNamespace(id="qq", self_id="", token="secret:qq", url="ws://127.0.0.1:3001")
@@ -33,9 +36,10 @@ def test_download_napcat_file_from_base64_without_a_usable_url(tmp_path, monkeyp
             "file_size": str(len(payload)),
         },
     }
+    records = {("qq_file", ref_id): row}
     app = SimpleNamespace(
         home=tmp_path,
-        store=SimpleNamespace(get=AsyncMock(return_value=row)),
+        store=SimpleNamespace(get=AsyncMock(side_effect=lambda kind, key: records.get((kind, key)))),
         adapters=SimpleNamespace(instances={"qq": bot}),
     )
 
@@ -75,10 +79,11 @@ def test_download_napcat_file_from_base64_without_a_usable_url(tmp_path, monkeyp
     monkeypatch.setattr(onebot11, "connect", connect)
 
     async def run():
-        with pytest.raises(PublicError, match="不属于当前会话"):
-            await qq.download_qq_file(app, "private:qq:99", "ref")
+        with pytest.raises(PublicError, match="在当前会话中找不到该文件引用"):
+            await qq.download_qq_file(app, "private:qq:99", ref)
+        app.store.get.assert_awaited_once_with("qq_file", ref_id)
         bot.call.assert_not_awaited()
-        return await qq.download_qq_file(app, session, "ref")
+        return await qq.download_qq_file(app, session, ref)
 
     result = asyncio.run(run())
     bot.call.assert_awaited_once_with("get_private_file_url", {"file_id": "platform-id"})
