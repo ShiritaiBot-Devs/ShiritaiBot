@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Manrope Variable";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/fonts/manrope-latin-wght-normal.woff2") format("woff2");
+}
+
 .layout {
   display: flex;
   min-height: 100vh;
@@ -23,17 +31,29 @@ aside {
   gap: 10px;
   align-items: center;
   padding: 0 8px;
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.4px;
   color: var(--text);
   text-decoration: none;
+}
+
+.brand-name {
+  display: block;
+  font-family: "Manrope Variable", sans-serif;
+  font-size: 25px;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.brand-name > span {
+  font-weight: 450;
 }
 
 .brand small {
   display: block;
   margin-top: 2px;
   font-size: 10px;
+  font-weight: 600;
   letter-spacing: 1px;
   color: var(--muted);
 }
