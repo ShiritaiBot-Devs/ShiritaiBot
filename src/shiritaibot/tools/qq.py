@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -33,8 +34,14 @@ ADAPTER = {
 }
 ID = {"type": "integer", "minimum": 1}
 MESSAGE_ID = {"type": "integer", "description": "tools.qq.param.messageId"}
-TARGET = {"type": "string", "enum": ["private", "group"]}
-CHAT = {"target": TARGET, "id": {**ID, "description": "tools.qq.param.target"}}
+CHAT = {
+    "target": {
+        "type": "string",
+        "enum": ["current", "private", "group"],
+        "description": "tools.qq.param.chatTarget",
+    },
+    "id": {**ID, "description": "tools.qq.param.target"},
+}
 AT = {"anyOf": [ID, {"type": "string", "enum": ["all"]}]}
 PATH = {
     "type": "string",
@@ -118,9 +125,14 @@ async def qq_file_source(bot: OneBot, group_id: str, data: dict) -> str | bytes:
 
 async def download_qq_file(app, session: str, ref: str) -> dict:
     """Fetch a session-bound QQ file reference into the session's download folder."""
+    ref = ref.strip()
+    # The model can copy the filename along with the ID from the attachment marker.
+    ref_with_name = re.match(r"([0-9a-f]{32})\s*:", ref)
+    if ref_with_name:
+        ref = ref_with_name[1]
     row = await app.store.get("qq_file", ref)
     if not row or row["scope"] != session:
-        raise PublicError("tools.qq.refOtherSession")
+        raise PublicError("tools.qq.fileRefUnavailable")
     bot = app.adapters.instances.get(row["adapter"])
     if not isinstance(bot, OneBot):
         raise PublicError("tools.qq.adapterUnavailable")
@@ -201,18 +213,38 @@ def qq_tools(app) -> list[Tool]:
     def own_chat(ctx: Context) -> tuple[str, str] | None:
         """The chat this session belongs to, as (private|group, id)."""
         parts = ctx.session.split(":")
-        if len(parts) == 3 and parts[0] in {"private", "group"}:
+        if len(parts) == 3 and parts[0] in {"private", "group"} and re.fullmatch(r"[1-9][0-9]*", parts[2]):
             return parts[0], parts[2]
         return None
 
-    def read_bot_for(ctx: Context):
-        # Read-only message access rides the session's own adapter, without owner privileges.
-        instances = {key: bot for key, bot in app.adapters.instances.items() if isinstance(bot, OneBot)}
-        parts = ctx.session.split(":")
-        bot = instances.get(parts[1]) if len(parts) == 3 else None
-        if not isinstance(bot, OneBot) or bot.status != "connected":
-            raise PublicError("会话所属 OneBot 实例不可用")
+    def own_private(ctx: Context) -> tuple[str, str] | None:
+        scope = own_chat(ctx)
+        if not ctx.group and not ctx.background and scope == ("private", ctx.actor):
+            return scope
+        return None
+
+    def session_bot(ctx: Context) -> OneBot | None:
+        if own_chat(ctx) is None:
+            return None
+        bot = app.adapters.instances.get(ctx.session.split(":")[1])
+        return bot if isinstance(bot, OneBot) and bot.status == "connected" else None
+
+    def chat_bot_for(ctx: Context) -> OneBot:
+        bot = session_bot(ctx)
+        if bot is None:
+            raise PublicError("tools.qq.sessionAdapterUnavailable")
         return bot
+
+    def can_operate_account(ctx: Context) -> bool:
+        return owner_agent(ctx) and connected(ctx)
+
+    def can_send_to_chat(ctx: Context) -> bool:
+        return can_operate_account(ctx) or (
+            own_private(ctx) is not None and session_bot(ctx) is not None
+        )
+
+    def can_read_chat(ctx: Context) -> bool:
+        return can_send_to_chat(ctx) or (ctx.mode == "agent" and session_bot(ctx) is not None)
 
     def bot_for(ctx: Context, args: dict):
         owner_only(ctx)
@@ -236,6 +268,22 @@ def qq_tools(app) -> list[Tool]:
             raise PublicError("tools.qq.adapterMissing", adapter=adapter)
         return bot
 
+    def chat_destination(ctx: Context, args: dict, *, sending: bool) -> tuple[OneBot, str, int]:
+        target = args.get("target", "current")
+        if owner_agent(ctx) and target != "current":
+            if "id" not in args:
+                raise PublicError("tools.qq.targetIdRequired")
+            return bot_for(ctx, args), target, args["id"]
+
+        scope = own_private(ctx) if sending and not owner_agent(ctx) else own_chat(ctx)
+        if scope is None or (
+            target not in ("current", scope[0])
+            or ("id" in args and str(args["id"]) != scope[1])
+            or ("adapter" in args and args["adapter"] != ctx.session.split(":")[1])
+        ):
+            raise PublicError("tools.qq.sendToOwnPrivate" if sending else "tools.qq.readOwnChat")
+        return chat_bot_for(ctx), scope[0], int(scope[1])
+
     def stamp(value) -> str | None:
         if not value:
             return None
@@ -246,15 +294,13 @@ def qq_tools(app) -> list[Tool]:
         roots = [
             session_dir(app.home, "workspaces", ctx.session),
             session_dir(app.home, "files", ctx.session),  # legacy downloads
-            # Plugins (e.g. thu_learn downloads) keep their files here.
-            app.home / "plugin_data",
         ]
+        if owner_agent(ctx):
+            roots.append(app.home / "plugin_data")
         path = Path(value)
         path = (path if path.is_absolute() else roots[0] / path).resolve()
         if not any(path.is_relative_to(root.resolve()) for root in roots):
-            raise PublicError(
-                "tools.qq.sendPathDenied"
-            )
+            raise PublicError("tools.qq.sendPathDenied" if owner_agent(ctx) else "tools.qq.sendSessionPathDenied")
         if is_sensitive(app.home, path):
             raise PublicError("tools.qq.sensitiveFile")
         if not await asyncio.to_thread(path.is_file):
@@ -265,7 +311,9 @@ def qq_tools(app) -> list[Tool]:
 
     async def media(ctx: Context, value: str) -> str:
         if value.startswith("https://"):
-            return value
+            if owner_agent(ctx):
+                return value
+            raise PublicError("tools.qq.sendSessionPathDenied")
         _, content = await local_file(ctx, value)
         return "base64://" + base64.b64encode(content).decode()
 
@@ -312,12 +360,29 @@ def qq_tools(app) -> list[Tool]:
 
     # --- chat ---
 
+    async def private_message(bot: OneBot, peer: str, message_id: int) -> dict:
+        raw = await bot.call("get_msg", {"message_id": message_id})
+        sender = str((raw.get("sender") or {}).get("user_id") or "")
+        is_private = raw.get("message_type") == "private" and raw.get("group_id") in (None, "", 0, "0")
+        if is_private and sender == peer:
+            return raw
+        if is_private and bot.self_id and sender == str(bot.self_id):
+            # The sender alone does not identify a bot reply's conversation.
+            data = await bot.call(
+                "get_friend_msg_history", {"user_id": int(peer), "count": 50, "message_seq": 0}
+            )
+            if any(str(message.get("message_id")) == str(message_id) for message in data.get("messages", [])):
+                return raw
+        raise PublicError("tools.qq.readOwnChat")
+
     async def message_send(ctx, args):
-        bot = bot_for(ctx, args)
+        bot, target, recipient = chat_destination(ctx, args, sending=True)
         message = []
         if "reply_to" in args:
+            if not owner_agent(ctx):
+                await private_message(bot, str(recipient), args["reply_to"])
             message.append({"type": "reply", "data": {"id": str(args["reply_to"])}})
-        for qq in args.get("at", []) if args["target"] == "group" else []:
+        for qq in args.get("at", []) if target == "group" else []:
             message.append({"type": "at", "data": {"qq": str(qq)}})
         if args.get("text"):
             message.append({"type": "text", "data": {"text": args["text"]}})
@@ -325,27 +390,27 @@ def qq_tools(app) -> list[Tool]:
             message.append({"type": "image", "data": {"file": await media(ctx, image)}})
         if not any(part["type"] in {"text", "image", "at"} for part in message):
             raise PublicError("tools.qq.emptyMessage")
-        group = args["target"] == "group"
+        group = target == "group"
         receipt = await bot.call(
             "send_group_msg" if group else "send_private_msg",
-            {"group_id" if group else "user_id": args["id"], "message": message},
+            {"group_id" if group else "user_id": recipient, "message": message},
         )
-        await record_sent(bot, args["target"], args["id"], receipt, describe(message))
+        await record_sent(bot, target, recipient, receipt, describe(message))
         return {"message_id": receipt.get("message_id")}
 
     async def file_send(ctx, args):
-        bot = bot_for(ctx, args)
+        bot, target, recipient = chat_destination(ctx, args, sending=True)
         path, content = await local_file(ctx, args["path"])
         params = {
             "file": "base64://" + base64.b64encode(content).decode(),
             "name": args.get("name") or path.name,
         }
-        if args["target"] == "group":
+        if target == "group":
             if args.get("folder"):
                 params["folder"] = args["folder"]
-            await bot.call("upload_group_file", {"group_id": args["id"], **params})
+            await bot.call("upload_group_file", {"group_id": recipient, **params})
         else:
-            await bot.call("upload_private_file", {"user_id": args["id"], **params})
+            await bot.call("upload_private_file", {"user_id": recipient, **params})
         return {"sent": True, "name": params["name"], "bytes": len(content)}
 
     async def message_get(ctx, args):
@@ -353,33 +418,23 @@ def qq_tools(app) -> list[Tool]:
         if scope is None:
             bot = bot_for(ctx, args)
             return await render(ctx, bot, await bot.call("get_msg", {"message_id": args["message_id"]}))
-        bot = read_bot_for(ctx)
+        bot = chat_bot_for(ctx)
+        if scope[0] == "private":
+            return await render(ctx, bot, await private_message(bot, scope[1], args["message_id"]))
         raw = await bot.call("get_msg", {"message_id": args["message_id"]})
-        uid = str((raw.get("sender") or {}).get("user_id") or "")
-        if scope[0] == "group":
-            ok = str(raw.get("group_id") or "") == scope[1]
-        else:
-            # Own chat: the member's messages plus the bot's replies in this chat.
-            ok = uid == scope[1] or (bot.self_id and uid == str(bot.self_id))
-        if not ok:
-            raise PublicError("只能读取当前会话的消息")
+        if str(raw.get("group_id") or "") != scope[1]:
+            raise PublicError("tools.qq.readOwnChat")
         return await render(ctx, bot, raw)
 
     async def message_history(ctx, args):
-        scope = None if owner_agent(ctx) else own_chat(ctx)
-        if scope is None:
-            bot = bot_for(ctx, args)
-        else:
-            if args["target"] != scope[0] or str(args["id"]) != scope[1]:
-                raise PublicError("只能读取当前会话的消息记录")
-            bot = read_bot_for(ctx)
+        bot, target, recipient = chat_destination(ctx, args, sending=False)
         count = args.get("count", 20)
         params = {"count": count, "message_seq": args.get("before_seq", 0)}
-        if args["target"] == "group":
-            data = await bot.call("get_group_msg_history", {"group_id": args["id"], **params})
+        if target == "group":
+            data = await bot.call("get_group_msg_history", {"group_id": recipient, **params})
         else:
-            data = await bot.call("get_friend_msg_history", {"user_id": args["id"], **params})
-        group_id = str(args["id"]) if args["target"] == "group" else ""
+            data = await bot.call("get_friend_msg_history", {"user_id": recipient, **params})
+        group_id = str(recipient) if target == "group" else ""
         messages = [await render(ctx, bot, m, group_id) for m in data.get("messages", [])]
         oldest = messages[0] if messages else {}
         return {
@@ -395,12 +450,17 @@ def qq_tools(app) -> list[Tool]:
         return {"recalled": True}
 
     async def forward_send(ctx, args):
-        bot = bot_for(ctx, args)
+        bot, target, recipient = chat_destination(ctx, args, sending=True)
+        privileged = owner_agent(ctx)
         nodes = []
         for node in args["nodes"]:
             if "message_id" in node:
+                if not privileged:
+                    await private_message(bot, str(recipient), node["message_id"])
                 nodes.append({"type": "node", "data": {"id": str(node["message_id"])}})
             elif node.get("text"):
+                if not privileged and ("name" in node or "user_id" in node):
+                    raise PublicError("tools.qq.forwardOwnIdentity")
                 nodes.append(
                     forward_node(
                         [{"type": "text", "data": {"text": node["text"]}}],
@@ -410,16 +470,16 @@ def qq_tools(app) -> list[Tool]:
                 )
             else:
                 raise PublicError("tools.qq.forwardNode")
-        group = args["target"] == "group"
+        group = target == "group"
         receipt = await bot.call(
             "send_group_forward_msg" if group else "send_private_forward_msg",
-            {"group_id" if group else "user_id": args["id"], "messages": nodes},
+            {"group_id" if group else "user_id": recipient, "messages": nodes},
         )
         return {"message_id": receipt.get("message_id"), "forward_id": receipt.get("res_id")}
 
     async def forward_get(ctx, args):
         scope = None if owner_agent(ctx) else own_chat(ctx)
-        bot = read_bot_for(ctx) if scope is not None else bot_for(ctx, args)
+        bot = chat_bot_for(ctx) if scope is not None else bot_for(ctx, args)
         data = await bot.call("get_forward_msg", {"message_id": args["id"], "id": args["id"]})
         return {
             "messages": [await render(ctx, bot, m) for m in data.get("messages", [])],
@@ -637,10 +697,11 @@ def qq_tools(app) -> list[Tool]:
                     },
                     "adapter": ADAPTER,
                 },
-                ["target", "id"],
             ),
             message_send,
             risk="sensitive",
+            chat=True,
+            available=can_send_to_chat,
         ),
         Tool(
             "qq_file_send",
@@ -653,11 +714,13 @@ def qq_tools(app) -> list[Tool]:
                     "folder": {"type": "string", "maxLength": 200, "description": "tools.qq.param.folderId"},
                     "adapter": ADAPTER,
                 },
-                ["target", "id", "path"],
+                ["path"],
             ),
             file_send,
             risk="sensitive",
+            chat=True,
             timeout=180,
+            available=can_send_to_chat,
         ),
         Tool(
             "qq_message_get",
@@ -665,6 +728,8 @@ def qq_tools(app) -> list[Tool]:
             schema({"message_id": MESSAGE_ID, "adapter": ADAPTER}, ["message_id"]),
             message_get,
             risk="safe",
+            chat=True,
+            available=can_read_chat,
         ),
         Tool(
             "qq_message_history",
@@ -676,10 +741,11 @@ def qq_tools(app) -> list[Tool]:
                     "before_seq": {"type": "integer", "minimum": 0},
                     "adapter": ADAPTER,
                 },
-                ["target", "id"],
             ),
             message_history,
             risk="safe",
+            chat=True,
+            available=can_read_chat,
         ),
         Tool(
             "qq_message_recall",
@@ -709,10 +775,12 @@ def qq_tools(app) -> list[Tool]:
                     },
                     "adapter": ADAPTER,
                 },
-                ["target", "id", "nodes"],
+                ["nodes"],
             ),
             forward_send,
             risk="sensitive",
+            chat=True,
+            available=can_send_to_chat,
         ),
         Tool(
             "qq_forward_get",
@@ -723,6 +791,7 @@ def qq_tools(app) -> list[Tool]:
             ),
             forward_get,
             risk="safe",
+            available=can_read_chat,
         ),
         Tool(
             "qq_friend_list",
@@ -885,16 +954,20 @@ def qq_tools(app) -> list[Tool]:
         ),
     ]
     for tool in tools:
-        tool.available = connected
+        if tool.available is None:
+            tool.available = can_operate_account
     tools.append(
         Tool(
             "qq_file_download",
             "tools.qq.fileDownload",
-            schema({"ref": TEXT}, ["ref"]),
+            schema({"ref": {**TEXT, "description": "tools.qq.param.fileRef"}}, ["ref"]),
             file_download,
             risk="normal",
+            chat=True,
             timeout=180,
-            available=qq_context,
+            available=lambda ctx: qq_context(ctx) and (
+                ctx.mode == "agent" or (own_private(ctx) is not None and session_bot(ctx) is not None)
+            ),
         )
     )
     return tools
