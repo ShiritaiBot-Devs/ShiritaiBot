@@ -211,7 +211,7 @@ def qq_tools(app) -> list[Tool]:
         parts = ctx.session.split(":")
         bot = instances.get(parts[1]) if len(parts) == 3 else None
         if not isinstance(bot, OneBot) or bot.status != "connected":
-            raise PublicError("会话所属 OneBot 实例不可用")
+            raise PublicError("tools.qq.chatAdapterUnavailable")
         return bot
 
     def bot_for(ctx: Context, args: dict):
@@ -362,7 +362,7 @@ def qq_tools(app) -> list[Tool]:
             # Own chat: the member's messages plus the bot's replies in this chat.
             ok = uid == scope[1] or (bot.self_id and uid == str(bot.self_id))
         if not ok:
-            raise PublicError("只能读取当前会话的消息")
+            raise PublicError("tools.qq.messageOtherChat")
         return await render(ctx, bot, raw)
 
     async def message_history(ctx, args):
@@ -371,7 +371,7 @@ def qq_tools(app) -> list[Tool]:
             bot = bot_for(ctx, args)
         else:
             if args["target"] != scope[0] or str(args["id"]) != scope[1]:
-                raise PublicError("只能读取当前会话的消息记录")
+                raise PublicError("tools.qq.historyOtherChat")
             bot = read_bot_for(ctx)
         count = args.get("count", 20)
         params = {"count": count, "message_seq": args.get("before_seq", 0)}

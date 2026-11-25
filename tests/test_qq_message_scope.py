@@ -6,6 +6,7 @@ import pytest
 
 from shiritaibot.adapters.onebot11 import OneBot
 from shiritaibot.core import Context, PublicError
+from shiritaibot.i18n import use_locale
 from shiritaibot.tools import qq
 
 FRIEND = "201574690"
@@ -105,3 +106,31 @@ def test_owner_agent_session_stays_unrestricted(tmp_path):
     bot.call.side_effect = lambda action, params: _msg(sender="999")
     result = asyncio.run(tools["qq_message_get"].handler(_owner_ctx(), {"message_id": 1}))
     assert result["sender"]["user_id"] == 999
+
+
+@pytest.mark.parametrize(
+    ("locale", "other_message", "other_history", "no_adapter"),
+    [
+        ("zh-CN", "只能读取当前会话的消息", "只能读取当前会话的消息记录", "会话所属 OneBot 实例不可用"),
+        (
+            "en",
+            "Only messages from this chat can be read",
+            "Only this chat's message history can be read",
+            "This chat's OneBot instance isn't available",
+        ),
+    ],
+)
+def test_scope_errors_follow_the_session_language(tmp_path, locale, other_message, other_history, no_adapter):
+    app, bot, tools = _app(tmp_path)
+
+    def error(tool, args):
+        with pytest.raises(PublicError) as raised:
+            asyncio.run(tools[tool].handler(_friend_ctx(), args))
+        return str(raised.value)
+
+    with use_locale(locale):
+        bot.call.side_effect = lambda action, params: _msg(sender="999")
+        assert error("qq_message_get", {"message_id": 3}) == other_message
+        assert error("qq_message_history", {"target": "private", "id": 999}) == other_history
+        bot.status = "disconnected"
+        assert error("qq_message_history", {"target": "private", "id": int(FRIEND)}) == no_adapter
