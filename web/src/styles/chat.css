@@ -541,8 +541,7 @@
     transform: translateY(0);
   }
 }
-.chat-plain,
-.chat-markdown p {
+.chat-plain {
   white-space: pre-line;
 }
 .chat-markdown {

@@ -1,11 +1,14 @@
-"""Collect provider SSE replies for the existing, whole-reply agent interface."""
+"""Collect provider SSE replies and optionally publish visible text as it arrives."""
 
 from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 
 import httpx
+
+TextDelta = Callable[[str], None]
 
 
 async def _events(response: httpx.Response):
@@ -36,7 +39,7 @@ class ChatStream:
         self.usage = {}
         self.finished = False
 
-    def add(self, event):
+    def add(self, event, on_text):
         if event.get("usage"):
             self.usage = event["usage"]
         output = False
@@ -45,6 +48,8 @@ class ChatStream:
                 continue
             self.finished |= bool(choice.get("finish_reason"))
             delta = choice.get("delta") or {}
+            if on_text and delta.get("content"):
+                on_text(delta["content"])
             for key in ("content", "reasoning_content", "refusal"):
                 if delta.get(key):
                     self.message[key] = self.message.get(key, "") + delta[key]
@@ -80,7 +85,7 @@ class ResponsesStream:
         self.finished = False
         self.require_completed = require_completed
 
-    def add(self, event):
+    def add(self, event, on_text):
         kind = event["type"]
         if kind in {"response.failed", "response.cancelled"}:
             error = event.get("response", {}).get("error") or {}
@@ -90,6 +95,9 @@ class ResponsesStream:
         if kind in {"response.completed", "response.incomplete"}:
             self.response = event["response"]
             self.finished = True
+        if on_text and kind in {"response.output_text.delta", "response.refusal.delta"}:
+            if text := event.get("delta"):
+                on_text(text)
         return kind in {
             "response.output_text.delta",
             "response.refusal.delta",
@@ -109,13 +117,15 @@ class AnthropicStream:
         self.usage = {}
         self.finished = False
 
-    def add(self, event):
+    def add(self, event, on_text):
         kind = event["type"]
         if kind == "message_start":
             self.usage.update(event["message"].get("usage", {}))
         elif kind == "content_block_start":
             block = event["content_block"]
             self.blocks[event["index"]] = block
+            if on_text and block["type"] == "text" and block.get("text"):
+                on_text(block["text"])
             return bool(block.get("text") or block.get("thinking") or block.get("name"))
         elif kind == "content_block_delta":
             index, delta = event["index"], event["delta"]
@@ -128,6 +138,8 @@ class AnthropicStream:
             for key in ("text", "thinking", "signature"):
                 if key in delta:
                     block[key] = block.get(key, "") + delta[key]
+                    if on_text and key == "text" and block["type"] == "text" and delta[key]:
+                        on_text(delta[key])
                     return key != "signature" and bool(delta[key])
         elif kind == "message_delta":
             self.usage.update(event.get("usage") or {})
@@ -148,7 +160,7 @@ class GeminiStream:
         self.usage = {}
         self.finished = False
 
-    def add(self, event):
+    def add(self, event, on_text):
         self.usage.update(event.get("usageMetadata") or {})
         output = False
         for candidate in event.get("candidates", []):
@@ -156,6 +168,10 @@ class GeminiStream:
                 continue
             parts = candidate.get("content", {}).get("parts", [])
             self.parts.extend(parts)
+            if on_text:
+                for part in parts:
+                    if part.get("text") and not part.get("thought"):
+                        on_text(part["text"])
             self.finished |= bool(candidate.get("finishReason"))
             output |= any(part.get("text") or part.get("functionCall") for part in parts)
         return output
@@ -164,7 +180,7 @@ class GeminiStream:
         return {"candidates": [{"content": {"parts": self.parts}}], "usageMetadata": self.usage}
 
 
-async def collect_stream(protocol, response, started):
+async def collect_stream(protocol, response, started, on_text: TextDelta | None = None):
     collector = {
         "chat_completions": ChatStream,
         "responses": ResponsesStream,
@@ -180,7 +196,7 @@ async def collect_stream(protocol, response, started):
         if event.get("error") or event.get("type") == "error":
             error = event.get("error") or event
             raise ResponseStreamError(error.get("code") if isinstance(error, dict) else None)
-        if collector.add(event):
+        if collector.add(event, on_text):
             last = arrived
             if first is None:
                 first = last

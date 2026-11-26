@@ -22,7 +22,7 @@ from shiritaibot.core import (
 from shiritaibot.core.logs import get_logger
 from shiritaibot.i18n import Text, t
 from shiritaibot.llm.media import ImageResolver
-from shiritaibot.llm.streaming import ResponseStreamError, collect_stream
+from shiritaibot.llm.streaming import ResponseStreamError, TextDelta, collect_stream
 from shiritaibot.llm.subscription import (
     LIMIT_EXCEEDED,
     PROTOCOL,
@@ -441,7 +441,7 @@ class ProviderManager:
         await self.client.aclose()
 
     async def _request(
-        self, provider, method: str, url: str, *, stream_protocol=None, **kwargs
+        self, provider, method: str, url: str, *, stream_protocol=None, on_text=None, **kwargs
     ) -> httpx.Response:
         async def send(client):
             for attempt in range(provider.max_retries + 1):
@@ -461,7 +461,7 @@ class ProviderManager:
                                 or (stream_protocol == PROTOCOL and not content_type)
                             )
                         ):
-                            data, timing = await collect_stream(stream_protocol, response, started)
+                            data, timing = await collect_stream(stream_protocol, response, started, on_text)
                             return httpx.Response(
                                 response.status_code,
                                 json=data,
@@ -474,6 +474,8 @@ class ProviderManager:
                 except httpx.TimeoutException:
                     if attempt == provider.max_retries:
                         raise
+                    if on_text:
+                        on_text("")
                 else:
                     if (
                         response.status_code not in {429, 500, 502, 503, 504}
@@ -500,7 +502,7 @@ class ProviderManager:
                 return await send(client)
         return await send(self.client)
 
-    async def _generate(self, provider, path, body, headers, stream):
+    async def _generate(self, provider, path, body, headers, stream, on_text=None):
         if provider.protocol == PROTOCOL:
             return await self._request(
                 provider,
@@ -509,6 +511,7 @@ class ProviderManager:
                 json={**body, "store": False, "stream": True},
                 headers={**headers, "Accept": "text/event-stream"},
                 stream_protocol=PROTOCOL,
+                on_text=on_text,
             )
         base = provider.base_url.rstrip("/")
         if provider.protocol == "gemini":
@@ -536,6 +539,7 @@ class ProviderManager:
                     json=stream_body,
                     headers=headers,
                     stream_protocol=protocol,
+                    on_text=on_text,
                 )
             except httpx.HTTPStatusError as exc:
                 # Compatibility gateways may implement only the buffered endpoint.
@@ -673,8 +677,9 @@ class ProviderManager:
         *,
         tool_free: bool = False,
         track_web_context: bool = False,
+        on_text: TextDelta | None = None,
     ) -> Reply:
-        """Use an explicit session for usage attribution and QQ image resolution when given."""
+        """Use scope for attribution and image resolution. An empty delta discards a preview."""
         cfg = settings or self.config.value
         candidates = cfg.routes.get(route, [])
         if not candidates:
@@ -762,7 +767,12 @@ class ProviderManager:
                     headers["Authorization"] = f"Bearer {token}"
                 async with self.semaphore:
                     response = await self._generate(
-                        provider, path, body, headers, model.extra_body.get("stream") is not False
+                        provider,
+                        path,
+                        body,
+                        headers,
+                        model.extra_body.get("stream") is not False,
+                        **({"on_text": on_text} if on_text else {}),
                     )
                 reply = parse_reply(protocol, model.model, response.json(), opaque_key=opaque_key)
                 if subscription:
@@ -800,6 +810,8 @@ class ProviderManager:
                 TypeError,
                 AttributeError,
             ) as exc:
+                if on_text:
+                    on_text("")
                 if subscription and (
                     (isinstance(exc, ResponseStreamError) and exc.code == LIMIT_EXCEEDED)
                     or (

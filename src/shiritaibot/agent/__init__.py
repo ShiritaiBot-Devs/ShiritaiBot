@@ -745,6 +745,49 @@ class AgentRuntime:
         if hooks is not None:
             await hooks.call("agent_begin", info)
 
+        preview_id = ""
+        preview_text = ""
+        preview_timer: asyncio.TimerHandle | None = None
+
+        def emit_preview() -> None:
+            nonlocal preview_timer
+            preview_timer = None
+            self.store.bus.emit({
+                "kind": "chat_reply", "session": ctx.session,
+                "id": preview_id, "text": preview_text,
+            })
+
+        def finish_preview(committed: bool = False) -> None:
+            nonlocal preview_id, preview_text, preview_timer
+            if preview_timer is not None:
+                preview_timer.cancel()
+                preview_timer = None
+            if preview_id:
+                self.store.bus.emit({
+                    "kind": "chat_reply_end", "session": ctx.session,
+                    "id": preview_id, "committed": committed,
+                })
+            preview_id = preview_text = ""
+
+        def preview(delta: str, *, handoff: bool = False) -> None:
+            nonlocal preview_id, preview_text, preview_timer
+            if not delta:
+                finish_preview()
+                return
+            preview_text += delta
+            if not preview_id:
+                visible = preview_text.strip()
+                if not visible or (handoff and WORK_HANDOFF.startswith(visible)):
+                    return
+                preview_id = uid()
+                emit_preview()
+            elif preview_timer is None:
+                preview_timer = asyncio.get_running_loop().call_later(0.04, emit_preview)
+
+        stream = bool(web_context) and ctx.stream_reply
+        # Response hooks can rewrite the entire output before it becomes visible.
+        stream_text = stream and (hooks is None or not hooks.has("llm_response"))
+
         async def collect_steering() -> list[dict]:
             messages = []
             while actor and actor.steering:
@@ -836,8 +879,10 @@ class AgentRuntime:
                         scope=ctx.session,
                         tool_free=True,
                         **web_context,
+                        **({"on_text": partial(preview, handoff=True)} if stream_text else {}),
                     )
                     if chat_reply.text.strip() == WORK_HANDOFF and not chat_reply.calls:
+                        finish_preview()
                         chat_reply = None
                         route = "agent"
                         if selected_model:
@@ -906,6 +951,7 @@ class AgentRuntime:
                             settings=cfg,
                             scope=ctx.session,
                             **web_context,
+                            **({"on_text": preview} if stream_text else {}),
                         )
                     else:
                         reply = chat_reply
@@ -931,7 +977,12 @@ class AgentRuntime:
                     }
                     if reply.calls:
                         message["tool_calls"] = reply.calls
+                    if preview_id:
+                        message["_stream_id"] = preview_id
                     await append(message)
+                    if stream and not preview_id:
+                        self.store.bus.emit({"kind": "chat_history", "session": ctx.session})
+                    finish_preview(committed=True)
                     history.append(message)
                     if not reply.calls:
                         if proactive and not nudged and not _is_loop_result(reply.text):
@@ -1027,6 +1078,8 @@ class AgentRuntime:
                             "content": output,
                         }
                         await append(result)
+                        if stream:
+                            self.store.bus.emit({"kind": "chat_history", "session": ctx.session})
                         history.append(result)
                     if report is not None:
                         log.log(
@@ -1073,6 +1126,7 @@ class AgentRuntime:
             final = error
             await self.deliver(execution_session, error)
         finally:
+            finish_preview()
             if hooks is not None and hooks.has("agent_done"):
                 result = AgentResult(body["status"], body["steps"] + 1, final)
                 # Shielded so a cancelled turn still reports its end to plugins.

@@ -811,6 +811,7 @@ export interface HistoryMessage {
     truncated?: boolean;
   };
   _seq?: number;
+  _stream_id?: string;
   _original_content?: string;
   _client_ids?: string[];
   _elapsed_seconds?: number;

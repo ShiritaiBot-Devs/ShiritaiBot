@@ -776,6 +776,7 @@ def create_app(
                     "agent",
                     True,
                     web_message_ids=(body.client_id,) if body.client_id else (),
+                    stream_reply=desktop,
                 ),
                 text,
             )

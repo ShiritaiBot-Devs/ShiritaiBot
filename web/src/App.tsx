@@ -12,6 +12,7 @@ import { applyInstanceLocale } from "./i18n";
 import { setOwnerTimeZone } from "./lib/utils";
 import { ApiError, createClient } from "./api/client";
 import type { ApiClient } from "./api/client";
+import type { HistoryMessage } from "./api/types";
 import { AppShell } from "./components/AppShell";
 import { PageTabs } from "./components/PageTabs";
 import { CAPABILITY_TABS, type PageId } from "./navigation";
@@ -224,6 +225,37 @@ function ConsoleApp() {
 
   const onRealtime = useCallback(
     (event: RealtimeEvent) => {
+      if (event.kind === "chat_history") {
+        if (desktop && event.session)
+          void queryClient.invalidateQueries({
+            queryKey: ["history", event.session],
+          });
+        return;
+      }
+      if (event.kind === "chat_reply" || event.kind === "chat_reply_end") {
+        if (!desktop || !event.session || !event.id) return;
+        const key = ["chat-reply", event.session];
+        if (event.kind === "chat_reply" && typeof event.text === "string") {
+          queryClient.setQueryData(key, {
+            role: "assistant",
+            content: event.text,
+            _stream_id: event.id,
+          });
+        } else if (event.kind === "chat_reply_end") {
+          const clear = () =>
+            queryClient.setQueryData<HistoryMessage | null>(key, (preview) =>
+              preview?._stream_id === event.id ? null : preview,
+            );
+          if (event.committed) {
+            void queryClient
+              .invalidateQueries({ queryKey: ["history", event.session] })
+              .then(clear);
+          } else {
+            clear();
+          }
+        }
+        return;
+      }
       void queryClient.invalidateQueries({ queryKey: ["health"] });
       void queryClient.invalidateQueries({ queryKey: ["records"] });
       if (event.kind === "web_context") {
@@ -237,7 +269,10 @@ function ConsoleApp() {
     },
     [queryClient],
   );
-  useRealtime(token, onRealtime);
+  const onRealtimeDisconnect = useCallback(() => {
+    queryClient.setQueriesData({ queryKey: ["chat-reply"] }, null);
+  }, [queryClient]);
+  useRealtime(token, onRealtime, onRealtimeDisconnect);
 
   const pending = (approvals.data ?? []).filter(
     (row) => row.status === "pending" && row.reviewer !== "model",

@@ -117,6 +117,7 @@ class Context:
     memory_profile: str = "default"
     reply_anchor: ReplyAnchor | None = None
     web_message_ids: tuple[str, ...] = ()
+    stream_reply: bool = False
     tool_call_id: str = ""
     subagent_run: str = ""
     allowed_skills: tuple[str, ...] | None = None

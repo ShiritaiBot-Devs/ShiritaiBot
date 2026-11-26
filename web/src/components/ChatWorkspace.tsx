@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Menu } from "lucide-react";
 import type { ApiClient } from "../api/client";
-import type { WebChat } from "../api/types";
+import type { HistoryMessage, WebChat } from "../api/types";
 import { draftKey, modelKey, writeValue } from "../lib/composer";
 import { AgentTimeline } from "./AgentTimeline";
 import { ApprovalCard } from "./ApprovalCard";
@@ -73,6 +73,15 @@ export function ChatWorkspace({
     queryFn: () => client.history(session),
     refetchInterval: 2500,
   });
+  const { data: preview } = useQuery<HistoryMessage | null>({
+    queryKey: ["chat-reply", session],
+    enabled: false,
+  });
+  const liveReply =
+    preview &&
+    !history.data?.some((row) => row._stream_id === preview._stream_id)
+      ? preview
+      : null;
   const approvals = useQuery({
     queryKey: ["records", "approval"],
     queryFn: () => client.records("approval"),
@@ -129,6 +138,7 @@ export function ChatWorkspace({
     history.data?.length === 0 &&
     !outgoing.length &&
     !current.length &&
+    !liveReply &&
     !waiting;
 
   useEffect(() => {
@@ -263,7 +273,11 @@ export function ChatWorkspace({
             )}
             <AgentTimeline
               client={client}
-              history={[...(history.data ?? []), ...outgoing]}
+              history={[
+                ...(history.data ?? []),
+                ...outgoing,
+                ...(liveReply ? [liveReply] : []),
+              ]}
             />
             {current.map((row) => (
               <ApprovalCard
@@ -273,7 +287,7 @@ export function ChatWorkspace({
                 onResolve={(allow) => resolve(row.id, allow)}
               />
             ))}
-            {waiting && (
+            {waiting && !liveReply && (
               <div
                 className="chat-loading"
                 role="status"

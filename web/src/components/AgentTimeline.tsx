@@ -67,7 +67,7 @@ export function AgentTimeline({
         const local = "localId" in msg;
         return (
           <div
-            key={msg._client_ids?.[0] ?? msg._seq ?? index}
+            key={msg._client_ids?.[0] ?? msg._stream_id ?? msg._seq ?? index}
             className={`message ${entry.kind}${local ? " outgoing" : ""}`}
           >
             {!user && msg._elapsed_seconds !== undefined && (

@@ -3,6 +3,9 @@ import { useEffect } from "react";
 export interface RealtimeEvent {
   kind: string;
   id?: string;
+  session?: string;
+  text?: string;
+  committed?: boolean;
 }
 
 const MAX_RETRY_DELAY = 30000;
@@ -14,6 +17,7 @@ const MAX_RETRY_DELAY = 30000;
 export function useRealtime(
   token: string | null,
   onEvent: (event: RealtimeEvent) => void,
+  onDisconnect: () => void,
 ) {
   useEffect(() => {
     if (!token) return;
@@ -39,6 +43,7 @@ export function useRealtime(
       };
       socket.onclose = () => {
         if (disposed) return;
+        onDisconnect();
         const delay = Math.min(MAX_RETRY_DELAY, 1000 * 2 ** attempt++);
         timer = setTimeout(connect, delay);
       };
@@ -50,5 +55,5 @@ export function useRealtime(
       if (timer) clearTimeout(timer);
       socket?.close();
     };
-  }, [token, onEvent]);
+  }, [token, onEvent, onDisconnect]);
 }

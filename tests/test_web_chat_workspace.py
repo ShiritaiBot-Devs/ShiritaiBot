@@ -1,3 +1,5 @@
+import asyncio
+import json
 import time
 from unittest.mock import AsyncMock
 
@@ -114,3 +116,109 @@ def test_web_history_filters_legacy_settings_command_pairs(tmp_path, monkeypatch
         assert [row["content"] for row in result.json()] == ["/model", "inspect"]
         chats = client.get("/api/web-chats").json()
         assert next(row["title"] for row in chats if row["id"] == "web:legacy") == "/model"
+
+
+def test_desktop_streams_markdown_and_publishes_tool_history(tmp_path, monkeypatch):
+    monkeypatch.setattr(RuntimeEnvironment, "prepare", AsyncMock())
+    app = create_app(tmp_path, token="test", desktop=True)
+    resume_model = asyncio.Event()
+    finish_call = asyncio.Event()
+    resume_tool = asyncio.Event()
+    resume_final = asyncio.Event()
+    first = "**Checking"
+    second = " files**\r\nnext line\n\n```text\nfile\n```"
+
+    def chunk(delta, finish=None):
+        event = {"choices": [{"delta": delta, "finish_reason": finish}]}
+        return ("data: " + json.dumps(event) + "\r\n\r\n").encode()
+
+    class Stream(httpx.AsyncByteStream):
+        def __init__(self, after_tool):
+            self.after_tool = after_tool
+
+        async def __aiter__(self):
+            if self.after_tool:
+                await asyncio.wait_for(resume_final.wait(), 5)
+                yield chunk({"content": "Done"}, "stop")
+                return
+            yield chunk({"tool_calls": [{
+                "index": 0, "id": "call-1",
+                "function": {"name": "example_tool", "arguments": '{"private_arg":'},
+            }]})
+            event = chunk({"content": first})
+            yield event[:-3]
+            yield event[-3:]
+            await asyncio.wait_for(resume_model.wait(), 5)
+            yield chunk({"content": second})
+            await asyncio.wait_for(finish_call.wait(), 5)
+            yield chunk({"tool_calls": [{
+                "index": 0, "function": {"arguments": '"value"}'},
+            }]}, "tool_calls")
+
+    async def provider(request):
+        body = json.loads(request.content)
+        assert body["stream"] is True
+        after_tool = any(row["role"] == "tool" for row in body["messages"])
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, stream=Stream(after_tool))
+
+    async def execute(*_):
+        await asyncio.wait_for(resume_tool.wait(), 5)
+        return '{"ok":true}'
+
+    with TestClient(app, headers={"Authorization": "Bearer test"}) as client:
+        config = {
+            "providers": [{"id": "local", "base_url": "https://provider.example.test"}],
+            "models": [{"id": "model", "provider": "local", "model": "model"}],
+            "routes": {"agent": ["model"]},
+            "agent_split": False,
+            "policy": {"owner_default": {"mode": "agent"}},
+            "memory": {"inject": False, "extract": False},
+            "emotion": {"enabled": False},
+        }
+        assert client.put("/api/config", json=config).status_code == 200
+        runtime = app.state.runtime
+        assert client.portal is not None
+        client.portal.call(runtime.llm.client.aclose)
+        runtime.llm.client = httpx.AsyncClient(transport=httpx.MockTransport(provider))
+        monkeypatch.setattr(runtime.runtime.registry, "execute", execute)
+
+        def history():
+            return client.get("/api/history", params={"timeline": True}).json()
+
+        with client.websocket_connect("/api/ws") as socket:
+            socket.send_text("test")
+
+            def wait_for(kind):
+                while True:
+                    event = socket.receive_json()
+                    if event["kind"] == kind:
+                        return event
+                    assert event["kind"] not in {"web_task_finished", "heartbeat"}, event
+
+            assert client.post("/api/messages", json={"text": "Check the file"}).status_code == 200
+            preview = wait_for("chat_reply")
+            assert preview["text"] == first
+            assert [row["role"] for row in history()] == ["user"]
+
+            client.portal.call(resume_model.set)
+            update = wait_for("chat_reply")
+            assert update["id"] == preview["id"] and update["text"] == first + second
+            assert [row["role"] for row in history()] == ["user"]
+
+            client.portal.call(finish_call.set)
+            commit = wait_for("chat_reply_end")
+            assert commit["id"] == preview["id"] and commit["committed"]
+            reply = history()[-1]
+            assert reply["_stream_id"] == preview["id"]
+            assert reply["content"] == first + second
+            assert reply["tool_calls"][0]["function"]["arguments"] == '{"private_arg":"value"}'
+
+            client.portal.call(resume_tool.set)
+            assert wait_for("chat_history")["session"] == "web:owner"
+            assert history()[-1]["role"] == "tool"
+            assert history()[-1]["content"] == '{"ok":true}'
+
+            client.portal.call(resume_final.set)
+            assert wait_for("web_task_finished")["status"] == "completed"
+            replies = [row["content"] for row in history() if row["role"] == "assistant"]
+            assert replies == [first + second, "Done"]

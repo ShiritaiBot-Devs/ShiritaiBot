@@ -9,19 +9,22 @@ import i18n from "../i18n";
 
 const plugins: Options["remarkPlugins"] = [
   remarkGfm,
-  function memeMarkers() {
+  function chatMarkup() {
     // Parse chat markup as text, leaving inline and fenced code untouched.
     (this.data().micromarkExtensions ??= []).push({
       disable: { null: ["htmlFlow", "htmlText"] },
     });
     return (tree) => {
       findAndReplace(tree, [
-        /<(?:me){2,}>\s*(\w{1,40})\s*<\/(?:me){2,}>/gi,
-        (_, id: string) => ({
-          type: "image",
-          url: `/api/memes/${id}/image`,
-          alt: i18n.t("meme.label"),
-        }),
+        [
+          /<(?:me){2,}>\s*(\w{1,40})\s*<\/(?:me){2,}>/gi,
+          (_, id: string) => ({
+            type: "image",
+            url: `/api/memes/${id}/image`,
+            alt: i18n.t("meme.label"),
+          }),
+        ],
+        [/\r\n?|\n/g, () => ({ type: "break" })],
       ]);
     };
   },
