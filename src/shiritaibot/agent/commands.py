@@ -12,6 +12,7 @@ from shiritaibot.config import SessionPolicy, preset_risks
 from shiritaibot.core import PublicError, uid
 from shiritaibot.core.logs import get_logger
 from shiritaibot.i18n import LOCALE_NAMES, LOCALES, Text, normalize, t, use_locale
+from shiritaibot.store import is_settings_command
 
 if TYPE_CHECKING:
     from shiritaibot.plugin.core.hooks import Handler
@@ -104,6 +105,7 @@ def help_sections(runtime, ctx) -> list[HelpSection]:
 
 
 async def command(runtime, ctx, text):
+    settings_only = ctx.session.startswith("web:") and is_settings_command(text)
     parts = text.strip()[1:].split(maxsplit=1)
     name, argument = parts[0] if parts else "help", parts[1] if len(parts) > 1 else ""
     name, argument = name.lower(), argument.strip()
@@ -383,7 +385,12 @@ async def command(runtime, ctx, text):
         else:
             answer = t("commands.unknown")
     except PublicError as exc:
+        if settings_only:
+            raise PublicError(str(exc)) from exc
         answer = str(exc)
+    if settings_only:
+        await runtime.deliver(ctx.session, answer)
+        return "settings_command"
     turn = uid()
     await runtime.store.append(
         ctx.session,

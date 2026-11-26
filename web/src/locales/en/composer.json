@@ -13,10 +13,10 @@
   "attachmentSize": "A chat attachment can be up to 250 MiB.",
   "attachmentCount": "You can attach up to 20 files to one message.",
   "contextWindow": "Context window",
-  "usedTokens": "{{used}} input tokens used",
-  "estimatedTokens": "About {{used}} input tokens used",
-  "totalTokens": "{{total}} tokens total",
-  "unknownContextLimit": "Model context limit unspecified",
+  "contextTokens": "{percent} used · {used} of {total} input tokens",
+  "estimatedContextTokens": "{percent} used · about {used} of {total} input tokens",
+  "contextCharacters": "{percent} used · {used} of {total} characters (global limit)",
+  "estimatedContextCharacters": "{percent} used · about {used} of {total} characters (global limit)",
   "noContextUsage": "Usage appears after the first model response.",
   "sendModes": {
     "steer": {

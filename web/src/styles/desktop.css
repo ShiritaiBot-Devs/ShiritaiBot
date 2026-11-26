@@ -94,3 +94,20 @@
 .login > .desktop-sidebar-drag {
   position: fixed;
 }
+
+.desktop-notification-setting {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 8px;
+}
+
+.desktop-notification-setting .desktop-notification-toggle {
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 0;
+}
+
+.desktop-notification-toggle input[type="checkbox"] {
+  flex-shrink: 0;
+}

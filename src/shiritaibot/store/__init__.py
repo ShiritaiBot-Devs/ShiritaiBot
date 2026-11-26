@@ -17,6 +17,19 @@ GROUP_MESSAGES_KEPT = 2000
 MEMORY_PROFILE_FILTER = "COALESCE(json_extract(data,'$._memory_profile'),'default')=?"
 
 
+def is_settings_command(text: str | None) -> bool:
+    if not text:
+        return False
+    parts = text.strip().split(maxsplit=1)
+    if len(parts) != 2:
+        return False
+    name, argument = parts
+    name = name.lower()
+    return name in {"/model", "/persona", "/lang", "/tools", "/permissions", "/mode"} or (
+        name == "/grants" and argument.startswith(("revoke", "撤销"))
+    )
+
+
 def memory_context_key(session: str, profile: str) -> str:
     return session if profile == "default" else f"memory:{profile}:{session}"
 
@@ -35,6 +48,7 @@ class Store:
         await asyncio.to_thread(self.home.mkdir, parents=True, exist_ok=True)
         self.db = await aiosqlite.connect(self.home / "state.sqlite3")
         self.db.row_factory = aiosqlite.Row
+        await self.db.create_function("is_settings_command", 1, is_settings_command, deterministic=True)
         await self.db.execute("PRAGMA journal_mode=WAL")
         await self.db.execute("PRAGMA busy_timeout=5000")
         # Every migration is idempotent (IF NOT EXISTS) and runs in file order.
@@ -161,9 +175,20 @@ class Store:
         include_commands: bool = True,
         memory_profile: str = "default",
         timeline: bool = False,
+        hide_settings_commands: bool = False,
     ) -> list[dict]:
         epoch = await self.get("session_epoch", memory_context_key(session, memory_profile))
         condition = "" if include_commands else " AND COALESCE(json_extract(data,'$._command'),0)=0"
+        if hide_settings_commands:
+            condition += """ AND (
+                COALESCE(json_extract(data,'$._command'),0)=0 OR NOT EXISTS (
+                    SELECT 1 FROM messages c
+                    WHERE c.session=messages.session AND c.turn=messages.turn
+                    AND json_extract(c.data,'$._command')=1
+                    AND json_extract(c.data,'$.role')='user'
+                    AND is_settings_command(json_extract(c.data,'$.content'))
+                )
+            )"""
         recent = (
             "SELECT seq,turn,data FROM messages WHERE session=? AND seq>?"
             f" AND {MEMORY_PROFILE_FILTER}" + condition + " ORDER BY seq DESC LIMIT ?"
@@ -261,6 +286,8 @@ class Store:
                 (SELECT substr(coalesce(json_extract(data,'$._original_content'),
                                         json_extract(data,'$.content')),1,120)
                  FROM messages WHERE session=i.id AND json_extract(data,'$.role')='user'
+                 AND (COALESCE(json_extract(data,'$._command'),0)=0
+                      OR NOT is_settings_command(json_extract(data,'$.content')))
                  ORDER BY seq LIMIT 1) AS opening
             FROM ids i LEFT JOIN web_chat c ON c.id=i.id
             WHERE coalesce(c.deleted,0)=0 OR EXISTS (SELECT 1 FROM messages WHERE session=i.id)

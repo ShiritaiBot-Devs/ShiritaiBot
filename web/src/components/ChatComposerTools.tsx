@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Folder, Gauge, Monitor } from "lucide-react";
+import { Folder, Monitor } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ApiClient } from "../api/client";
 import type { Action } from "../pages/common";
@@ -188,53 +188,54 @@ export function ChatContextMeter({ client, session }: ChatToolProps) {
     refetchInterval: 3000,
   });
   const usage = context.data;
-  const fraction = usage?.limit ? usage.used / usage.limit : null;
-  const percent =
-    fraction === null
-      ? null
-      : new Intl.NumberFormat(i18n.language, { style: "percent" }).format(
-          fraction,
-        );
+  const fraction = usage ? usage.used / usage.limit : 0;
+  const percent = new Intl.NumberFormat(i18n.language, {
+    style: "percent",
+  }).format(fraction);
   const format = new Intl.NumberFormat(i18n.language);
+  const details = useId();
   return (
     <div className="composer-context">
       <button
         type="button"
         aria-label={t("contextWindow")}
-        title={t("contextWindow")}
+        aria-describedby={details}
         aria-expanded={open}
         onClick={() => setOpen(!open)}
         onBlur={() => setOpen(false)}
       >
-        {fraction === null ? (
-          <Gauge size={16} />
-        ) : (
-          <span
-            className="context-ring"
-            style={{
-              background: `conic-gradient(var(--accent) ${Math.min(fraction, 1)}turn, var(--border) 0)`,
-            }}
-          />
-        )}
-        {percent && <span>{percent}</span>}
+        <span
+          aria-hidden="true"
+          className="context-ring"
+          style={{
+            background: `conic-gradient(var(--accent) ${Math.min(fraction, 1)}turn, var(--border-strong) 0)`,
+          }}
+        />
       </button>
       <div
         className={"context-details" + (open ? " is-open" : "")}
         role="tooltip"
+        id={details}
       >
         <strong>{t("contextWindow")}</strong>
         {usage ? (
           <>
             <span>{usage.model}</span>
             <span>
-              {t(usage.estimated ? "estimatedTokens" : "usedTokens", {
-                used: format.format(usage.used),
-              })}
-            </span>
-            <span>
-              {usage.limit
-                ? t("totalTokens", { total: format.format(usage.limit) })
-                : t("unknownContextLimit")}
+              {t(
+                usage.unit === "characters"
+                  ? usage.estimated
+                    ? "estimatedContextCharacters"
+                    : "contextCharacters"
+                  : usage.estimated
+                    ? "estimatedContextTokens"
+                    : "contextTokens",
+                {
+                  used: format.format(usage.used),
+                  total: format.format(usage.limit),
+                  percent,
+                },
+              )}
             </span>
           </>
         ) : (

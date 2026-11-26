@@ -17,6 +17,7 @@ import sys
 import time
 import tomllib
 import uuid
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -270,6 +271,7 @@ class RuntimeEnvironment:
         self.core = (core or source_root()).resolve()
         self.root = self.home / "runtime"
         self.extras = extras
+        self.desktop_index = os.environ.get("SHIRITAI_DESKTOP_INDEX", "")
         self.lock = asyncio.Lock()
 
     def current(self) -> RuntimePlan | None:
@@ -348,9 +350,16 @@ class RuntimeEnvironment:
             if key not in {"UV_PROJECT_ENVIRONMENT", "UV_PROJECT", "UV_WORKING_DIR", "VIRTUAL_ENV"}
         }
         env.update(UV_NO_PROGRESS="1", NO_COLOR="1")
+        timeout = 1200
+        if self.desktop_index and args[0] != "export":
+            env.update(UV_DEFAULT_INDEX=self.desktop_index)
+            env.setdefault("UV_HTTP_TIMEOUT", "12")
+            env.setdefault("UV_HTTP_RETRIES", "0")
+            if args[0] == "lock":
+                timeout = 45
         try:
             result = await run_process(
-                [executable, *args], self.core, timeout=1200, limit=128 * 1024, env=env
+                [executable, *args], self.core, timeout=timeout, limit=128 * 1024, env=env
             )
         except (OSError, TimeoutError):
             raise PublicError("dependencies.uvFailed") from None
@@ -365,11 +374,14 @@ class RuntimeEnvironment:
         required: str | None = None,
         repair: bool = False,
         retry: bool = False,
+        on_progress: Callable[[str], None] | None = None,
     ) -> RuntimePlan:
         async with self.lock, self.exclusive():
-            return await self._prepare(paths, required=required, repair=repair, retry=retry)
+            return await self._prepare(
+                paths, required=required, repair=repair, retry=retry, on_progress=on_progress
+            )
 
-    async def _prepare(self, paths, *, required, repair, retry) -> RuntimePlan:
+    async def _prepare(self, paths, *, required, repair, retry, on_progress) -> RuntimePlan:
         previous = self.current()
         extras = sorted(
             set(
@@ -417,6 +429,7 @@ class RuntimeEnvironment:
                     reader.inputs,
                     {key: vars(value) for key, value in declarations.items()},
                     errors,
+                    *([self.desktop_index] if self.desktop_index else []),
                 ],
                 sort_keys=True,
             ).encode()
@@ -431,7 +444,9 @@ class RuntimeEnvironment:
             and not (retry and previous.state["errors"])
         ):
             if repair:
-                await self.command(
+                if on_progress:
+                    on_progress("synchronizing")
+                sync = (
                     "sync",
                     "--project",
                     str(previous.directory),
@@ -440,17 +455,28 @@ class RuntimeEnvironment:
                     "--python",
                     sys.executable,
                 )
+                if self.desktop_index:
+                    try:
+                        await self.command(*sync, "--offline")
+                    except PublicError:
+                        await self.command(*sync)
+                else:
+                    await self.command(*sync)
             return previous
 
         directory = self.root / "projects" / (signature[:16] + "-" + uuid.uuid4().hex[:8])
         directory.mkdir(parents=True, mode=0o700)
         published = False
         try:
+            if on_progress:
+                on_progress("resolving")
             export = [
                 "export",
                 "--project",
                 str(self.core),
-                "--locked",
+                # The repository lock pins Core. The desktop mirror only
+                # applies to the separate runtime project resolved below.
+                "--frozen" if self.desktop_index else "--locked",
                 "--no-dev",
                 "--no-emit-project",
                 "--no-hashes",
@@ -481,7 +507,11 @@ class RuntimeEnvironment:
                     }
                 },
             }
-            if previous and (previous.directory / "uv.lock").is_file():
+            if (
+                previous
+                and previous.state.get("desktop_index", "") == self.desktop_index
+                and (previous.directory / "uv.lock").is_file()
+            ):
                 preferred_lock = (previous.directory / "uv.lock").read_text("utf-8")
             else:
                 preferred_lock = ""
@@ -523,6 +553,8 @@ class RuntimeEnvironment:
                     private_write(directory / "uv.lock", before_lock)
             if required in errors:
                 raise PublicError(errors[required])
+            if on_progress:
+                on_progress("synchronizing")
             # These commands only touch the candidate venv, never sys.prefix.
             await self.command(
                 "sync",
@@ -539,6 +571,7 @@ class RuntimeEnvironment:
                 "extras": extras,
                 "plugins": accepted,
                 "errors": errors,
+                "desktop_index": self.desktop_index,
             }
             private_write(directory / "uv.lock", (directory / "uv.lock").read_text("utf-8"))
             private_write(directory / "state.json", json.dumps(state, ensure_ascii=False, indent=2))

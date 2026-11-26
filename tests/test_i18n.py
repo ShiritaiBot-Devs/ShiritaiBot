@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from zoneinfo import ZoneInfo
 
+import pytest
 from fastapi.testclient import TestClient
 
 import shiritaibot.prompts.en as en_prompts
@@ -201,9 +202,8 @@ def test_lang_command_sets_forced_session_language(tmp_path):
             assert await reply(guest, "/lang en") == "只有主人可以切换会话语言。"
             assert (await reply(guest, "/lang")).startswith("本会话语言：简体中文（全局默认")
             # Errors use the session's current language (English here).
-            assert await reply(owner, "/lang klingon") == (
-                "Unsupported language: klingon. Options: zh-CN (简体中文), en (English)."
-            )
+            with pytest.raises(PublicError, match="Unsupported language: klingon"):
+                await reply(owner, "/lang klingon")
 
             answer = await reply(owner, "/lang default")
             assert answer.startswith("本会话语言：简体中文（全局默认")

@@ -6,6 +6,7 @@ const { createConnection } = require("node:net");
 const { delimiter, dirname, join } = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { createInterface } = require("node:readline");
+const { setTimeout: delay } = require("node:timers/promises");
 const { closeBehaviors, dataFolder, loadPreferences, writePreferences } = require("./preferences.cjs");
 
 const mac = process.platform === "darwin";
@@ -36,7 +37,17 @@ let saving = Promise.resolve();
 let devWeb;
 let restartBackend = () => {};
 let exitCode = 0;
+let startupStage = "checking";
+let startupIndexHost;
 const tr = (zh, en) => chinese() ? zh : en;
+
+function showStartupStage(stage, indexHost) {
+  startupStage = stage;
+  startupIndexHost = indexHost;
+  if (window && !window.isDestroyed() && window.webContents.getURL() === startupUrl.href) {
+    window.webContents.send("desktop:startup-progress", stage, indexHost);
+  }
+}
 
 if (dev) {
   const profile = join(root, ".local", "desktop-dev");
@@ -165,10 +176,11 @@ function createWindow() {
   const sendState = () => window.webContents.send("desktop:maximized", window.isMaximized());
   window.on("maximize", sendState);
   window.on("unmaximize", sendState);
+  window.webContents.on("did-finish-load", () => showStartupStage(startupStage, startupIndexHost));
   void window.loadURL(startupUrl.href);
 }
 
-function runPython(python, args, home, onReport, sourceBootstrap = false) {
+function runPython(python, args, home, onReport, { sourceBootstrap = false, index = "" } = {}) {
   const script = ["-u", bootstrap, ...args];
   const uv = dev ? (process.env.UV || "uv") : join(runtime, windows ? "uv.exe" : "uv");
   const processHandle = spawn(sourceBootstrap ? uv : python, sourceBootstrap
@@ -180,6 +192,8 @@ function runPython(python, args, home, onReport, sourceBootstrap = false) {
       ...process.env,
       PATH: [python && dirname(python), !dev && runtime, process.env.PATH].filter(Boolean).join(delimiter),
       UV: uv,
+      SHIRITAI_DESKTOP_PARENT: "1",
+      SHIRITAI_DESKTOP_INDEX: index,
       ...(sourceBootstrap && { UV_PROJECT_ENVIRONMENT: join(app.getPath("userData"), "bootstrap") }),
       ...(!dev && { UV_CACHE_DIR: join(home, "runtime", "cache"), UV_PYTHON_DOWNLOADS: "never" }),
       PYTHONDONTWRITEBYTECODE: "1",
@@ -231,14 +245,25 @@ async function runBackend() {
     origin = devWeb?.origin ?? `http://127.0.0.1:${port}`;
     if (dev) console.log(`ShiritaiBot dev UI: ${origin}`);
     const token = await readFile(join(home, "web.token"), "utf8");
+    showStartupStage("ready");
+    await delay(280);
     if (!quitting) await window.loadURL(`${origin}/token#${new URLSearchParams({ token: token.trim() })}`);
   }
   while (!quitting) {
     try {
       let python;
-      await runPython(bootstrapPython, ["prepare", home], home, (message) => { python = message.python; }, dev);
+      let index;
+      await runPython(bootstrapPython, ["prepare", home], home, (message) => {
+        if (message.startupStage) {
+          if (!openingWindow) showStartupStage(message.startupStage, message.indexHost);
+        } else {
+          python = message.python;
+          index = message.index;
+        }
+      }, { sourceBootstrap: dev });
       if (quitting) return;
       if (!python) throw new Error("Python did not report a runtime environment.");
+      if (!openingWindow) showStartupStage("starting");
       const code = await runPython(python, ["serve", home, String(port)], home, (message) => {
         if (message.taskFinished) {
           notifyTask(message.taskFinished);
@@ -252,7 +277,7 @@ async function runBackend() {
           };
         }
         openingWindow ??= openApp(port).catch(showError);
-      });
+      }, { index });
       if (code !== 75 && !quitting) throw new Error("The local server stopped unexpectedly.");
     } catch (error) {
       if (!devWeb || quitting) throw error;

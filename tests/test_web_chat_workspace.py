@@ -53,9 +53,12 @@ def test_context_reports_provider_usage_for_the_selected_web_session(tmp_path, m
     with TestClient(app, headers={"Authorization": "Bearer test"}) as client:
         config = {
             "providers": [{"id": "local", "base_url": "https://provider.example.test"}],
-            "models": [{"id": "chat", "provider": "local", "model": "chat", "max_context": 100000}],
+            "models": [
+                {"id": "chat", "provider": "local", "model": "chat", "max_context": 100000},
+                {"id": "global", "provider": "local", "model": "global"},
+            ],
             "routes": {"chat": ["chat"]},
-            "policy": {"owner_default": {"mode": "chat"}},
+            "policy": {"owner_default": {"mode": "chat"}, "max_context_chars": 40000},
             "memory": {"inject": False, "extract": False},
             "emotion": {"enabled": False},
         }
@@ -73,5 +76,41 @@ def test_context_reports_provider_usage_for_the_selected_web_session(tmp_path, m
             time.sleep(0.05)
         assert context["used"] == 1234
         assert context["limit"] == 100000
+        assert context["unit"] == "tokens"
         assert not context["estimated"]
         assert client.get("/api/web-chats/web:other/context").json() is None
+        assert client.post("/api/messages", json={
+            "session": "web:other", "text": "/model global",
+        }).json()["status"] == "settings_command"
+        assert client.get("/api/history", params={"session": "web:other"}).json() == []
+        assert client.post("/api/messages", json={
+            "session": "web:other", "text": "Hello",
+        }).status_code == 200
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if fallback := client.get("/api/web-chats/web:other/context").json():
+                break
+            time.sleep(0.05)
+        assert fallback["unit"] == "characters"
+        assert fallback["limit"] == 40000
+        assert fallback["used"] == fallback["context_chars"] > 0
+        payload = app.state.runtime.llm._generate.await_args.args[2]
+        assert "/model global" not in str(payload["messages"])
+
+
+def test_web_history_filters_legacy_settings_command_pairs(tmp_path, monkeypatch):
+    monkeypatch.setattr(RuntimeEnvironment, "prepare", AsyncMock())
+    app = create_app(tmp_path, token="test")
+    with TestClient(app, headers={"Authorization": "Bearer test"}) as client:
+        async def seed():
+            store = app.state.runtime.store
+            for turn, command in (("change", "/MoDeL\tchat"), ("inspect", "/model")):
+                await store.append("web:legacy", turn, {"role": "user", "content": command, "_command": True})
+                await store.append("web:legacy", turn, {"role": "assistant", "content": turn, "_command": True})
+
+        assert client.portal is not None
+        client.portal.call(seed)
+        result = client.get("/api/history", params={"session": "web:legacy", "timeline": True})
+        assert [row["content"] for row in result.json()] == ["/model", "inspect"]
+        chats = client.get("/api/web-chats").json()
+        assert next(row["title"] for row in chats if row["id"] == "web:legacy") == "/model"

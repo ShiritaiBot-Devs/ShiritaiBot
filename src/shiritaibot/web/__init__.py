@@ -644,6 +644,7 @@ def create_app(
             session,
             memory_profile=profile or runtime.config.value.session_memory(session),
             timeline=timeline,
+            hide_settings_commands=session.startswith("web:"),
         )
 
     @api.get("/api/web-chats", dependencies=protected)
@@ -698,7 +699,19 @@ def create_app(
 
     @api.get("/api/web-chats/{session}/context", dependencies=protected)
     async def web_chat_context(session: WebChatId):
-        return await runtime.store.get("web_context", session)
+        context = await runtime.store.get("web_context", session)
+        if context is None:
+            return None
+        if context["limit"]:
+            return {**context, "unit": "tokens"}
+        chars = context.get("context_chars")
+        return {
+            **context,
+            "unit": "characters",
+            "used": chars if chars is not None else context["used"] * 4,
+            "limit": runtime.config.value.policy.max_context_chars,
+            "estimated": chars is None,
+        }
 
     @api.get("/api/help-images/{key}", dependencies=protected)
     async def help_image(key: str):

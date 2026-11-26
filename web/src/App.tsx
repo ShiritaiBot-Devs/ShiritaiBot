@@ -14,7 +14,8 @@ import { ApiError, createClient } from "./api/client";
 import type { ApiClient } from "./api/client";
 import { AppShell } from "./components/AppShell";
 import { PageTabs } from "./components/PageTabs";
-import { CAPABILITY_TABS } from "./navigation";
+import { CAPABILITY_TABS, type PageId } from "./navigation";
+import { FirstRunChecklist } from "./components/FirstRunChecklist";
 import { ChatWorkspace } from "./components/ChatWorkspace";
 import { LoginView } from "./components/LoginView";
 import { desktop, DesktopTitleBar } from "./components/DesktopTitleBar";
@@ -320,6 +321,10 @@ function ConsoleApp() {
   }
 
   if (mode === "chat") {
+    function openConsole(page: PageId) {
+      setMode("console");
+      navigate(page);
+    }
     return (
       <ChatWorkspace
         client={client}
@@ -332,10 +337,16 @@ function ConsoleApp() {
           setDrafts((previous) => previous.filter((item) => item !== id))
         }
         draftSessions={drafts}
-        onOpenSettings={() => {
-          setMode("console");
-          navigate("settings");
-        }}
+        onOpenSettings={() => openConsole("settings")}
+        setup={
+          desktop && savedSettings && session.startsWith("web:") ? (
+            <FirstRunChecklist
+              config={savedSettings}
+              onNavigate={openConsole}
+              compact
+            />
+          ) : undefined
+        }
       />
     );
   }
@@ -352,7 +363,14 @@ function ConsoleApp() {
     };
     switch (page) {
       case "overview":
-        return <OverviewPage client={api} act={act} onNavigate={navigate} />;
+        return (
+          <OverviewPage
+            client={api}
+            act={act}
+            onNavigate={navigate}
+            setupConfig={desktop ? undefined : savedSettings}
+          />
+        );
       case "chat":
         return (
           <ChatPage

@@ -13,10 +13,10 @@
   "attachmentSize": "单个聊天附件最大为 250 MiB。",
   "attachmentCount": "每条消息最多添加 20 个附件。",
   "contextWindow": "上下文窗口",
-  "usedTokens": "已用 {{used}} 个输入 token",
-  "estimatedTokens": "约用 {{used}} 个输入 token",
-  "totalTokens": "共 {{total}} 个 token",
-  "unknownContextLimit": "模型未配置上下文上限",
+  "contextTokens": "已用 {percent} · {used} / {total} 个输入 token",
+  "estimatedContextTokens": "已用 {percent} · 约 {used} / {total} 个输入 token",
+  "contextCharacters": "已用 {percent} · {used} / {total} 字符（全局上限）",
+  "estimatedContextCharacters": "已用 {percent} · 约 {used} / {total} 字符（全局上限）",
   "noContextUsage": "模型首次回复后显示用量。",
   "sendModes": {
     "steer": {

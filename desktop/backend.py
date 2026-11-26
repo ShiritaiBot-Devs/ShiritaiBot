@@ -6,7 +6,17 @@ import os
 import socket
 import sys
 import threading
+import time
 from pathlib import Path
+from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
+
+PYPI_INDEXES = (
+    "https://pypi.org/simple",
+    "https://pypi.tuna.tsinghua.edu.cn/simple",
+    "https://mirrors.aliyun.com/pypi/simple",
+    "https://mirrors.ustc.edu.cn/pypi/simple",
+)
 
 
 def report(**fields):
@@ -21,6 +31,84 @@ def bootstrap_environment():
     from shiritaibot.dependencies import RuntimeEnvironment
 
     return RuntimeEnvironment
+
+
+def probe_index(index):
+    start = time.monotonic()
+    request = Request(index + "/packaging/", method="HEAD")
+    try:
+        with urlopen(request, timeout=3) as response:
+            if response.status == 200:
+                return time.monotonic() - start
+    except OSError:
+        pass
+    return float("inf")
+
+
+async def prepare(home, environment):
+    from shiritaibot.core import PublicError
+
+    explicit_index = any(
+        os.environ.get(name) for name in ("UV_DEFAULT_INDEX", "UV_INDEX_URL", "UV_INDEX", "UV_OFFLINE")
+    )
+    if explicit_index:
+        indexes = [""]
+    else:
+        report(startupStage="probing")
+        scores = await asyncio.gather(
+            *(asyncio.to_thread(probe_index, index) for index in PYPI_INDEXES)
+        )
+        indexes = sorted(PYPI_INDEXES, key=dict(zip(PYPI_INDEXES, scores)).__getitem__)
+        previous = environment(home).current()
+        preferred = previous.state.get("desktop_index") if previous else None
+        if preferred in indexes:
+            indexes.remove(preferred)
+            indexes.insert(0, preferred)
+
+    errors = []
+    for i, index in enumerate(indexes):
+        os.environ["SHIRITAI_DESKTOP_INDEX"] = index
+        host = urlsplit(index).hostname
+        if i:
+            report(startupStage="retrying", indexHost=host)
+        try:
+            plan = await environment(home).prepare(
+                repair=True, on_progress=lambda stage: report(startupStage=stage, indexHost=host)
+            )
+        except PublicError as exc:
+            if len(indexes) == 1:
+                raise
+            errors.append(f"{host}: {exc}")
+        else:
+            report(python=str(plan.python), index=index)
+            return
+    raise PublicError("\n".join(errors))
+
+
+async def prepare_until_closed(home, environment):
+    from shiritaibot.core import PublicError
+
+    task = asyncio.create_task(prepare(home, environment))
+    loop = asyncio.get_running_loop()
+
+    def watch_host():
+        while os.read(sys.stdin.fileno(), 4096):
+            pass
+        try:
+            loop.call_soon_threadsafe(task.cancel)
+        except RuntimeError:
+            pass
+
+    if os.environ.get("SHIRITAI_DESKTOP_PARENT"):
+        threading.Thread(target=watch_host, daemon=True).start()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    except PublicError as exc:
+        print(str(exc), file=sys.stderr, flush=True)
+        return 1
+    return 0
 
 
 def serve(home, port):
@@ -96,7 +184,6 @@ if __name__ == "__main__":
     if command == "check":
         bootstrap_environment()
     elif command == "prepare":
-        plan = asyncio.run(bootstrap_environment()(Path(args[0])).prepare(repair=True))
-        report(python=str(plan.python))
+        sys.exit(asyncio.run(prepare_until_closed(Path(args[0]), bootstrap_environment())))
     elif command == "serve":
         sys.exit(serve(Path(args[0]), int(args[1])))

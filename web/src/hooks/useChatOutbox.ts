@@ -33,6 +33,23 @@ export function useChatOutbox(
   }, [history, session, cache]);
 
   function send(text: string, attachments: ChatAttachment[] = []) {
+    // Settings commands use the alert path instead of adding an optimistic bubble.
+    if (
+      /^\/(?:model|persona|lang|tools|permissions|mode)\s+\S/i.test(text) ||
+      /^\/grants\s+(?:revoke|撤销)/i.test(text)
+    ) {
+      void act(
+        () =>
+          client.sendMessage(
+            text,
+            session,
+            undefined,
+            attachments.map((file) => file.id),
+          ),
+        "",
+      );
+      return;
+    }
     const id = Array.from(crypto.getRandomValues(new Uint32Array(4)), (x) =>
       x.toString(16).padStart(8, "0"),
     ).join("");
@@ -70,7 +87,10 @@ export function useChatOutbox(
     }, "").then(() => {
       // Plugins can consume a message without writing it to model history.
       const discard = new Set<string>();
-      if (["plugin", "ignored", "cancelled"].includes(status)) discard.add(id);
+      if (
+        ["plugin", "ignored", "cancelled", "settings_command"].includes(status)
+      )
+        discard.add(id);
       if (
         status === "cancelled" ||
         (status === "command" &&

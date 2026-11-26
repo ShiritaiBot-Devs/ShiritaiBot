@@ -1,5 +1,5 @@
 import { LoadingBar } from "./LoadingBar";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Menu } from "lucide-react";
 import type { ApiClient } from "../api/client";
@@ -30,6 +30,7 @@ export interface ChatWorkspaceProps {
   onForgetSession: (id: string) => void;
   draftSessions: string[];
   onOpenSettings: () => void;
+  setup?: ReactNode;
 }
 
 export function ChatWorkspace({
@@ -42,6 +43,7 @@ export function ChatWorkspace({
   onForgetSession,
   draftSessions,
   onOpenSettings,
+  setup,
 }: ChatWorkspaceProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -122,6 +124,11 @@ export function ChatWorkspace({
   );
   const waiting =
     outgoing.some((row) => !row.sendFailed) || running.has(session);
+  const empty =
+    history.data?.length === 0 &&
+    !outgoing.length &&
+    !current.length &&
+    !waiting;
 
   useEffect(() => {
     stickRef.current = true;
@@ -129,17 +136,17 @@ export function ChatWorkspace({
     const stream = streamRef.current;
     if (!scroll || !stream) return;
     const observer = new ResizeObserver(() => {
-      if (stickRef.current) scroll.scrollTop = scroll.scrollHeight;
+      if (stickRef.current && !empty) scroll.scrollTop = scroll.scrollHeight;
     });
     observer.observe(stream);
     return () => observer.disconnect();
-  }, [session]);
+  }, [session, empty]);
 
   useEffect(() => {
     const element = scrollRef.current;
-    if (!element || !stickRef.current) return;
+    if (!element || !stickRef.current || empty) return;
     element.scrollTop = element.scrollHeight;
-  }, [history.data, approvals.data, session, outgoing.length, waiting]);
+  }, [history.data, approvals.data, session, outgoing.length, waiting, empty]);
 
   function resolve(id: string, allow: boolean) {
     setBusy(true);
@@ -242,15 +249,15 @@ export function ChatWorkspace({
                 })}
               />
             )}
-            {history.data?.length === 0 &&
-              !outgoing.length &&
-              !current.length &&
-              !waiting && (
+            {empty && (
+              <div className="chat-empty">
                 <div className="chat-greeting">
                   <h2>Hi I'm ShiritaiBot</h2>
                   <p>{i18n.t("chat:workspace.greeting")}</p>
                 </div>
-              )}
+                {setup}
+              </div>
+            )}
             <AgentTimeline
               client={client}
               history={[...(history.data ?? []), ...outgoing]}

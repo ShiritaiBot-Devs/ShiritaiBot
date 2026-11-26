@@ -1,106 +1,28 @@
 import { MetricIcon } from "../components/MetricIcon";
 import { LoadingBar } from "../components/LoadingBar";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Activity,
-  ArrowUpRight,
-  CheckCircle2,
-  Circle,
-  Network,
-} from "lucide-react";
+import { Activity, ArrowUpRight, Network } from "lucide-react";
 import type { ApiClient } from "../api/client";
-import type { PageId } from "../navigation";
+import type { Settings } from "../api/types";
 import { ApprovalCard } from "../components/ApprovalCard";
 import { EmptyState } from "../components/EmptyState";
+import { FirstRunChecklist } from "../components/FirstRunChecklist";
 import type { Action } from "./common";
 import type { NavigationProps } from "./common";
 import { Dashboard } from "./Dashboard";
 import { formatDateTime } from "../lib/utils";
 import i18n from "../i18n";
 
-function FirstRunChecklist({
-  client,
-  onNavigate,
-}: {
-  client: ApiClient;
-  onNavigate: (page: PageId) => void;
-}) {
-  const config = useQuery({
-    queryKey: ["config"],
-    queryFn: () => client.config(),
-  });
-  const data = config.data;
-  if (!data) return null;
-  const steps: { label: string; done: boolean; page: PageId }[] = [
-    {
-      label: i18n.t("overview:setup.provider"),
-      done: data.providers.some((provider) => provider.enabled),
-      page: "models",
-    },
-    {
-      label: i18n.t("overview:setup.model"),
-      done: data.models.some((model) => model.enabled),
-      page: "models",
-    },
-    {
-      label: i18n.t("overview:setup.routes"),
-      done: ["chat", "agent", "agent_chat"].every(
-        (route) => (data.routes[route] ?? []).length > 0,
-      ),
-      page: "models",
-    },
-    {
-      label: i18n.t("overview:setup.webSearch"),
-      done:
-        !data.web_search.enabled ||
-        Boolean(data.web_search[data.web_search.provider].api_key),
-      page: "settings",
-    },
-    {
-      label: i18n.t("overview:setup.adapter"),
-      done: data.adapters.some((adapter) => adapter.enabled),
-      page: "adapters",
-    },
-  ];
-  if (steps.every((step) => step.done)) return null;
-  return (
-    <section className="panel">
-      <h2>{i18n.t("overview:setup.title")}</h2>
-      <p className="muted">{i18n.t("overview:setup.hint")}</p>
-      <ul className="checklist">
-        {steps.map((step) => (
-          <li key={step.label} className={step.done ? "done" : undefined}>
-            {step.done ? (
-              <CheckCircle2
-                size={16}
-                aria-label={i18n.t("overview:setup.done")}
-              />
-            ) : (
-              <Circle size={16} aria-label={i18n.t("overview:setup.todo")} />
-            )}
-            <span className={step.done ? "muted" : ""}>{step.label}</span>
-            {!step.done && (
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => onNavigate(step.page)}
-              >
-                {i18n.t("overview:setup.go")}
-                <ArrowUpRight size={14} />
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 export function OverviewPage({
   client,
   act,
   onNavigate,
-}: { client: ApiClient; act: Action } & NavigationProps) {
+  setupConfig,
+}: {
+  client: ApiClient;
+  act: Action;
+  setupConfig?: Settings;
+} & NavigationProps) {
   const health = useQuery({
     queryKey: ["health"],
     queryFn: () => client.health(),
@@ -123,7 +45,9 @@ export function OverviewPage({
 
   return (
     <>
-      <FirstRunChecklist client={client} onNavigate={onNavigate} />
+      {setupConfig && (
+        <FirstRunChecklist config={setupConfig} onNavigate={onNavigate} />
+      )}
       <div className="metrics">
         {(
           [

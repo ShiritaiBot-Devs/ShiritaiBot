@@ -1,5 +1,5 @@
 import { LoadingBar } from "./LoadingBar";
-import { DesktopSidebarDrag } from "./DesktopTitleBar";
+import { desktop, DesktopSidebarDrag } from "./DesktopTitleBar";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -115,23 +115,25 @@ export function AppShell({
             )}
             <small>{version}</small>
           </div>
-          <button
-            type="button"
-            className="restart-button"
-            onClick={onRestart}
-            disabled={restartDisabled || restarting}
-            title={restartHint}
-            aria-label={restarting ? t("restart.busy") : t("restart.label")}
-          >
-            {restarting ? (
-              <LoadingBar compact label={t("status.restarting")} />
-            ) : (
-              <>
-                <RotateCw size={16} aria-hidden="true" />
-                <span>{t("restart.label")}</span>
-              </>
-            )}
-          </button>
+          {!desktop && (
+            <button
+              type="button"
+              className="restart-button"
+              onClick={onRestart}
+              disabled={restartDisabled || restarting}
+              title={restartHint}
+              aria-label={restarting ? t("restart.busy") : t("restart.label")}
+            >
+              {restarting ? (
+                <LoadingBar compact label={t("status.restarting")} />
+              ) : (
+                <>
+                  <RotateCw size={16} aria-hidden="true" />
+                  <span>{t("restart.label")}</span>
+                </>
+              )}
+            </button>
+          )}
           <div className="sidebar-mode-actions">
             <button
               type="button"
@@ -185,9 +187,11 @@ export function AppShell({
               )}
             </button>
             <UiLanguageSelect compact />
-            <button type="button" onClick={onLogout}>
-              {t("header.logout")}
-            </button>
+            {!desktop && (
+              <button type="button" onClick={onLogout}>
+                {t("header.logout")}
+              </button>
+            )}
           </div>
         </header>
         <div className="content">

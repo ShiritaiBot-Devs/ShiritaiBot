@@ -44,14 +44,14 @@ export function DesktopSettings({ act }: { act: Action }) {
             <option value="tray">{t("desktop.tray")}</option>
           </select>
         </label>
-        <div>
-          <label className="inline">
+        <div className="desktop-notification-setting">
+          <label className="field field-toggle desktop-notification-toggle">
+            <span className="field-name">{t("desktop.notifications")}</span>
             <input
               type="checkbox"
               checked={preferences.notifications}
               onChange={(event) => save("notifications", event.target.checked)}
             />
-            {t("desktop.notifications")}
           </label>
           {desktop.platform === "win32" && (
             <button

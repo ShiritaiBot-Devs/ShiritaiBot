@@ -11,10 +11,13 @@
       button { app-region: no-drag; width: 46px; border: 0; background: transparent; color: inherit; font: inherit; }
       button:hover { background: #e9f1ff; }
       button:last-child:hover { background: #dc2626; color: white; }
-      main { text-align: center; }
+      main { width: min(300px, calc(100% - 44px)); text-align: center; }
       img { width: 72px; height: 72px; border-radius: 16px; }
       h1 { margin: 8px 0 2px; font-size: 24px; }
       p { margin: 0; color: #64748b; }
+      .progress { height: 5px; margin: 18px 0 9px; overflow: hidden; border-radius: 4px; background: #e2e8f2; }
+      .progress-fill { height: 100%; border-radius: inherit; background: #4d6bfe; transform: scaleX(0); transform-origin: left; transition: transform 260ms ease-out; }
+      @media (prefers-reduced-motion: reduce) { .progress-fill { transition: none; } }
     </style>
   </head>
   <body>
@@ -22,14 +25,38 @@
     <main>
       <img alt="" width="72" height="72">
       <h1>ShiritaiBot</h1>
-      <p role="status"></p>
+      <div class="progress" role="progressbar" aria-labelledby="startup-status">
+        <div class="progress-fill"></div>
+      </div>
+      <p id="startup-status" role="status"></p>
     </main>
     <script>
       const desktop = window.shiritaiDesktop;
       const zh = navigator.language.startsWith("zh");
       document.documentElement.lang = zh ? "zh-CN" : "en";
       if (desktop.platform === "darwin") document.body.classList.add("mac");
-      document.querySelector("p").textContent = zh ? "正在准备本地运行环境…" : "Preparing the local runtime…";
+      const stages = {
+        checking: [10, "检查本地运行环境…", "Checking the local runtime…"],
+        probing: [20, "检测 Python 软件包源…", "Checking Python package indexes…"],
+        retrying: [32, "切换 Python 软件包源…", "Trying another Python package index…"],
+        resolving: [32, "解析 Python 和插件依赖…", "Resolving Python and plugin dependencies…"],
+        synchronizing: [58, "同步 Python 依赖…", "Syncing Python dependencies…"],
+        starting: [84, "启动本地服务…", "Starting the local service…"],
+        ready: [100, "准备就绪", "Ready"],
+      };
+      const progress = document.querySelector(".progress");
+      const fill = progress.firstElementChild;
+      const status = document.querySelector("#startup-status");
+      let displayed = 0;
+      function showProgress(stage, indexHost) {
+        const [value, labelZh, labelEn] = stages[stage];
+        displayed = Math.max(displayed, value);
+        status.textContent = (zh ? labelZh : labelEn) + (indexHost ? ` · ${indexHost}` : "");
+        progress.setAttribute("aria-valuenow", displayed);
+        fill.style.transform = `scaleX(${displayed / 100})`;
+      }
+      showProgress("checking");
+      desktop.onStartupProgress(showProgress);
       document.querySelector("img").src = new URLSearchParams(location.search).get("icon");
       if (desktop.platform !== "darwin") {
         for (const [action, icon, label] of [

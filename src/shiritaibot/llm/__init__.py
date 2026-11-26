@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 
+from shiritaibot.agent.context import context_chars
 from shiritaibot.core import (
     PublicError,
     Reply,
@@ -781,6 +782,7 @@ class ProviderManager:
                         "used": used or estimate,
                         "limit": model.max_context or None,
                         "estimated": not used,
+                        "context_chars": context_chars(messages) if not model.max_context else None,
                     }, scope)
                 log.debug(
                     t("llm.replied", display_name=model.display_name, value=time.monotonic() - started)

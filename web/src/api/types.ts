@@ -779,7 +779,8 @@ export interface ChatAttachment {
 export interface ChatContextUsage {
   model: string;
   used: number;
-  limit: number | null;
+  limit: number;
+  unit: "tokens" | "characters";
   estimated: boolean;
 }
 

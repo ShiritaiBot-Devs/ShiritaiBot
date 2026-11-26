@@ -61,25 +61,30 @@
   position: relative;
 }
 
-.composer-context button {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
+.composer .composer-context button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
 }
 
 .context-ring {
   display: inline-block;
   position: relative;
-  width: 16px;
-  height: 16px;
+  width: 19px;
+  height: 19px;
   border-radius: 50%;
 }
 
 .context-ring::after {
   content: "";
   position: absolute;
-  inset: 3px;
+  inset: 2px;
   border-radius: inherit;
   background: var(--panel);
 }
@@ -97,6 +102,7 @@
   background: var(--panel);
   box-shadow: var(--shadow);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .composer-context:hover .context-details,
@@ -429,9 +435,27 @@
   min-height: 100%;
 }
 
-.chat-stream:has(.chat-greeting) {
+.chat-stream:has(.chat-empty) {
   display: grid;
-  place-content: center;
+  align-content: center;
+  justify-items: center;
+}
+
+.chat-empty {
+  width: min(100%, 460px);
+}
+
+.chat-setup {
+  margin-top: 24px;
+}
+
+.chat-setup h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.chat-setup .checklist {
+  margin-top: 4px;
 }
 
 .chat-greeting {
