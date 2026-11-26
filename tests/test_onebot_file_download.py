@@ -79,7 +79,7 @@ def test_download_napcat_file_from_base64_without_a_usable_url(tmp_path, monkeyp
     monkeypatch.setattr(onebot11, "connect", connect)
 
     async def run():
-        with pytest.raises(PublicError, match="在当前会话中找不到该文件引用"):
+        with pytest.raises(PublicError, match="该文件引用属于其他会话"):
             await qq.download_qq_file(app, "private:qq:99", ref)
         app.store.get.assert_awaited_once_with("qq_file", ref_id)
         bot.call.assert_not_awaited()
@@ -98,6 +98,24 @@ def test_download_napcat_file_from_base64_without_a_usable_url(tmp_path, monkeyp
     assert Path(result["path"]).is_relative_to(downloads)
     assert list(downloads.glob("*.part")) == []
     assert not session_dir(tmp_path, "files", session).exists()
+
+
+@pytest.mark.parametrize(
+    ("row", "message"),
+    [
+        (None, "该文件引用不存在，可能传错或已被清理"),
+        ({"scope": "private:qq:99"}, "该文件引用属于其他会话"),
+    ],
+    ids=["missing", "other-session"],
+)
+def test_download_rejects_missing_or_other_session_ref(row, message):
+    ref = "ff69cd8d2a4044cebff91d59def38162"
+    app = SimpleNamespace(store=SimpleNamespace(get=AsyncMock(return_value=row)))
+
+    with pytest.raises(PublicError, match=message):
+        asyncio.run(qq.download_qq_file(app, "private:qq:42", ref))
+
+    app.store.get.assert_awaited_once_with("qq_file", ref)
 
 
 def test_download_source_keeps_https_and_rejects_path_only_or_invalid_data(monkeypatch):

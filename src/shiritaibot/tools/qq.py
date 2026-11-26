@@ -131,8 +131,10 @@ async def download_qq_file(app, session: str, ref: str) -> dict:
     if ref_with_name:
         ref = ref_with_name[1]
     row = await app.store.get("qq_file", ref)
-    if not row or row["scope"] != session:
-        raise PublicError("tools.qq.fileRefUnavailable")
+    if not row:
+        raise PublicError("tools.qq.fileRefMissing")
+    if row["scope"] != session:
+        raise PublicError("tools.qq.fileRefOtherSession")
     bot = app.adapters.instances.get(row["adapter"])
     if not isinstance(bot, OneBot):
         raise PublicError("tools.qq.adapterUnavailable")
