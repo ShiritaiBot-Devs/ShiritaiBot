@@ -1,4 +1,13 @@
 {
+  "plan": {
+    "title": "任务清单",
+    "progress": "任务清单进度",
+    "pending": "待办",
+    "in_progress": "进行中",
+    "completed": "已完成",
+    "blocked": "受阻",
+    "skipped": "已跳过"
+  },
   "shell": {
     "diffOutput": "差异输出",
     "editedFiles": "已编辑的文件",

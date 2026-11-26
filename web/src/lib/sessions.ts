@@ -182,7 +182,8 @@ export function sessionActivity(turns: TurnRecord[]): Record<string, number> {
 export function runningSessions(turns: TurnRecord[]): Set<string> {
   const running = new Set<string>();
   for (const turn of turns) {
-    if (turn.scope && turn.status === "running") running.add(turn.scope);
+    if (turn.scope && ["running", "wrapping_up", "evaluating"].includes(turn.status ?? ""))
+      running.add(turn.scope);
   }
   return running;
 }

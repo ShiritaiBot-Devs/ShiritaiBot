@@ -1,7 +1,7 @@
 import { LoadingBar } from "./LoadingBar";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Menu } from "lucide-react";
+import { Check, Circle, CircleAlert, LoaderCircle, Menu, SkipForward } from "lucide-react";
 import type { ApiClient } from "../api/client";
 import type { HistoryMessage, WebChat } from "../api/types";
 import { draftKey, modelKey, writeValue } from "../lib/composer";
@@ -20,6 +20,14 @@ import {
   sessionTitle,
 } from "../lib/sessions";
 import i18n from "../i18n";
+
+const planIcons = {
+  pending: Circle,
+  in_progress: LoaderCircle,
+  completed: Check,
+  blocked: CircleAlert,
+  skipped: SkipForward,
+};
 
 export interface ChatWorkspaceProps {
   client: ApiClient;
@@ -72,6 +80,11 @@ export function ChatWorkspace({
     queryKey: ["history", session],
     queryFn: () => client.history(session),
     refetchInterval: 2500,
+  });
+  const { data: plan } = useQuery({
+    queryKey: ["task-plan", session],
+    queryFn: () => client.taskPlan(session),
+    refetchInterval: 10000,
   });
   const { data: preview } = useQuery<HistoryMessage | null>({
     queryKey: ["chat-reply", session],
@@ -287,6 +300,29 @@ export function ChatWorkspace({
                 onResolve={(allow) => resolve(row.id, allow)}
               />
             ))}
+            {!!plan?.length && (
+              <section className="chat-task-plan" aria-label={i18n.t("chat:plan.title")}>
+                <div className="chat-task-plan-header">
+                  <strong>{i18n.t("chat:plan.title")}</strong>
+                  <progress
+                    max={plan.length}
+                    value={plan.filter(({ status }) => status === "completed" || status === "skipped").length}
+                    aria-label={i18n.t("chat:plan.progress")}
+                  />
+                </div>
+                <ul>
+                  {plan.map(({ id, title, status, active_form }) => {
+                    const Icon = planIcons[status];
+                    return (
+                      <li key={id} data-status={status}>
+                        <Icon size={15} role="img" aria-label={i18n.t(`chat:plan.${status}`)} />
+                        <span>{status === "in_progress" ? active_form : title}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
             {waiting && !liveReply && (
               <div
                 className="chat-loading"

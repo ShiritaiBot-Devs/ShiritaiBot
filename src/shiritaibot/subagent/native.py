@@ -1,22 +1,21 @@
 from __future__ import annotations
 
-from collections import Counter
+import asyncio
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from shiritaibot.agent import repair_history
-from shiritaibot.agent.context import context_chars
+from shiritaibot.agent.execution import TurnExecution, TurnLimit, TurnState
 from shiritaibot.core import (
+    NEEDS_INPUT,
     Context,
     InteractionRequired,
     PublicError,
     canonical,
     delegated_workspace,
-    fingerprint,
     uid,
 )
 from shiritaibot.prompts import prompt as prompt_text
-from shiritaibot.subagent import NEEDS_INPUT
 
 
 @dataclass(frozen=True)
@@ -93,6 +92,7 @@ class NativeRunner:
         cfg = self.config.value.model_copy(deep=True)
         if instance.model:
             cfg.routes["agent"] = [instance.model]
+        execution = TurnExecution(cfg, self.llm, ctx.session, seconds=instance.timeout)
         allowed_tools, allowed_skills, require_manual_approval = self._resolve_permissions(
             ctx, instance
         )
@@ -116,24 +116,56 @@ class NativeRunner:
 
         saved = await self.store.get("subagent_history", key) or {}
         history = repair_history(saved.get("messages", []), None)
-        history.append({"role": "user", "content": prompt})
+        history.append({"role": "user", "content": prompt, "_turn_input": True})
         history = repair_history(history, cfg.policy.max_context_chars)
+        start = len(history) - 1
 
-        async def checkpoint():
-            await self.store.put("subagent_history", key, {"messages": history}, ctx.session)
+        async def checkpoint(messages=None, summary=None, through=0):
+            await self.store.put(
+                "subagent_history", key,
+                {"messages": history if messages is None else messages,
+                 "summary": execution.summary if summary is None else summary,
+                 "steps": execution.steps, "status": execution.state},
+                ctx.session,
+            )
 
         await checkpoint()
-        repeats = Counter()
-        for _ in range(cfg.policy.max_steps):
+        try:
+            result = await self.run_steps(ctx, workspace, system, history, start, execution, checkpoint)
+        except TurnLimit as limit:
+            try:
+                result = await execution.wrap(str(limit), "agent", system, history, repair_history)
+            except asyncio.CancelledError:
+                execution.state = TurnState.CANCELLED
+                raise
+            except Exception:
+                execution.state = TurnState.FAILED
+                raise
+        except asyncio.CancelledError:
+            execution.state = TurnState.CANCELLED
+            raise
+        except Exception:
+            execution.state = TurnState.FAILED
+            raise
+        finally:
+            history[:] = repair_history(history, None)
+            if execution.state == TurnState.BUDGET_STOPPED:
+                history.append({"role": "assistant", "content": result})
+            await checkpoint()
+        return result
+
+    async def run_steps(self, ctx, workspace, system, history, start, execution, checkpoint):
+        while True:
             settings = self.config.value
             if not settings.adapter_context_valid(ctx) or (
                 not ctx.background and ctx.memory_profile != settings.session_memory(ctx.session)
             ):
                 raise PublicError("subagent.sourceChanged")
-            if context_chars(history) > cfg.policy.max_context_chars * 2:
-                raise PublicError("subagent.contextFull")
-            reply = await self.llm.complete(
-                "agent", system, history, self.registry.specs(ctx), settings=cfg, scope=ctx.session
+            await execution.reduce(history, start, "", checkpoint)
+            execution.reserve_step()
+            reply = await execution.work(
+                self.llm.complete, "agent", system, history, self.registry.specs(ctx),
+                settings=execution.cfg, scope=ctx.session,
             )
             message = {"role": "assistant", "content": reply.text, "_opaque": reply.opaque}
             if reply.calls:
@@ -143,16 +175,17 @@ class NativeRunner:
             if not reply.calls:
                 if not reply.text.strip():
                     raise PublicError("subagent.noResult")
+                execution.state = (
+                    TurnState.WAITING_INPUT if reply.text.lstrip().startswith(NEEDS_INPUT)
+                    else TurnState.COMPLETED
+                )
                 return reply.text
             for call in reply.calls:
                 fn = call["function"]
-                signature = fingerprint(fn)
-                repeats[signature] += 1
-                if repeats[signature] >= 5:
-                    raise PublicError("subagent.repeatLimit")
                 token = delegated_workspace.set((ctx.session, workspace))
                 try:
-                    output = await self.registry.execute(
+                    output = await execution.work(
+                        self.registry.execute,
                         replace(ctx, tool_call_id=call["id"]), fn["name"], fn["arguments"]
                     )
                 except InteractionRequired as request:
@@ -163,10 +196,14 @@ class NativeRunner:
                             "content": canonical({"waiting": request.reason}),
                         }
                     )
-                    await checkpoint()
+                    execution.state = TurnState.WAITING_INPUT
                     return f"{NEEDS_INPUT} {request.reason}"
                 finally:
                     delegated_workspace.reset(token)
-                history.append({"role": "tool", "tool_call_id": call["id"], "content": output})
+                history.append({
+                    "role": "tool", "tool_call_id": call["id"],
+                    "content": execution.observe_result(fn, output),
+                })
                 await checkpoint()
-        raise PublicError("subagent.stepLimit", max_steps=cfg.policy.max_steps)
+                if execution.repeat_count >= 5:
+                    raise TurnLimit("repeat")

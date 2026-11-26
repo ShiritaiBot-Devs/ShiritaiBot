@@ -60,6 +60,13 @@ export class ApiError extends Error {
   }
 }
 
+export interface PlanStep {
+  id: string;
+  title: string;
+  active_form: string;
+  status: "pending" | "in_progress" | "completed" | "blocked" | "skipped";
+}
+
 export interface LogFilter {
   limit: number;
   level: string;
@@ -115,6 +122,7 @@ export interface ApiClient {
   helpMenuSections(): Promise<HelpMenuSection[]>;
   helpMenuImage(id: string): Promise<Blob>;
   history(session: string): Promise<HistoryMessage[]>;
+  taskPlan(session: string): Promise<PlanStep[]>;
   webChats(): Promise<WebChat[]>;
   chatWorkspace(session: string): Promise<ChatWorkspaceInfo>;
   setChatWorkspace(
@@ -416,6 +424,8 @@ export function createClient(getToken: () => string): ApiClient {
       request<HistoryMessage[]>(
         "/history?timeline=true&session=" + encodeURIComponent(session),
       ),
+    taskPlan: (session) =>
+      request<PlanStep[]>("/task-plan?session=" + encodeURIComponent(session)),
     rawLogs: (lines, query) =>
       request<{ lines: string[] }>(
         "/logs/raw?lines=" + lines + "&q=" + encodeURIComponent(query),

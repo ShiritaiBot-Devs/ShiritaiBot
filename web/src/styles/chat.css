@@ -840,3 +840,47 @@
   padding-inline: 6px;
   font: inherit;
 }
+.chat-task-plan {
+  border-top: 1px solid var(--border);
+  padding: 0.75rem 0;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.chat-task-plan-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.chat-task-plan progress {
+  width: min(7rem, 35%);
+  accent-color: var(--accent);
+}
+
+.chat-task-plan ul {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-task-plan li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.chat-task-plan svg {
+  flex-shrink: 0;
+  align-self: start;
+  margin-top: 0.15rem;
+}
+
+.chat-task-plan [data-status="completed"] svg {
+  color: var(--success);
+}
+
+.chat-task-plan [data-status="in_progress"] svg {
+  color: var(--accent);
+}

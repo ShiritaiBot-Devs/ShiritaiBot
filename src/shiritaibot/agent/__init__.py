@@ -4,7 +4,7 @@ import asyncio
 import json
 import re
 import time
-from collections import Counter, deque
+from collections import deque
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
@@ -15,16 +15,19 @@ from zoneinfo import ZoneInfo
 
 from shiritaibot.agent.commands import command
 from shiritaibot.agent.context import ContextManager, context_chars, dialogue_message
+from shiritaibot.agent.execution import TurnExecution, TurnLimit, TurnState
+from shiritaibot.agent.goals import GOAL_USAGE, Goals, remaining
+from shiritaibot.agent.plan import plan_anchor, read_plan
 from shiritaibot.api.event import AgentResult, LLMRequest, LLMResponse, Turn
 from shiritaibot.config import is_feishu_session
 from shiritaibot.core import (
+    NEEDS_INPUT,
     Context,
     InteractionRequired,
     PublicError,
     canonical,
     current_reply,
     delegated_workspace,
-    fingerprint,
     now,
     record_usage_for,
     uid,
@@ -204,6 +207,8 @@ class SessionActor:
         self.wake = asyncio.Event()
         self.current: asyncio.Task | None = None
         self.context: Context | None = None
+        self.goal_wake: tuple[Context, str] | None = None
+        self.goal_judge: asyncio.Task | None = None
         self.task = asyncio.create_task(self.run(), name=f"session:{session}")
 
     async def submit(self, ctx: Context, text: str) -> str:
@@ -235,6 +240,8 @@ class SessionActor:
             and ctx.mode == "agent"
         ):
             self.steering.append((ctx, text))
+            if self.goal_judge:
+                self.goal_judge.cancel()
             loop_logger(ctx).log(Text("agent.log.steered", brief=brief(text, 80)))
             return "steering"
         policy = self.runtime.config.value.policy
@@ -317,6 +324,9 @@ class SessionActor:
                 continue
             if not self.queue.empty():
                 return self.queue.get_nowait()
+            if self.goal_wake:
+                item, self.goal_wake = self.goal_wake, None
+                return item
             try:
                 await asyncio.wait_for(self.wake.wait(), timeout=1800)
                 self.wake.clear()
@@ -351,7 +361,7 @@ class SessionActor:
                         key for origin, _ in self.steering for key in origin.web_message_ids
                     )
                     self.steering.clear()
-                    await self.queue.put((replace(ctx, web_message_ids=ids), followup))
+                    self.ready.appendleft([(replace(ctx, web_message_ids=ids, goal_id=""), followup)])
                     self.wake.set()
         finally:
             if self.current:
@@ -387,6 +397,7 @@ class AgentRuntime:
         self.hooks: Any = None
         self.submit_locks: dict[str, asyncio.Lock] = {}
         self.context_locks: dict[str, asyncio.Lock] = {}
+        self.goals = Goals(self)
         self.deliver_group_reply: Callable[[str, str, str], Awaitable[None]] | None = None
 
     async def session_locale(self, session: str) -> tuple[Locale, bool]:
@@ -448,6 +459,9 @@ class AgentRuntime:
             locale, _ = await self.session_locale(ctx.session)
             with record_usage_for(ctx.session), use_locale(locale):
                 return await command(self, ctx, text)
+        return await self.actor_for(actor_session).submit(ctx, text)
+
+    def actor_for(self, actor_session: str) -> SessionActor:
         if actor_session not in self.actors or self.actors[actor_session].task.done():
             actor = SessionActor(self, actor_session)
             self.actors[actor_session] = actor
@@ -457,7 +471,7 @@ class AgentRuntime:
                     self.actors.pop(actor_session, None)
 
             actor.task.add_done_callback(cleanup)
-        return await self.actors[actor_session].submit(ctx, text)
+        return self.actors[actor_session]
 
     def busy(self, session: str) -> bool:
         actor = self.actors.get(session)
@@ -465,7 +479,7 @@ class AgentRuntime:
             return False
         if actor.current is not None and not actor.current.done():
             return True
-        return bool(actor.buffered or not actor.queue.empty())
+        return bool(actor.goal_wake or actor.buffered or actor.ready or not actor.queue.empty())
 
     async def cancel_reconfigured_sessions(self, previous) -> None:
         cfg = self.config.value
@@ -485,6 +499,7 @@ class AgentRuntime:
                 await asyncio.gather(actor.task, return_exceptions=True)
 
     async def close(self) -> None:
+        self.goals.stopping = True
         for actor in self.actors.values():
             actor.task.cancel()
         await asyncio.gather(*(a.task for a in self.actors.values()), return_exceptions=True)
@@ -620,13 +635,34 @@ class AgentRuntime:
                     if workspace:
                         workspace_token = delegated_workspace.set((ctx.session, Path(workspace["path"])))
                         try:
-                            await self._turn(actor, ctx, text)
+                            await self.run_actor_turn(actor, ctx, text)
                         finally:
                             delegated_workspace.reset(workspace_token)
                     else:
-                        await self._turn(actor, ctx, text)
+                        await self.run_actor_turn(actor, ctx, text)
             finally:
                 current_reply.reset(token)
+
+    async def run_actor_turn(self, actor, ctx, text):
+        intent = ctx.goal_id
+        attempt = None
+        if isinstance(actor, SessionActor):
+            ctx = self.registry.permissions.context(ctx)
+            ctx, text, attempt = await self.goals.begin(actor, ctx, text)
+        if intent and attempt is None:
+            return
+        token = GOAL_USAGE.set(attempt.charge if attempt else None)
+        try:
+            if attempt:
+                await self._turn(actor, ctx, text, attempt=attempt)
+            else:
+                await self._turn(actor, ctx, text)
+        except BaseException:
+            if attempt:
+                await self.goals.abandon_attempt(attempt)
+            raise
+        finally:
+            GOAL_USAGE.reset(token)
 
     async def interjection_candidate(self, ctx: Context, text: str) -> str | None:
         """Generate without acquiring the passive actor, writing chat history or delivering."""
@@ -635,7 +671,7 @@ class AgentRuntime:
         with record_usage_for(ctx.session), use_locale(locale):
             return await self._turn(None, ctx, text)
 
-    async def _turn(self, actor: SessionActor | None, ctx: Context, text: str) -> str | None:
+    async def _turn(self, actor: SessionActor | None, ctx: Context, text: str, *, attempt=None) -> str | None:
         turn_started = now()
         settings = self.config.value
         if not settings.adapter_context_valid(ctx) or (
@@ -652,9 +688,32 @@ class AgentRuntime:
             else {}
         )
         proactive = execution_session.startswith(PREPARE_SESSION)
-        append = partial(
-            self.store.append, execution_session, ctx.turn, memory_profile=ctx.memory_profile
-        )
+        outstanding: dict[str, None] = {}
+
+        async def archive_message(message):
+            seq = await self.store.append(
+                execution_session, ctx.turn, message, memory_profile=ctx.memory_profile
+            )
+            if isinstance(seq, int):
+                message["_seq"] = seq
+
+        async def repair_checkpoint():
+            for call_id in tuple(outstanding):
+                await archive_message({
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": prompt_text("INTERRUPTED_SIDE_EFFECTS"),
+                })
+                outstanding.pop(call_id, None)
+
+        async def append(message):
+            if message["role"] != "tool":
+                await repair_checkpoint()
+            await archive_message(message)
+            if message["role"] == "tool":
+                outstanding.pop(message["tool_call_id"], None)
+            else:
+                outstanding.update((call["id"], None) for call in message.get("tool_calls", []))
         if ctx.interject:
             # A passing remark is one cheap chat turn: no tools, no policy upgrade.
             ctx = replace(ctx, mode="chat", allowed_tools=())
@@ -688,7 +747,7 @@ class AgentRuntime:
             emotion_block = await self.emotion.context(ctx, cfg)
             if not ctx.interject and not ctx.routine_event:
                 await self.emotion.observe(ctx, text)
-        route = await self.route(ctx, cfg, text)
+        route = "agent" if attempt else await self.route(ctx, cfg, text)
         selected = await self.store.get("session_model", ctx.session)
         selected_model = selected.get("model") if selected else None
         if selected_model:
@@ -742,6 +801,19 @@ class AgentRuntime:
             ctx,
         )
         final = ""
+        execution = TurnExecution(
+            cfg, self.llm, ctx.session,
+            steps=remaining(attempt.goal, "steps") if attempt else None,
+            seconds=remaining(attempt.goal, "seconds") if attempt else None,
+            exhausted=(lambda: not remaining(attempt.goal, "tokens")) if attempt else None,
+        )
+        history: list[dict] = []
+        current_start = 0
+        goal_anchor = (
+            "\n\n" + t("agent.goal.objective", objective=attempt.goal["objective"], marker=NEEDS_INPUT)
+            if attempt else ""
+        )
+        anchors = goal_anchor
         if hooks is not None:
             await hooks.call("agent_begin", info)
 
@@ -805,7 +877,7 @@ class AgentRuntime:
             return messages
 
         try:
-            async with asyncio.timeout(cfg.policy.max_turn_seconds):
+            async with asyncio.timeout_at(execution.deadline):
                 zone = ZoneInfo(cfg.proactive.timezone)
                 blocks = [emotion_block] if emotion_block else []
                 private_memory = ctx.owner and ctx.mode == "agent" and not ctx.group
@@ -828,6 +900,8 @@ class AgentRuntime:
                     blocks.append(recent_lines(summaries, zone))
                 user = {
                     "role": "user",
+                    "_turn_input": True,
+                    **({"_goal_continuation": True} if attempt and attempt.synthetic else {}),
                     "_speaker": cfg.owner_name if ctx.owner else name or ctx.actor,
                     "_original_content": text,
                     "content": text
@@ -841,6 +915,7 @@ class AgentRuntime:
                 # Interject turns carry a synthetic observation, not something anyone said.
                 if not ctx.interject:
                     await append(user)
+                history = [user]
                 context = ContextManager(self.store, self.llm)
                 chat_reply = None
                 steering = []
@@ -870,7 +945,8 @@ class AgentRuntime:
                         chat_system += meme_prompt(cfg, tool_guidance=False)
                     # The tool-free request excludes plugin request injections as well as tool specs.
                     log.debug(Text("agent.log.agentChat", count=len(chat_history)))
-                    chat_reply = await self.llm.complete(
+                    chat_reply = await execution.work(
+                        self.llm.complete,
                         route,
                         chat_system + prompt_text("WORK_HANDOFF", marker=WORK_HANDOFF),
                         chat_history,
@@ -895,7 +971,6 @@ class AgentRuntime:
                         raise PublicError("agent.chatToolCall")
 
                 tools: list[dict] = []
-                history: list[dict] = []
                 if chat_reply is None:
                     tools = [] if ctx.interject else self.registry.specs(ctx)
                     # Proactive turns report their conclusion through an internal tool.
@@ -918,32 +993,55 @@ class AgentRuntime:
                             cfg.policy.max_context_chars,
                         )
                     else:
-                        history = repair_history(
-                            await context.prepare(
-                                ctx.session,
-                                cfg,
-                                current,
-                                owner=ctx.owner,
-                                current_turn=ctx.turn,
-                                memory_profile=ctx.memory_profile,
-                            ),
-                            None,
-                        )
+                        try:
+                            previous = await execution.work(
+                                context.prepare, ctx.session, cfg, current,
+                                owner=ctx.owner, current_turn=ctx.turn, memory_profile=ctx.memory_profile,
+                            )
+                        except PublicError as exc:
+                            if exc.args == ("agent.context.limit",):
+                                raise TurnLimit("context") from None
+                            raise
+                        history = repair_history(previous, None)
+                    current_start = len(history)
                     history.extend([current, *steering])
                 nudged = False
-                repetitions: Counter = Counter()
-                for step in range(cfg.policy.max_steps):
+                last_plan = None
+                last_plan_step = 0
+                async def checkpoint(messages, summary, through):
+                    await self.store.put(
+                        "turn_context", ctx.turn, {"summary": summary, "seq": through},
+                        execution_session,
+                    )
+
+                while True:
+                    step = execution.steps
                     if chat_reply is None:
+                        subagent_anchor = await self.goals.results(attempt) if attempt else ""
                         history.extend(await collect_steering())
-                        if context_chars(history) > cfg.policy.max_context_chars * 2:
-                            raise PublicError("agent.contextLimit")
+                        reminder = ""
+                        if ctx.mode == "agent" and not (ctx.background or ctx.interject or ctx.routine_event):
+                            plan = await read_plan(self.store, ctx.session, ctx.memory_profile)
+                            anchors = goal_anchor + plan_anchor(plan)
+                            if last_plan != plan:
+                                last_plan, last_plan_step = plan, step
+                            elif step - last_plan_step == 6 and any(
+                                item["status"] in {"pending", "in_progress", "blocked"} for item in plan
+                            ):
+                                reminder = "\n\n" + t("agent.execution.planReminder")
+                        anchors += ("\n\n" + subagent_anchor) if subagent_anchor else ""
+                        await execution.reduce(history, current_start, system + anchors, checkpoint)
+                        execution.reserve_step(tool_free=not tools or actor is None or cfg.policy.max_steps == 1)
+                        if attempt:
+                            await self.goals.checkpoint_steps(attempt, execution.steps)
                         log.debug(Text("agent.log.step", value=step + 1, count=len(history)))
-                        request = LLMRequest(system, history, tools, route, step)
+                        request = LLMRequest(system + anchors + reminder, history, tools, route, step)
                         if hooks is not None and hooks.has("llm_request"):
                             # Plugins edit a copy: the stored conversation never changes.
                             request.messages, request.tools = deepcopy(history), deepcopy(tools)
                             await hooks.call("llm_request", info, request)
-                        reply = await self.llm.complete(
+                        reply = await execution.work(
+                            self.llm.complete,
                             route,
                             request.system_prompt,
                             request.messages,
@@ -953,13 +1051,21 @@ class AgentRuntime:
                             **web_context,
                             **({"on_text": preview} if stream_text else {}),
                         )
+                        if attempt:
+                            await self.goals.ack_results(attempt)
                     else:
+                        execution.steps += 1
                         reply = chat_reply
                     if hooks is not None and hooks.has("llm_response"):
                         response = LLMResponse(reply.text, tuple(reply.calls))
                         await hooks.call("llm_response", info, response)
                         if isinstance(response.text, str):
                             reply.text = response.text
+                    waiting_text = ""
+                    if attempt and not reply.calls and reply.text.lstrip().startswith(NEEDS_INPUT):
+                        waiting_text = reply.text.lstrip().removeprefix(NEEDS_INPUT).strip()
+                        if waiting_text:
+                            reply.text = waiting_text
                     if actor is None:
                         body["status"] = "completed"
                         if reply.calls or not reply.text.strip():
@@ -995,12 +1101,15 @@ class AgentRuntime:
                         if not proactive:
                             log.log(Text("agent.log.reply", value=brief(reply.text, 1000) or t("agent.log.empty")))
                         final = reply.text or t("agent.noDisplayable")
-                        if ctx.group_wake and self.deliver_group_reply:
-                            await self.deliver_group_reply(ctx.session, final, ctx.group_wake)
-                        else:
-                            await self.deliver(execution_session, final)
-                        body["status"] = "completed"
+                        if not attempt or waiting_text:
+                            if ctx.group_wake and self.deliver_group_reply:
+                                await self.deliver_group_reply(ctx.session, final, ctx.group_wake)
+                            else:
+                                await self.deliver(execution_session, final)
+                        body["status"] = TurnState.WAITING_INPUT if waiting_text else TurnState.COMPLETED
                         return
+                    if cfg.policy.max_steps == 1:
+                        raise TurnLimit("steps")
                     # Main-loop text is visible before tools run; proactive turns
                     # deliver only their final structured notification decision.
                     if not proactive and not ctx.background and reply.text.strip():
@@ -1009,11 +1118,6 @@ class AgentRuntime:
                     report = None
                     for call in reply.calls:
                         function = call["function"]
-                        sig = fingerprint(function)
-                        repetitions[sig] += 1
-                        if repetitions[sig] >= 5:
-                            log.warning(Text("agent.log.repeatLimit", name=function['name']))
-                            raise PublicError("agent.repeatLimit")
                         if proactive and function["name"] == REPORT_TOOL:
                             report, output = _report(function["arguments"])
                             if report is None:
@@ -1033,18 +1137,18 @@ class AgentRuntime:
                                 )
                             requested_at = now().timestamp()
                             try:
-                                output = await self.registry.execute(
+                                output = await execution.work(
+                                    self.registry.execute,
                                     replace(ctx, tool_call_id=call["id"]),
                                     function["name"],
                                     function["arguments"],
                                 )
                             except InteractionRequired as interaction:
-                                if not proactive or self.wait_for_interaction is None:
-                                    raise PublicError(interaction.reason) from None
-                                await self.wait_for_interaction(
-                                    ctx.session, interaction, requested_at
-                                )
-                                body["status"] = "waiting"
+                                if proactive and self.wait_for_interaction is not None:
+                                    await self.wait_for_interaction(
+                                        ctx.session, interaction, requested_at
+                                    )
+                                body["status"] = TurnState.WAITING_INPUT
                                 await append(
                                     {
                                         "role": "tool",
@@ -1052,6 +1156,10 @@ class AgentRuntime:
                                         "content": canonical({"waiting": interaction.reason}),
                                     }
                                 )
+                                if not proactive:
+                                    final = interaction.reason
+                                    await append({"role": "assistant", "content": final})
+                                    await self.deliver(execution_session, final)
                                 return
                             if hooks is not None and hooks.has("tool_result"):
                                 await hooks.call(
@@ -1075,12 +1183,14 @@ class AgentRuntime:
                             "role": "tool",
                             "tool_call_id": call["id"],
                             "_tool_name": function["name"],
-                            "content": output,
+                            "content": execution.observe_result(function, output),
                         }
                         await append(result)
                         if stream:
                             self.store.bus.emit({"kind": "chat_history", "session": ctx.session})
                         history.append(result)
+                        if execution.repeat_count >= 5:
+                            raise TurnLimit("repeat")
                     if report is not None:
                         log.log(
                             Text("agent.log.notify", value=t("agent.log.send") if report.notify else t("agent.log.silent"), brief=brief(report.reason, 120))
@@ -1091,9 +1201,27 @@ class AgentRuntime:
                         return
                     body["steps"] = step + 1
                     await self.store.put("turn", ctx.turn, body, execution_session)
-                raise PublicError(
-                    "agent.stepLimit", steps=body['steps']
-                )
+        except TurnLimit as limit:
+            if actor is None:
+                return None
+            finish_preview()
+            body["status"] = TurnState.WRAPPING_UP
+            await self.store.put("turn", ctx.turn, body, execution_session)
+            try:
+                final = await execution.wrap(str(limit), route, system + anchors, history, repair_history)
+                body["status"] = execution.state
+            except asyncio.CancelledError:
+                body["status"] = TurnState.CANCELLED
+                raise
+            except Exception as exc:
+                body["status"] = TurnState.FAILED
+                log.warning(Text("agent.log.turnFailed", error=type(exc).__name__))
+                final = t("agent.execution.wrapFailed")
+            await append({"role": "assistant", "content": final})
+            if ctx.group_wake and self.deliver_group_reply:
+                await self.deliver_group_reply(ctx.session, final, ctx.group_wake)
+            else:
+                await self.deliver(execution_session, final)
         except asyncio.CancelledError:
             body["status"] = "cancelled"
             log.log(Text("agent.log.turnCancelled", count=body['steps'], value=time.monotonic() - started))
@@ -1127,19 +1255,31 @@ class AgentRuntime:
             await self.deliver(execution_session, error)
         finally:
             finish_preview()
+            await repair_checkpoint()
+            body["model_steps"] = execution.steps
             if hooks is not None and hooks.has("agent_done"):
-                result = AgentResult(body["status"], body["steps"] + 1, final)
+                result = AgentResult(body["status"], body["steps"], final)
                 # Shielded so a cancelled turn still reports its end to plugins.
                 await asyncio.shield(hooks.call("agent_done", info, result))
             if body["status"] == "completed":
                 log.log(
-                    Text("agent.log.turnDone", count=body['steps'] + 1, value2=time.monotonic() - started)
+                    Text("agent.log.turnDone", count=body['steps'], value2=time.monotonic() - started)
                 )
             body["finished"] = now().isoformat()
             await self.store.put("turn", ctx.turn, body, execution_session)
-            if ctx.session.startswith("web:") and not ctx.background and body["status"] in {"completed", "failed"}:
+            if ctx.session.startswith("web:") and not ctx.background:
                 self.store.bus.emit({"kind": "web_task_finished", "id": ctx.turn, "session": ctx.session, "status": body["status"]})
             if self.short_term and body["summary_eligible"]:
                 await self.short_term.enqueue(ctx, body["status"])
                 body["summary_enqueued"] = True
                 await self.store.put("turn", ctx.turn, body, ctx.session)
+            if attempt:
+                assert actor is not None
+                report = await self.goals.finish(
+                    actor, ctx, cfg, attempt, body["status"], execution.steps, history, final,
+                )
+                if body["status"] == TurnState.COMPLETED and final:
+                    await self.deliver(execution_session, final)
+                if report:
+                    await append({"role": "assistant", "content": report})
+                    await self.deliver(execution_session, report)

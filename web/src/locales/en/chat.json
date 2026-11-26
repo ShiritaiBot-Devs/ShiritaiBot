@@ -1,4 +1,13 @@
 {
+  "plan": {
+    "title": "Task plan",
+    "progress": "Task plan progress",
+    "pending": "Pending",
+    "in_progress": "In progress",
+    "completed": "Completed",
+    "blocked": "Blocked",
+    "skipped": "Skipped"
+  },
   "shell": {
     "diffOutput": "Diff output",
     "editedFiles": "Edited files",

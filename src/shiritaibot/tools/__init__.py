@@ -74,7 +74,7 @@ class ToolRegistry:
                         value = await tool.handler(ctx, args)
                     except InteractionRequired as request:
                         reason = redact_secrets(request.reason, self.secrets)
-                        if not ctx.background:
+                        if not (ctx.background or ctx.goal_id or ctx.subagent_run):
                             raise PublicError(reason) from None
                         raise InteractionRequired(
                             f"{tool.plugin}:{request.key}", reason, request.ttl

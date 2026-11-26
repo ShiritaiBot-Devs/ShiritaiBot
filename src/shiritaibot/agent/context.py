@@ -4,7 +4,7 @@ import json
 
 from shiritaibot.core import PublicError, canonical, fingerprint
 from shiritaibot.core.logs import describe_session, get_logger
-from shiritaibot.i18n import LOCALES, Text
+from shiritaibot.i18n import LOCALES, Text, t
 from shiritaibot.prompts import prompt as prompt_text
 from shiritaibot.store import MEMORY_PROFILE_FILTER, memory_context_key
 
@@ -97,6 +97,15 @@ class ContextManager:
         else:
             rows = await self.store.query(query + " ORDER BY seq", args)
 
+        summaries = {}
+        if not dialogue_only and rows:
+            # Only use projections for turns present in the current memory epoch.
+            projections = await self.store.query(
+                "SELECT id,data FROM records WHERE kind='turn_context' AND scope=? "
+                "AND json_extract(data,'$.seq')>?",
+                (session, max(epoch_seq, state.get("seq", 0))),
+            )
+            summaries = {row["id"]: json.loads(row["data"]) for row in projections}
         groups: list[list[dict]] = []
         previous = None
         for row in rows:
@@ -104,6 +113,16 @@ class ContextManager:
                 groups.append([])
                 previous = row["turn"]
             data = json.loads(row["data"])
+            projection = summaries.get(row["turn"])
+            if projection and row["seq"] <= projection["seq"]:
+                if data["role"] != "user":
+                    if row["seq"] == projection["seq"]:
+                        groups[-1].append({
+                            "role": "user",
+                            "content": t("agent.execution.summary", summary=projection["summary"]),
+                            "_seq": row["seq"],
+                        })
+                    continue
             if dialogue_only:
                 groups[-1].append(dialogue_message(data))
             else:

@@ -124,6 +124,7 @@ class Context:
     require_manual_approval: bool = False
     group_wake: str = ""
     routine_event: str = ""
+    goal_id: str = ""
 
     @property
     def summary_eligible(self) -> bool:
@@ -170,6 +171,9 @@ class Reply:
     calls: list[dict[str, Any]] = field(default_factory=list)
     usage: dict[str, Any] = field(default_factory=dict)
     opaque: dict[str, Any] = field(default_factory=dict)
+
+
+NEEDS_INPUT = "NEEDS_INPUT:"
 
 
 class Provider(Protocol):

@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from shiritaibot.agent.plan import PLAN_SCHEMA, update_plan
 from shiritaibot.core import PublicError, Tool, delegated_workspace, now, session_dir
 from shiritaibot.core.process import run_process
 from shiritaibot.i18n import Text, t
@@ -250,6 +251,14 @@ async def register_builtin(app) -> None:
         return {"text": row["content"][offset : offset + 12000], "total": len(row["content"])}
 
     entries = [
+        Tool(
+            "update_plan",
+            "tools.update_plan.description",
+            schema({"steps": PLAN_SCHEMA}, ["steps"]),
+            lambda ctx, args: update_plan(app.store, ctx, args["steps"]),
+            risk="safe",
+            available=lambda ctx: not (ctx.background or ctx.subagent_run or ctx.routine_event),
+        ),
         Tool(
             "history_query",
             "tools.history_query.description",

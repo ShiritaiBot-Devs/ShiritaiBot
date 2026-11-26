@@ -225,6 +225,10 @@ function ConsoleApp() {
 
   const onRealtime = useCallback(
     (event: RealtimeEvent) => {
+      if (event.kind === "task_plan" && event.session) {
+        void queryClient.invalidateQueries({ queryKey: ["task-plan", event.session] });
+        return;
+      }
       if (event.kind === "chat_history") {
         if (desktop && event.session)
           void queryClient.invalidateQueries({

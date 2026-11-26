@@ -1,4 +1,29 @@
 {
+  "goal": {
+    "description": "Set a long-running goal or manage it with status, pause, resume, or clear.",
+    "unavailable": "This goal cannot be managed from your current session context.",
+    "empty": "There is no goal for this session.",
+    "status": "{objective}\n{status} · {steps} steps, {seconds}s, {tokens} tokens, {continuations} automatic continuations left.",
+    "states": {
+      "active": "Active",
+      "evaluating": "Evaluating",
+      "continuing": "Continuing",
+      "waiting_subagent": "Waiting for subagents",
+      "paused": "Paused",
+      "budget_limited": "Budget reached",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "alreadyRunning": "The goal is already running.",
+    "budgetSyntax": "Add budget with /goal resume steps=50 seconds=600 tokens=50000 continuations=2. Supply values for the exhausted execution limits.",
+    "resumed": "Goal resumed.",
+    "usage": "Use /goal <objective>, /goal status, /goal pause, /goal resume, or /goal clear.",
+    "exists": "This session already has a goal. Clear it before starting another.",
+    "created": "Goal started. {objective}",
+    "paused": "Goal paused.",
+    "cleared": "Goal cleared.",
+    "agentMode": "Switch this session to Agent mode before creating a goal."
+  },
   "lang": {
     "description": "Show the bot language; /lang en|zh-CN sets it for this session; /lang default returns to the global default (owner only)",
     "current_session": "Language for this session: {name} (set with /lang; overrides the persona's language)",

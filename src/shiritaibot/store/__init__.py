@@ -156,7 +156,7 @@ class Store:
         *,
         memory_profile: str | None = None,
         require_turn: bool = False,
-    ) -> None:
+    ) -> int | None:
         if memory_profile is not None:
             message = {**message, "_memory_profile": memory_profile}
         sql = "INSERT INTO messages(session,turn,data,created) SELECT ?,?,?,?"
@@ -165,7 +165,10 @@ class Store:
             # A delayed plugin reply must not recreate a chat deleted since dispatch.
             sql += " WHERE EXISTS (SELECT 1 FROM messages WHERE session=? AND turn=?)"
             args += (session, turn)
-        await self.execute(sql, args)
+        async with self.lock:
+            cur = await self.db.execute(sql, args)
+            await self.db.commit()
+            return cur.lastrowid if cur.rowcount else None
 
     async def history(
         self,
@@ -272,6 +275,8 @@ class Store:
         )
         await self.put("session_epoch", key, {"seq": rows[0]["seq"]})
         await self.delete("context_state", key)
+        await self.delete("session_tasks", key)
+        self.bus.emit({"kind": "task_plan", "session": session})
         if session.startswith("web:"):
             await self.delete("web_context", session)
 
@@ -318,7 +323,8 @@ class Store:
                 await self.db.execute("DELETE FROM messages WHERE session=?", (session,))
                 await self.db.execute(
                     "DELETE FROM records WHERE kind IN "
-                    "('tool_diff','artifact','help_image','web_workspace','web_attachment','web_context') AND scope=?",
+                    "('tool_diff','artifact','help_image','web_workspace','web_attachment','web_context',"
+                    "'session_tasks','session_goals','goal_archive','task_plan_archive','turn_context') AND scope=?",
                     (session,),
                 )
                 await self.db.execute(

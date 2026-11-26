@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from shiritaibot.agent.context import context_chars
+from shiritaibot.agent.goals import GOAL_USAGE
 from shiritaibot.core import (
     PublicError,
     Reply,
@@ -555,6 +556,9 @@ class ProviderManager:
         return await self._request(provider, "POST", base + path, json=body, headers=headers)
 
     async def _record_call(self, model, protocol, status, usage=None, timing=None, *, scope=None):
+        charge = GOAL_USAGE.get()
+        if charge is not None and usage:
+            await charge(tokens(usage, protocol)["total_tokens"])
         await self.store.put(
             "usage",
             uid(),

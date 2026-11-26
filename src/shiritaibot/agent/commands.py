@@ -29,6 +29,7 @@ COMMANDS = {
     "new": "commands.new.description",
     "clear": "commands.clear.description",
     "stop": "commands.stop.description",
+    "goal": "commands.goal.description",
     "tools": "commands.tools.description",
     "permissions": "commands.permissions.description",
     "mode": "commands.mode.description",
@@ -45,7 +46,7 @@ PRIVATE_COMMANDS = {"tasks", "memory", "approve", "deny", "grants"}
 OWNER_COMMANDS = {"new", "clear"}
 COMMAND_TOOLS = {"memory": "memory_search", "tasks": "subagent_list"}
 COMMAND_GROUPS = {
-    "builtin:session": ("commands.sections.session", ("help", "status", "new", "clear", "stop", "mode", "lang")),
+    "builtin:session": ("commands.sections.session", ("help", "status", "new", "clear", "stop", "mode", "lang", "goal")),
     "builtin:models": ("commands.sections.models", ("models", "model", "personas", "persona")),
     "builtin:tools": ("commands.sections.tools", ("tools", "permissions", "approve", "deny", "grants")),
     "builtin:memory": ("commands.sections.memory", ("memory", "tasks")),
@@ -143,6 +144,8 @@ async def command(runtime, ctx, text):
                 except (OSError, ValueError) as exc:
                     log.warning(Text("commands.log.helpImageFailed", exc=exc))
         elif name in {"new", "clear"}:
+            if goals := getattr(runtime, "goals", None):
+                await goals.cancel(ctx, owner=True)
             if actor:
                 actor.task.cancel()
                 await asyncio.gather(actor.task, return_exceptions=True)
@@ -151,9 +154,13 @@ async def command(runtime, ctx, text):
             await runtime.store.reset_history(ctx.session, memory_profile=ctx.memory_profile)
             answer = t("commands.new.done")
         elif name == "stop":
+            if goals := getattr(runtime, "goals", None):
+                await goals.cancel(ctx, owner=ctx.owner)
             if actor:
                 await actor.submit(ctx, "/stop")
             answer = t("commands.stop.sent")
+        elif name == "goal":
+            answer = await runtime.goals.control(ctx, argument)
         elif name == "models":
             providers = {p.id for p in cfg.providers if p.enabled}
             answer = t("commands.models.title") + (

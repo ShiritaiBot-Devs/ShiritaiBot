@@ -23,6 +23,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from shiritaibot import __version__ as BOT_VERSION
 from shiritaibot.adapters.qq_official import MAX_CALLBACK_BYTES, CallbackError, QQOfficial
 from shiritaibot.agent.commands import help_section_titles, visible_builtin_commands
+from shiritaibot.agent.plan import read_plan
 from shiritaibot.api.event import MessageEvent
 from shiritaibot.app import Application
 from shiritaibot.config import (
@@ -640,11 +641,18 @@ def create_app(
     async def history(
         session: str = "web:owner", profile: str | None = None, timeline: bool = False
     ):
-        return await runtime.store.history(
+        rows = await runtime.store.history(
             session,
             memory_profile=profile or runtime.config.value.session_memory(session),
             timeline=timeline,
             hide_settings_commands=session.startswith("web:"),
+        )
+        return [row for row in rows if not row.get("_goal_continuation")]
+
+    @api.get("/api/task-plan", dependencies=protected)
+    async def task_plan(session: str):
+        return await read_plan(
+            runtime.store, session, runtime.config.value.session_memory(session)
         )
 
     @api.get("/api/web-chats", dependencies=protected)
@@ -1173,7 +1181,7 @@ def create_app(
                 for task in tasks:
                     task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
-        except (WebSocketDisconnect, TimeoutError, RuntimeError):
+        except (WebSocketDisconnect, asyncio.CancelledError, TimeoutError, RuntimeError):
             pass
         finally:
             runtime.bus.subscribers.discard(queue)

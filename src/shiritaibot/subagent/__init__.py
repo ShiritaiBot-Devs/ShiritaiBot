@@ -12,19 +12,14 @@ from shiritaibot.i18n import Text, join_list, t
 from shiritaibot.prompts import prompt as prompt_text
 
 if TYPE_CHECKING:
+    from shiritaibot.agent.goals import Goals
     from shiritaibot.subagent.native import NativeRunner
 
-from shiritaibot.core import Context, ExternalEvent, PublicError, uid
+from shiritaibot.core import NEEDS_INPUT, Context, ExternalEvent, PublicError, uid
 from shiritaibot.core.logs import brief, get_logger
 from shiritaibot.core.process import run_process
 
 log = get_logger("subagent.log.source")
-
-
-# Runs are unattended: stdin is closed after the prompt, so a CLI can never block on a
-# question. Instead the agent ends its turn with this marker and the run becomes
-# needs_input; Proactive Agent then answers (subagent_send) or asks the owner.
-NEEDS_INPUT = "NEEDS_INPUT:"
 
 
 # Stdout retained by run_process. NDJSON kinds lose nothing important past this, since their
@@ -350,6 +345,7 @@ class SubagentManager:
         self.resume_lock = asyncio.Lock()
         self.config, self.store, self.home, self.emit = config, store, home, emit
         self.tasks: dict[str, asyncio.Task] = {}
+        self.goals: Goals | None = None
         self.semaphore = asyncio.Semaphore(3)
         # Environment for child CLIs (plugin-provided git identity); None inherits the host.
         self.env: Callable[[], dict[str, str] | None] = lambda: None
@@ -393,7 +389,10 @@ class SubagentManager:
         key = row["id"]
         task = asyncio.create_task(self.run(dict(row), ctx, config, workspace, prompt, resume))
         self.tasks[key] = task
-        task.add_done_callback(lambda _: self.tasks.pop(key, None))
+        def cleanup(finished):
+            if self.tasks.get(key) is finished:
+                self.tasks.pop(key, None)
+        task.add_done_callback(cleanup)
 
     def _validate_dynamic_model(self, model: str) -> str:
         model = model.strip()
@@ -462,6 +461,8 @@ class SubagentManager:
             body["native_session_id"] = key
             body["origin"] = self._origin_snapshot(ctx)
         row = await self.store.put("subagent_run", key, body, ctx.session)
+        if self.goals:
+            await self.goals.bind(ctx, row)
         self.launch(row, ctx, config, workspace, prompt)
         log.log(Text("subagent.log.queued", instance=instance, kind=config.kind, brief=brief(prompt, 80)), key[:8])
         return row
@@ -519,6 +520,8 @@ class SubagentManager:
         }
         spec = self._dynamic_spec(body)
         row = await self.store.put("subagent_run", key, body, ctx.session)
+        if self.goals:
+            await self.goals.bind(ctx, row)
         self.launch(row, ctx, spec, workspace, prompt)
         log.log(Text("subagent.log.queuedDynamic", label=label, brief=brief(prompt, 80)), key[:8])
         return row
@@ -570,6 +573,8 @@ class SubagentManager:
         row.pop("question", None)
         row.pop("error", None)
         row = await self.store.put("subagent_run", key, row, row["scope"])
+        if self.goals and row["scope"] == ctx.session:
+            await self.goals.bind(ctx, row)
         self.launch(row, origin, config, Path(row["workspace"]), message, row["native_session_id"])
         log.log(Text("subagent.log.resumed", id=config.id, round=row['round'], brief=brief(message, 80)), key[:8])
         return row
@@ -629,29 +634,33 @@ class SubagentManager:
                     key[:8],
                 )
             await self.store.put("subagent_run", key, row, ctx.session)
+            if self.tasks.get(key) is asyncio.current_task():
+                self.tasks.pop(key, None)
+            linked = self.goals and await self.goals.subagent_result(ctx.session, row)
             # Owner-requested work: PE delivers it as a high-priority turn instead of Main polling.
             waiting = status == "needs_input"
-            await self.emit(
-                ExternalEvent(
-                    source="subagent",
-                    kind="subagent.needs_input" if waiting else "subagent.completed",
-                    # One event per round: a resumed run reports again under a new key.
-                    dedup_key=f"{key}:{row.get('round', 0)}",
-                    title=t("subagent.event.title", id=config.id, value=t("subagent.status.needs_input") if waiting else status),
-                    urgency="normal" if status == "cancelled" else "high",
-                    payload={
-                        "run_id": key,
-                        "instance": config.id,
-                        "status": status,
-                        "session": ctx.session,
-                        "task": row.get("task", prompt)[:2000],
-                        **({"reply": prompt[:2000]} if resume else {}),
-                        "result": row.get("result", "")[-4000:],
-                        **({"question": row["question"]} if waiting else {}),
-                        **({"error": row["error"]} if row.get("error") else {}),
-                    },
+            if not linked:
+                await self.emit(
+                    ExternalEvent(
+                        source="subagent",
+                        kind="subagent.needs_input" if waiting else "subagent.completed",
+                        # One event per round: a resumed run reports again under a new key.
+                        dedup_key=f"{key}:{row.get('round', 0)}",
+                        title=t("subagent.event.title", id=config.id, value=t("subagent.status.needs_input") if waiting else status),
+                        urgency="normal" if status == "cancelled" else "high",
+                        payload={
+                            "run_id": key,
+                            "instance": config.id,
+                            "status": status,
+                            "session": ctx.session,
+                            "task": row.get("task", prompt)[:2000],
+                            **({"reply": prompt[:2000]} if resume else {}),
+                            "result": row.get("result", "")[-4000:],
+                            **({"question": row["question"]} if waiting else {}),
+                            **({"error": row["error"]} if row.get("error") else {}),
+                        },
+                    )
                 )
-            )
 
     async def run_cli(self, row, config, workspace, prompt, resume):
         if config.kind == "generic":

@@ -1,4 +1,7 @@
 {
+  "update_plan": {
+    "description": "Replace the current session's task plan. Send the full step list with stable IDs and at most one in-progress step. Use present-progressive wording for active_form."
+  },
   "weekdays": {
     "0": "Monday",
     "1": "Tuesday",

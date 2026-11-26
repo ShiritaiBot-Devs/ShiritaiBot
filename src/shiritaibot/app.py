@@ -152,6 +152,8 @@ class Application:
             skills=self.skills,
         )
         self.runtime.hooks = self.plugins.hooks
+        self.subagents.goals = self.runtime.goals
+        await self.runtime.goals.recover()
         self.adapters.runtime, self.adapters.permissions = self.runtime, self.permissions
         self.adapters.heartflow = Heartflow(self.runtime, self.adapters.enqueue)
         self.runtime.deliver_group_reply = self.adapters.deliver_group_reply
@@ -166,6 +168,7 @@ class Application:
         await self.mcp.start()
         await self.adapters.start()
         self.tasks += [
+            asyncio.create_task(self.runtime.goals.watch()),
             asyncio.create_task(self.routine.run()),
             asyncio.create_task(self.proactive.run()),
             asyncio.create_task(self.short_term.run()),

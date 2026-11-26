@@ -1,4 +1,29 @@
 {
+  "goal": {
+    "description": "启动长程目标，或用 status、pause、resume、clear 管理目标。",
+    "unavailable": "当前会话身份无法管理这个目标。",
+    "empty": "当前会话没有目标。",
+    "status": "{objective}\n{status} · 剩余 {steps} 步、{seconds} 秒、{tokens} token、{continuations} 次自动续跑。",
+    "states": {
+      "active": "执行中",
+      "evaluating": "检查完成条件",
+      "continuing": "准备续跑",
+      "waiting_subagent": "等待子代理",
+      "paused": "已暂停",
+      "budget_limited": "已达预算",
+      "completed": "已完成",
+      "cancelled": "已取消"
+    },
+    "alreadyRunning": "目标已在运行。",
+    "budgetSyntax": "用 /goal resume steps=50 seconds=600 tokens=50000 continuations=2 追加预算，请为耗尽的执行额度追加数值。",
+    "resumed": "目标已恢复。",
+    "usage": "使用 /goal <目标>、/goal status、/goal pause、/goal resume 或 /goal clear。",
+    "exists": "当前会话已有目标，请先清除再创建。",
+    "created": "已启动目标。{objective}",
+    "paused": "目标已暂停。",
+    "cleared": "目标已清除。",
+    "agentMode": "请先把当前会话切换到 Agent 模式，再创建目标。"
+  },
   "lang": {
     "description": "查看机器人语言；/lang en|zh-CN 为本会话切换语言；/lang default 恢复全局默认（切换仅主人）",
     "current_session": "本会话语言：{name}（由 /lang 设定，优先于人设指定的语言）",
