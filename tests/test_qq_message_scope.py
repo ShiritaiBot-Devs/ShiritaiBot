@@ -10,6 +10,7 @@ from shiritaibot.adapters.onebot11 import OneBot
 from shiritaibot.auth import Permissions
 from shiritaibot.config import Settings
 from shiritaibot.core import Context, PublicError, session_dir
+from shiritaibot.i18n import use_locale
 from shiritaibot.tools import ToolRegistry, qq
 
 FRIEND = "201574690"
@@ -113,6 +114,33 @@ def test_owner_agent_session_stays_unrestricted(tmp_path):
     bot.call.side_effect = lambda action, params: _msg(sender="999")
     result = asyncio.run(tools["qq_message_get"].handler(_owner_ctx(), {"message_id": 1}))
     assert result["sender"]["user_id"] == 999
+
+
+@pytest.mark.parametrize(
+    ("locale", "outside_chat", "disconnected_adapter"),
+    [
+        ("zh-CN", "只能读取当前会话的消息", "当前会话所属的 OneBot 实例未连接"),
+        (
+            "en",
+            "Only messages in the current chat can be read",
+            "The OneBot instance for this chat is disconnected",
+        ),
+    ],
+)
+def test_scope_errors_follow_the_session_language(tmp_path, locale, outside_chat, disconnected_adapter):
+    _, bot, tools = _app(tmp_path)
+
+    def error(tool, args):
+        with pytest.raises(PublicError) as raised:
+            asyncio.run(tools[tool].handler(_friend_ctx(), args))
+        return str(raised.value)
+
+    with use_locale(locale):
+        bot.call.side_effect = lambda action, params: _msg(sender="999")
+        assert error("qq_message_get", {"message_id": 3}) == outside_chat
+        assert error("qq_message_history", {"target": "private", "id": 999}) == outside_chat
+        bot.status = "disconnected"
+        assert error("qq_message_history", {"target": "private", "id": int(FRIEND)}) == disconnected_adapter
 
 
 def test_private_chat_uses_bound_onebot_for_sending_and_reading(tmp_path):
