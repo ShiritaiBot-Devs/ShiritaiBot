@@ -1,7 +1,14 @@
 import { LoadingBar } from "./LoadingBar";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Circle, CircleAlert, LoaderCircle, Menu, SkipForward } from "lucide-react";
+import {
+  Check,
+  Circle,
+  CircleAlert,
+  LoaderCircle,
+  Menu,
+  SkipForward,
+} from "lucide-react";
 import type { ApiClient } from "../api/client";
 import type { HistoryMessage, WebChat } from "../api/types";
 import { draftKey, modelKey, writeValue } from "../lib/composer";
@@ -301,12 +308,20 @@ export function ChatWorkspace({
               />
             ))}
             {!!plan?.length && (
-              <section className="chat-task-plan" aria-label={i18n.t("chat:plan.title")}>
+              <section
+                className="chat-task-plan"
+                aria-label={i18n.t("chat:plan.title")}
+              >
                 <div className="chat-task-plan-header">
                   <strong>{i18n.t("chat:plan.title")}</strong>
                   <progress
                     max={plan.length}
-                    value={plan.filter(({ status }) => status === "completed" || status === "skipped").length}
+                    value={
+                      plan.filter(
+                        ({ status }) =>
+                          status === "completed" || status === "skipped",
+                      ).length
+                    }
                     aria-label={i18n.t("chat:plan.progress")}
                   />
                 </div>
@@ -315,8 +330,14 @@ export function ChatWorkspace({
                     const Icon = planIcons[status];
                     return (
                       <li key={id} data-status={status}>
-                        <Icon size={15} role="img" aria-label={i18n.t(`chat:plan.${status}`)} />
-                        <span>{status === "in_progress" ? active_form : title}</span>
+                        <Icon
+                          size={15}
+                          role="img"
+                          aria-label={i18n.t(`chat:plan.${status}`)}
+                        />
+                        <span>
+                          {status === "in_progress" ? active_form : title}
+                        </span>
                       </li>
                     );
                   })}
