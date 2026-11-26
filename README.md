@@ -10,7 +10,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-20.19+-339933?logo=node.js&logoColor=white)
 ![OneBot](https://img.shields.io/badge/OneBot-V11-black)
-![Status](https://img.shields.io/badge/status-0.4.0-orange)
+![Status](https://img.shields.io/badge/status-0.3.2-orange)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
 [官网](https://shiritaibot.dev/) ·
