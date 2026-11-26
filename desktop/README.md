@@ -45,7 +45,10 @@ npm --prefix desktop run dist
 
 ## 发布
 
-在 GitHub Actions 中对待发布的 commit 或 tag 手动运行 **Desktop packages**，下载对应平台的
-artifact。验收后，将安装包作为附件上传至同一版本的 GitHub Release。桌面应用的「检查更新」会
-打开 GitHub Releases，用户可以手动下载安装。面向公众发布前，给 Windows 程序和安装包装上可信
-签名，并完成 macOS Developer ID 签名和公证。仓库中的构建配置用于本地及 CI 试包。
+发布 GitHub Release 时，**Desktop packages** 会从该 Release 的 tag 构建 Windows x64 的 NSIS
+安装包，以及 macOS Apple Silicon 和 Intel 的 DMG。三种安装包全部构建成功后会自动上传到同一个
+Release。tag 须与 Core 和桌面包版本一致，可带 `v` 前缀，例如 `0.3.2` 或 `v0.3.2`。
+
+也可以在 GitHub Actions 中手动运行 **Desktop packages**，下载构建产物进行验收。
+桌面应用的「检查更新」会打开 GitHub Releases，用户可以手动下载安装。
+自动构建沿用现有签名配置。Windows 安装包未做可信签名，macOS 使用临时签名且未公证。

@@ -2,9 +2,15 @@ name: Desktop packages
 
 on:
   workflow_dispatch:
+  release:
+    types: [published]
 
 permissions:
   contents: read
+
+concurrency:
+  group: desktop-${{ github.event.release.id || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   package:
@@ -21,6 +27,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: astral-sh/setup-uv@v10.4.0
         with:
           version: "0.12.7"
@@ -31,6 +40,23 @@ jobs:
           cache-dependency-path: |
             web/package-lock.json
             desktop/package-lock.json
+      - name: Verify release version
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          node <<'NODE'
+          const { readFileSync } = require("node:fs");
+          const metadata = JSON.parse(readFileSync("desktop/package.json", "utf8"));
+          const lock = JSON.parse(readFileSync("desktop/package-lock.json", "utf8"));
+          const tag = process.env.RELEASE_TAG;
+          if (tag.replace(/^v/, "") !== metadata.version ||
+              lock.version !== metadata.version ||
+              lock.packages[""].version !== metadata.version) {
+            throw new Error(`Release tag ${tag}, desktop/package.json, and desktop/package-lock.json must agree.`);
+          }
+          NODE
       - run: npm --prefix web ci
       - run: npm --prefix desktop ci
       - run: npm --prefix desktop run dist -- --${{ matrix.arch }}
@@ -41,3 +67,43 @@ jobs:
             desktop/dist/*.exe
             desktop/dist/*.dmg
           if-no-files-found: error
+
+  publish:
+    name: Attach installers to release
+    if: github.event_name == 'release'
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: shiritaibot-*
+          path: installers
+          merge-multiple: true
+      - name: Upload release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          assets=(
+            "ShiritaiBot-Setup-${version}-x64.exe"
+            "ShiritaiBot-${version}-mac-arm64.dmg"
+            "ShiritaiBot-${version}-mac-x64.dmg"
+          )
+          existing=$(gh release view --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' -- "$RELEASE_TAG")
+          missing=()
+          for asset in "${assets[@]}"; do
+            if [[ ! -s "installers/$asset" ]]; then
+              echo "Missing or empty installer: $asset" >&2
+              exit 1
+            fi
+            if ! grep -Fxq -- "$asset" <<< "$existing"; then
+              missing+=("installers/$asset")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            gh release upload --repo "$GITHUB_REPOSITORY" -- "$RELEASE_TAG" "${missing[@]}"
+          fi
