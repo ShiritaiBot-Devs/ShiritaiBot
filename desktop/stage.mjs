@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, cpSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,10 +40,22 @@ copyFileSync(paths.trim().split(/\r?\n/)[0], join(runtime, uvName));
 
 const pythonInstall = join(runtime, "python");
 run(join(runtime, uvName), ["python", "install", "3.13.12", "--install-dir", pythonInstall, "--no-bin"]);
-const distribution = readdirSync(pythonInstall, { withFileTypes: true })
+const installs = readdirSync(pythonInstall, { withFileTypes: true });
+const distribution = installs
   .find((item) => item.isDirectory() && item.name.startsWith("cpython-"));
 if (!distribution) throw new Error("uv did not install a CPython distribution.");
-const python = join(pythonInstall, distribution.name, windows ? "python.exe" : "bin/python3.13");
+const distributionPath = join(pythonInstall, distribution.name);
+if (process.platform === "darwin") {
+  // uv's absolute version alias would point outside the signed app bundle.
+  for (const item of installs.filter((entry) => entry.isSymbolicLink())) {
+    const alias = join(pythonInstall, item.name);
+    if (readlinkSync(alias) === distributionPath) {
+      unlinkSync(alias);
+      symlinkSync(distribution.name, alias);
+    }
+  }
+}
+const python = join(distributionPath, windows ? "python.exe" : "bin/python3.13");
 const constraints = join(output, "constraints.txt");
 run(join(runtime, uvName), ["export", "--locked", "--no-dev", "--no-emit-project",
   "--no-hashes", "--output-file", constraints], { stdio: ["ignore", "ignore", "inherit"] });
