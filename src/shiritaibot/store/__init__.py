@@ -26,7 +26,7 @@ def is_settings_command(text: str | None) -> bool:
     name, argument = parts
     name = name.lower()
     return name in {"/model", "/persona", "/lang", "/tools", "/permissions", "/mode"} or (
-        name == "/grants" and argument.startswith(("revoke", "撤销"))
+        name == "/grants" and argument.startswith(("revoke", "撤销"))  # i18n: ok
     )
 
 

@@ -36,7 +36,7 @@ export function useChatOutbox(
     // Settings commands use the alert path instead of adding an optimistic bubble.
     if (
       /^\/(?:model|persona|lang|tools|permissions|mode)\s+\S/i.test(text) ||
-      /^\/grants\s+(?:revoke|撤销)/i.test(text)
+      /^\/grants\s+(?:revoke|撤销)/i.test(text) // i18n: ok
     ) {
       void act(
         () =>
