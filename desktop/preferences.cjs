@@ -18,14 +18,14 @@ async function installerFolder() {
   }
 }
 
-async function loadPreferences(userData) {
+async function loadPreferences(userData, { useInstallerFolder = true } = {}) {
   let saved = {};
   try {
     saved = JSON.parse(await readFile(join(userData, "desktop-preferences.json"), "utf8"));
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
-  const installed = saved.dataDirectory ? "" : await installerFolder();
+  const installed = useInstallerFolder && !saved.dataDirectory ? await installerFolder() : "";
   return {
     closeBehavior: closeBehaviors.has(saved.closeBehavior) ? saved.closeBehavior : "ask",
     notifications: saved.notifications === true,

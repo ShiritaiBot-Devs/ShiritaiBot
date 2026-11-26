@@ -9,6 +9,21 @@
 桌面版启动时进入对话模式。通用设置可启用会话任务结束通知，并设置关闭窗口时询问、
 退出或最小化到托盘。Windows 用户可从同一页面打开系统通知设置。
 
+## 本地开发
+
+安装 Node.js 24 和 uv 后，在仓库根目录运行：
+
+```sh
+npm --prefix web ci
+npm --prefix desktop ci
+npm run dev
+```
+
+命令会打开 Electron 窗口，终端会打印 Vite 的本地地址和后端日志。React 和 CSS
+保存后热更新，Python 源码变更后自动重启本地服务。修改 Electron 主进程或
+preload 脚本后，重新运行命令。默认开发数据和桌面偏好保存在 `.local/desktop-dev/`。
+按 Ctrl+C 结束开发会话。
+
 ## 构建试包
 
 在 Windows 或 macOS 上安装 Git、Node.js 24 和 uv，然后在仓库根目录运行：

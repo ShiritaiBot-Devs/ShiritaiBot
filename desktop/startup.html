@@ -30,8 +30,7 @@
       document.documentElement.lang = zh ? "zh-CN" : "en";
       if (desktop.platform === "darwin") document.body.classList.add("mac");
       document.querySelector("p").textContent = zh ? "正在准备本地运行环境…" : "Preparing the local runtime…";
-      document.querySelector("img").src = location.pathname.includes(".asar/")
-        ? "../icon.png" : "build/icons/icon.png";
+      document.querySelector("img").src = new URLSearchParams(location.search).get("icon");
       if (desktop.platform !== "darwin") {
         for (const [action, icon, label] of [
           ["minimize", "−", zh ? "最小化" : "Minimize"],

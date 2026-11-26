@@ -1,6 +1,8 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, shell, Tray } = require("electron");
 const { spawn } = require("node:child_process");
+const { mkdirSync } = require("node:fs");
 const { mkdir, readFile, readdir } = require("node:fs/promises");
+const { createConnection } = require("node:net");
 const { delimiter, dirname, join } = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { createInterface } = require("node:readline");
@@ -8,13 +10,16 @@ const { closeBehaviors, dataFolder, loadPreferences, writePreferences } = requir
 
 const mac = process.platform === "darwin";
 const windows = process.platform === "win32";
+const dev = !app.isPackaged && app.commandLine.hasSwitch("desktop-dev");
+const root = dirname(__dirname);
 const runtime = join(app.isPackaged ? process.resourcesPath : join(__dirname, "build"), "runtime");
-const bootstrap = join(runtime, "backend.py");
+const bootstrap = join(dev ? __dirname : runtime, "backend.py");
 const startup = join(__dirname, "startup.html");
-const startupUrl = pathToFileURL(startup).href;
-const icon = app.isPackaged
+const icon = dev ? join(root, "web", "public", "icon.png") : app.isPackaged
   ? join(process.resourcesPath, "icon.png")
   : join(__dirname, "build", "icons", "icon.png");
+const startupUrl = pathToFileURL(startup);
+startupUrl.searchParams.set("icon", pathToFileURL(icon).href);
 const releases = "https://github.com/ShiritaiBot-Devs/ShiritaiBot/releases/latest";
 const chinese = () => app.getLocale().startsWith("zh");
 let window;
@@ -28,7 +33,22 @@ let activeDirectory;
 let tray;
 let asking = false;
 let saving = Promise.resolve();
+let devWeb;
+let restartBackend = () => {};
+let exitCode = 0;
 const tr = (zh, en) => chinese() ? zh : en;
+
+if (dev) {
+  const profile = join(root, ".local", "desktop-dev");
+  mkdirSync(profile, { recursive: true });
+  app.setPath("userData", profile);
+  const endpoint = process.env.SHIRITAI_DESKTOP_DEV_SOCKET;
+  if (endpoint) {
+    const launcher = createConnection(endpoint);
+    launcher.once("close", () => app.quit());
+    launcher.once("error", (error) => console.error(error.message));
+  }
+}
 
 function savePreferences(patch) {
   const update = saving.then(async () => {
@@ -102,7 +122,7 @@ function external(url) {
 }
 
 function trusted(url) {
-  return url === startupUrl || Boolean(origin && new URL(url).origin === origin);
+  return url === startupUrl.href || Boolean(origin && new URL(url).origin === origin);
 }
 
 function createWindow() {
@@ -145,19 +165,23 @@ function createWindow() {
   const sendState = () => window.webContents.send("desktop:maximized", window.isMaximized());
   window.on("maximize", sendState);
   window.on("unmaximize", sendState);
-  void window.loadFile(startup);
+  void window.loadURL(startupUrl.href);
 }
 
-function runPython(python, args, home, onReport) {
-  const processHandle = spawn(python, ["-u", bootstrap, ...args], {
+function runPython(python, args, home, onReport, sourceBootstrap = false) {
+  const script = ["-u", bootstrap, ...args];
+  const uv = dev ? (process.env.UV || "uv") : join(runtime, windows ? "uv.exe" : "uv");
+  const processHandle = spawn(sourceBootstrap ? uv : python, sourceBootstrap
+    ? ["run", "--locked", "--project", root, "python", ...script]
+    : script, {
     cwd: home,
     windowsHide: true,
     env: {
       ...process.env,
-      PATH: [dirname(python), runtime, process.env.PATH].filter(Boolean).join(delimiter),
-      UV: join(runtime, windows ? "uv.exe" : "uv"),
-      UV_CACHE_DIR: join(home, "runtime", "cache"),
-      UV_PYTHON_DOWNLOADS: "never",
+      PATH: [python && dirname(python), !dev && runtime, process.env.PATH].filter(Boolean).join(delimiter),
+      UV: uv,
+      ...(sourceBootstrap && { UV_PROJECT_ENVIRONMENT: join(app.getPath("userData"), "bootstrap") }),
+      ...(!dev && { UV_CACHE_DIR: join(home, "runtime", "cache"), UV_PYTHON_DOWNLOADS: "never" }),
       PYTHONDONTWRITEBYTECODE: "1",
       PYTHONIOENCODING: "utf-8",
     },
@@ -168,9 +192,11 @@ function runPython(python, args, home, onReport) {
   output.on("line", (line) => {
     const prefix = "SHIRITAI_DESKTOP ";
     if (line.startsWith(prefix)) onReport(JSON.parse(line.slice(prefix.length)));
+    else if (dev) console.log(line);
   });
   processHandle.stderr.setEncoding("utf8").on("data", (chunk) => {
     diagnostics = (diagnostics + chunk).slice(-6000);
+    if (dev) process.stderr.write(chunk);
   });
   processHandle.stdin.on("error", () => {});
   return new Promise((resolve, reject) => {
@@ -185,34 +211,66 @@ function runPython(python, args, home, onReport) {
 
 async function runBackend() {
   const home = activeDirectory;
-  const distributions = await readdir(join(runtime, "python"), { withFileTypes: true });
-  const distribution = distributions.find((item) => item.isDirectory() && item.name.startsWith("cpython-"));
-  if (!distribution) throw new Error("The bundled Python runtime is missing.");
-  const bootstrapPython = join(runtime, "python", distribution.name, windows ? "python.exe" : "bin/python3.13");
+  let bootstrapPython;
+  if (!dev) {
+    const distributions = await readdir(join(runtime, "python"), { withFileTypes: true });
+    const distribution = distributions.find((item) => item.isDirectory() && item.name.startsWith("cpython-"));
+    if (!distribution) throw new Error("The bundled Python runtime is missing.");
+    bootstrapPython = join(runtime, "python", distribution.name, windows ? "python.exe" : "bin/python3.13");
+  }
+  let openingWindow;
+  async function openApp(port) {
+    if (dev) {
+      const { startDevWeb } = await import(pathToFileURL(join(root, "web", "desktop-dev.mjs")).href);
+      devWeb = await startDevWeb(port, () => restartBackend());
+    }
+    if (quitting) {
+      await devWeb?.close();
+      return;
+    }
+    origin = devWeb?.origin ?? `http://127.0.0.1:${port}`;
+    if (dev) console.log(`ShiritaiBot dev UI: ${origin}`);
+    const token = await readFile(join(home, "web.token"), "utf8");
+    if (!quitting) await window.loadURL(`${origin}/token#${new URLSearchParams({ token: token.trim() })}`);
+  }
   while (!quitting) {
-    let python;
-    await runPython(bootstrapPython, ["prepare", home], home, (message) => { python = message.python; });
-    if (quitting) return;
-    if (!python) throw new Error("Python did not report a runtime environment.");
-    const exitCode = await runPython(python, ["serve", home, String(port)], home, (message) => {
-      if (message.taskFinished) {
-        notifyTask(message.taskFinished);
-        return;
-      }
-      port = message.port;
-      if (!origin) {
-        origin = `http://127.0.0.1:${port}`;
-        void readFile(join(home, "web.token"), "utf8").then((token) => {
-          if (!quitting) return window.loadURL(`${origin}/token#${new URLSearchParams({ token: token.trim() })}`);
-        }).catch(showError);
-      }
-    });
-    if (exitCode !== 75 && !quitting) throw new Error("The local server stopped unexpectedly.");
+    try {
+      let python;
+      await runPython(bootstrapPython, ["prepare", home], home, (message) => { python = message.python; }, dev);
+      if (quitting) return;
+      if (!python) throw new Error("Python did not report a runtime environment.");
+      const code = await runPython(python, ["serve", home, String(port)], home, (message) => {
+        if (message.taskFinished) {
+          notifyTask(message.taskFinished);
+          return;
+        }
+        port = message.port;
+        if (dev) {
+          const running = child;
+          restartBackend = () => {
+            if (!quitting && child === running) running.stdin.write("r");
+          };
+        }
+        openingWindow ??= openApp(port).catch(showError);
+      });
+      if (code !== 75 && !quitting) throw new Error("The local server stopped unexpectedly.");
+    } catch (error) {
+      if (!devWeb || quitting) throw error;
+      console.error(error.message + "\nSave a backend file to retry.");
+      await new Promise((resolve) => { restartBackend = resolve; });
+      restartBackend = () => {};
+    }
   }
 }
 
 function showError(error) {
   if (quitting) return;
+  if (dev) {
+    console.error(error);
+    exitCode = 1;
+    app.quit();
+    return;
+  }
   dialog.showErrorBox(chinese() ? "ShiritaiBot 启动失败" : "ShiritaiBot could not start", error.message);
   app.quit();
 }
@@ -229,7 +287,7 @@ if (!app.requestSingleInstanceLock()) {
     if (windows) app.setAppUserModelId("dev.shiritaibot.desktop");
     const userData = app.getPath("userData");
     await mkdir(userData, { recursive: true });
-    preferences = await loadPreferences(userData);
+    preferences = await loadPreferences(userData, { useInstallerFolder: !dev });
     activeDirectory = await dataFolder(preferences.dataDirectory, process.execPath);
     function validSender(event) {
       return event.sender === window?.webContents && event.senderFrame === event.sender.mainFrame
@@ -271,7 +329,11 @@ if (!app.requestSingleInstanceLock()) {
         case "notification-settings":
           if (windows) void shell.openExternal("ms-settings:notifications").catch(console.error);
           break;
-        case "relaunch": app.relaunch(); app.quit(); break;
+        case "relaunch":
+          if (dev) exitCode = 75;
+          else app.relaunch();
+          app.quit();
+          break;
       }
     });
     createWindow();
@@ -280,20 +342,27 @@ if (!app.requestSingleInstanceLock()) {
   app.on("activate", () => { if (window) showWindow(); });
   app.on("window-all-closed", () => app.quit());
   app.on("before-quit", (event) => {
-    if (stopped || !child) {
+    if (stopped || (!dev && !child)) {
       quitting = true;
       return;
     }
     event.preventDefault();
     if (quitting) return;
     quitting = true;
+    restartBackend();
     const active = child;
-    const timeout = setTimeout(() => active.kill(), 13000);
-    active.once("close", () => {
-      clearTimeout(timeout);
+    const shutdown = active ? new Promise((resolve) => {
+      const timeout = setTimeout(() => active.kill(), 13000);
+      active.once("close", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      active.stdin.end();
+    }) : Promise.resolve();
+    void Promise.allSettled([shutdown, devWeb?.close()]).then(() => {
       stopped = true;
-      app.quit();
+      if (dev) app.exit(exitCode);
+      else app.quit();
     });
-    active.stdin.end();
   });
 }

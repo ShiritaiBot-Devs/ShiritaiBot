@@ -8,6 +8,7 @@
   "author": "ShiritaiBot Developers",
   "main": "main.cjs",
   "scripts": {
+    "dev": "node dev.cjs",
     "prepare:app": "npm --prefix ../web run build && node stage.mjs",
     "start": "electron .",
     "pack": "npm run prepare:app && electron-builder --dir --publish never",

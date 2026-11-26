@@ -2,6 +2,9 @@
   "name": "ShiritaiBot",
   "description": "",
   "main": "index.js",
+  "scripts": {
+    "dev": "npm --prefix desktop run dev --"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC"

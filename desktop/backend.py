@@ -15,7 +15,9 @@ def report(**fields):
 
 def bootstrap_environment():
     root = Path(__file__).resolve().parent
-    sys.path[0:0] = [str(root / "bootstrap"), str(root / "core" / "src")]
+    bootstrap = root / "bootstrap"
+    if bootstrap.is_dir():
+        sys.path[0:0] = [str(bootstrap), str(root / "core" / "src")]
     from shiritaibot.dependencies import RuntimeEnvironment
 
     return RuntimeEnvironment
@@ -43,8 +45,9 @@ def serve(home, port):
             loop = asyncio.get_running_loop()
 
             def watch_host():
-                while os.read(sys.stdin.fileno(), 4096):
-                    pass
+                while command := os.read(sys.stdin.fileno(), 4096):
+                    if b"r" in command:
+                        loop.call_soon_threadsafe(request_restart)
                 try:
                     loop.call_soon_threadsafe(setattr, self, "should_exit", True)
                 except RuntimeError:
