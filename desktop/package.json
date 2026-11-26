@@ -1,0 +1,20 @@
+{
+  "name": "shiritaibot-desktop",
+  "version": "0.3.2",
+  "productName": "ShiritaiBot",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "description": "ShiritaiBot desktop application",
+  "author": "ShiritaiBot Developers",
+  "main": "main.cjs",
+  "scripts": {
+    "prepare:app": "npm --prefix ../web run build && node stage.mjs",
+    "start": "electron .",
+    "pack": "npm run prepare:app && electron-builder --dir --publish never",
+    "dist": "npm run prepare:app && electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.5.0",
+    "electron-builder": "26.18.0"
+  }
+}

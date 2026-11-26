@@ -44,6 +44,9 @@ import type {
   UpdateInspect,
   UpdateStatus,
   WebChat,
+  ChatAttachment,
+  ChatContextUsage,
+  ChatWorkspaceInfo,
 } from "./types";
 import i18n, { currentLocale } from "../i18n";
 
@@ -113,6 +116,16 @@ export interface ApiClient {
   helpMenuImage(id: string): Promise<Blob>;
   history(session: string): Promise<HistoryMessage[]>;
   webChats(): Promise<WebChat[]>;
+  chatWorkspace(session: string): Promise<ChatWorkspaceInfo>;
+  setChatWorkspace(
+    session: string,
+    path: string,
+    create?: boolean,
+  ): Promise<
+    ChatWorkspaceInfo | { missing: true; path: string; suggestions: string[] }
+  >;
+  uploadChatAttachment(session: string, file: File): Promise<ChatAttachment>;
+  chatContext(session: string): Promise<ChatContextUsage | null>;
   updateWebChat(
     session: string,
     patch: Partial<Pick<WebChat, "title" | "pinned">>,
@@ -126,6 +139,7 @@ export interface ApiClient {
     text: string,
     session: string,
     clientId?: string,
+    attachments?: string[],
   ): Promise<{ status: string }>;
   resolveApproval(id: string, allow: boolean): Promise<unknown>;
   memoryProfiles(): Promise<MemoryProfile[]>;
@@ -376,6 +390,24 @@ export function createClient(getToken: () => string): ApiClient {
     helpMenuImage: (id) =>
       requestBlob("/help-images/" + encodeURIComponent(id)),
     webChats: () => request<WebChat[]>("/web-chats"),
+    chatWorkspace: (id) =>
+      request("/web-chats/" + encodeURIComponent(id) + "/workspace"),
+    setChatWorkspace: (id, path, create = false) =>
+      request("/web-chats/" + encodeURIComponent(id) + "/workspace", "PUT", {
+        path,
+        create,
+      }),
+    uploadChatAttachment: (id, file) =>
+      request(
+        "/web-chats/" +
+          encodeURIComponent(id) +
+          "/attachments?" +
+          new URLSearchParams({ name: file.name }),
+        "POST",
+        file,
+      ),
+    chatContext: (id) =>
+      request("/web-chats/" + encodeURIComponent(id) + "/context"),
     updateWebChat: (id, patch) =>
       request("/web-chats/" + encodeURIComponent(id), "PUT", patch),
     deleteWebChat: (id) =>
@@ -401,8 +433,13 @@ export function createClient(getToken: () => string): ApiClient {
     logLevel: () => request<{ level: string }>("/logs/level"),
     setLogLevel: (level) =>
       request<{ level: string }>("/logs/level", "PUT", { level }),
-    sendMessage: (text, session, clientId) =>
-      request("/messages", "POST", { text, session, client_id: clientId }),
+    sendMessage: (text, session, clientId, attachments) =>
+      request("/messages", "POST", {
+        text,
+        session,
+        client_id: clientId,
+        attachments,
+      }),
     resolveApproval: (id, allow) =>
       request("/approvals/" + encodeURIComponent(id), "POST", { allow }),
     memoryProfiles: () => request<MemoryProfile[]>("/memory/profiles"),

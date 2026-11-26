@@ -1,4 +1,17 @@
 {
+  "desktop": {
+    "title": "Desktop",
+    "closeBehavior": "When closing the window",
+    "ask": "Ask each time",
+    "quit": "Quit",
+    "tray": "Minimize to tray",
+    "notifications": "Notify me when a chat task ends",
+    "windowsNotifications": "Open Windows notification settings",
+    "dataDirectory": "Data directory",
+    "chooseFolder": "Choose folder",
+    "relaunch": "Restart ShiritaiBot",
+    "restartHint": "The new directory takes effect after restart. Existing data stays in its original folder."
+  },
   "language": {
     "title": "Language",
     "botLabel": "Bot language",

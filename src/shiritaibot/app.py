@@ -60,8 +60,9 @@ class FeishuAdapterConflict(PublicError):
 
 
 class Application:
-    def __init__(self, home: Path):
+    def __init__(self, home: Path, *, desktop: bool = False):
         self.home = home.resolve()
+        self.desktop = desktop
         self.bus = EventBus()
         self.config = ConfigService(self.home)
         self.store = Store(self.home, self.bus)
@@ -124,7 +125,13 @@ class Application:
             NativeRunner(self.config, self.store, self.llm, self.registry, self.skills),
         )
         self.plugins = PluginManager(
-            self.home, self.config, self.registry, self.vault, self.store, self.proactive.emit
+            self.home,
+            self.config,
+            self.registry,
+            self.vault,
+            self.store,
+            self.proactive.emit,
+            desktop=self.desktop,
         )
         self.plugins.llm, self.plugins.adapters = self.llm, self.adapters
         self.plugins.hooks.send = self.adapters.enqueue

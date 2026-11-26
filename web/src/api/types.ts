@@ -765,6 +765,24 @@ export interface WebChat {
   pinned: boolean;
 }
 
+export interface ChatWorkspaceInfo {
+  path: string;
+  custom: boolean;
+}
+
+export interface ChatAttachment {
+  id: string;
+  name: string;
+  size: number;
+}
+
+export interface ChatContextUsage {
+  model: string;
+  used: number;
+  limit: number | null;
+  estimated: boolean;
+}
+
 export interface TurnRecord {
   id: string;
   scope?: string;

@@ -1,0 +1,96 @@
+[data-desktop="win32"] {
+  --desktop-titlebar-height: 38px;
+}
+
+[data-desktop="win32"] body {
+  padding-top: var(--desktop-titlebar-height);
+}
+
+[data-desktop="win32"] .layout,
+[data-desktop="win32"] .chat-workspace {
+  min-height: calc(100vh - var(--desktop-titlebar-height));
+}
+
+[data-desktop="win32"] .layout > aside {
+  top: var(--desktop-titlebar-height);
+}
+
+[data-desktop="win32"] .chat-workspace {
+  height: calc(100vh - var(--desktop-titlebar-height));
+}
+
+.desktop-titlebar {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 100;
+  height: var(--desktop-titlebar-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fafbfd;
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  app-region: drag;
+}
+
+.desktop-titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 13px;
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.desktop-titlebar-brand img {
+  border-radius: 5px;
+}
+
+.desktop-window-actions {
+  display: flex;
+  align-self: stretch;
+  app-region: no-drag;
+}
+
+.desktop-window-actions button {
+  width: 46px;
+  height: 100%;
+  padding: 0;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.desktop-window-actions button:hover {
+  background: var(--button-hover);
+}
+
+.desktop-window-actions button:last-child:hover {
+  color: white;
+  background: var(--danger);
+}
+
+[data-desktop="darwin"] .layout > aside,
+[data-desktop="darwin"] .chat-sidebar {
+  padding-top: 50px;
+}
+
+[data-desktop="darwin"] .chat-sidebar {
+  position: relative;
+}
+
+.desktop-sidebar-drag {
+  position: absolute;
+  inset: 0 0 auto 92px;
+  height: 44px;
+  flex-shrink: 0;
+  user-select: none;
+  app-region: drag;
+}
+
+.login > .desktop-sidebar-drag {
+  position: fixed;
+}

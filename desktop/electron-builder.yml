@@ -1,0 +1,34 @@
+appId: dev.shiritaibot.desktop
+productName: ShiritaiBot
+asar: true
+directories:
+  output: dist
+  buildResources: build/icons
+files:
+  - main.cjs
+  - preload.cjs
+  - startup.html
+  - preferences.cjs
+extraResources:
+  - from: build/runtime
+    to: runtime
+  - from: build/icons/icon.png
+    to: icon.png
+win:
+  icon: build/icons/windows.png
+  target:
+    - nsis
+nsis:
+  artifactName: ShiritaiBot-Setup-${version}-${arch}.${ext}
+  oneClick: false
+  perMachine: false
+  selectPerMachineByDefault: false
+  allowToChangeInstallationDirectory: true
+  include: build-installer.nsh
+mac:
+  icon: build/icons/mac.png
+  category: public.app-category.productivity
+  identity: '-'
+  artifactName: ShiritaiBot-${version}-mac-${arch}.${ext}
+  target:
+    - dmg

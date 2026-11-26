@@ -1,4 +1,23 @@
 {
+  "workspace": "Workspace",
+  "defaultWorkspace": "Default workspace",
+  "serverWorkspace": "Absolute path on the server",
+  "workspaceMissing": "This directory does not exist",
+  "workspaceSuggestions": "Did you mean one of these?",
+  "useWorkspace": "Use this path",
+  "resetWorkspace": "Use default workspace",
+  "createWorkspace": "Create this path",
+  "attachments": "Attachments",
+  "attach": "Attach files",
+  "uploading": "Uploading…",
+  "attachmentSize": "A chat attachment can be up to 250 MiB.",
+  "attachmentCount": "You can attach up to 20 files to one message.",
+  "contextWindow": "Context window",
+  "usedTokens": "{{used}} input tokens used",
+  "estimatedTokens": "About {{used}} input tokens used",
+  "totalTokens": "{{total}} tokens total",
+  "unknownContextLimit": "Model context limit unspecified",
+  "noContextUsage": "Usage appears after the first model response.",
   "sendModes": {
     "steer": {
       "label": "Steer",

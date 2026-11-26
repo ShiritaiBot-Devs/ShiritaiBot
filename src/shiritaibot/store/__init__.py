@@ -247,6 +247,8 @@ class Store:
         )
         await self.put("session_epoch", key, {"seq": rows[0]["seq"]})
         await self.delete("context_state", key)
+        if session.startswith("web:"):
+            await self.delete("web_context", session)
 
     async def web_chats(self) -> list[dict]:
         rows = await self.query("""
@@ -288,7 +290,8 @@ class Store:
             try:
                 await self.db.execute("DELETE FROM messages WHERE session=?", (session,))
                 await self.db.execute(
-                    "DELETE FROM records WHERE kind IN ('tool_diff','artifact','help_image') AND scope=?",
+                    "DELETE FROM records WHERE kind IN "
+                    "('tool_diff','artifact','help_image','web_workspace','web_attachment','web_context') AND scope=?",
                     (session,),
                 )
                 await self.db.execute(

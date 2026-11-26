@@ -1,4 +1,9 @@
 {
+  "workspaceUnavailable": "Enter an accessible absolute directory on the ShiritaiBot host.",
+  "chatUploadTooLarge": "A chat attachment can be up to 250 MiB.",
+  "chatEmptyMessage": "Enter a message or attach a file.",
+  "chatAttachmentUnavailable": "An attachment is unavailable in this session workspace. Upload it again.",
+  "chatAttachedFiles": "Files attached by the user (paths relative to the session workspace)",
   "token_required": "A WebUI admin token is required",
   "providerMissing": "The model's provider doesn't exist. Check the settings.",
   "modelNotSaved": "Couldn't find the saved model; it may not be saved yet, or it was renamed. Refresh the page and use Test this configuration.",

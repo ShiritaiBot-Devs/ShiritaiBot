@@ -17,6 +17,7 @@ import { PageTabs } from "./components/PageTabs";
 import { CAPABILITY_TABS } from "./navigation";
 import { ChatWorkspace } from "./components/ChatWorkspace";
 import { LoginView } from "./components/LoginView";
+import { desktop, DesktopTitleBar } from "./components/DesktopTitleBar";
 import { SaveBar } from "./components/SaveBar";
 import { UpdateDialog } from "./components/UpdateDialog";
 import { isNewer } from "./lib/version";
@@ -49,6 +50,7 @@ const MODE_KEY = "shiritaibot-mode";
 export function App() {
   return (
     <NoticeProvider>
+      <DesktopTitleBar />
       <ConsoleApp />
     </NoticeProvider>
   );
@@ -72,7 +74,7 @@ function ConsoleApp() {
   const [restartInstance, setRestartInstance] = useState<string | null>(null);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [mode, setMode] = useState<"console" | "chat">(() =>
-    localStorage.getItem(MODE_KEY) === "chat" ? "chat" : "console",
+    desktop || localStorage.getItem(MODE_KEY) === "chat" ? "chat" : "console",
   );
   const [session, setSession] = useState(
     () => sessionStorage.getItem("shiritaibot-chat-session") || "web:owner",
@@ -169,7 +171,7 @@ function ConsoleApp() {
         release && status?.current && isNewer(release, status.current),
       );
     },
-    enabled: client !== null && health.isSuccess && !restarting,
+    enabled: !desktop && client !== null && health.isSuccess && !restarting,
     staleTime: 30 * 60 * 1000,
     refetchInterval: 6 * 60 * 60 * 1000,
     retry: false,
@@ -223,6 +225,11 @@ function ConsoleApp() {
     (event: RealtimeEvent) => {
       void queryClient.invalidateQueries({ queryKey: ["health"] });
       void queryClient.invalidateQueries({ queryKey: ["records"] });
+      if (event.kind === "web_context") {
+        void queryClient.invalidateQueries({
+          queryKey: ["chat-context", event.id],
+        });
+      }
       if (event.kind === "turn" || event.kind === "reply") {
         void queryClient.invalidateQueries({ queryKey: ["history"] });
       }
@@ -431,7 +438,9 @@ function ConsoleApp() {
             ? t("restart.unsupported")
             : t("restart.hint")
       }
-      onCheckUpdate={() => setUpdateOpen(true)}
+      onCheckUpdate={
+        desktop ? () => desktop?.action("releases") : () => setUpdateOpen(true)
+      }
       updateAvailable={updateCheck.data === true}
       onLogout={() => {
         dismiss();

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ApiClient } from "../api/client";
-import type { HistoryMessage } from "../api/types";
+import type { ChatAttachment, HistoryMessage } from "../api/types";
 import type { Action } from "../pages/common";
 
 type Outgoing = HistoryMessage & { localId: string; sendFailed?: boolean };
@@ -32,7 +32,7 @@ export function useChatOutbox(
     );
   }, [history, session, cache]);
 
-  function send(text: string) {
+  function send(text: string, attachments: ChatAttachment[] = []) {
     const id = Array.from(crypto.getRandomValues(new Uint32Array(4)), (x) =>
       x.toString(16).padStart(8, "0"),
     ).join("");
@@ -41,7 +41,9 @@ export function useChatOutbox(
       ...(rows ?? []),
       {
         role: "user",
-        content: text,
+        content: [text, ...attachments.map((file) => file.name)]
+          .filter(Boolean)
+          .join("\n"),
         localId: id,
         _client_ids: [id],
       },
@@ -49,7 +51,14 @@ export function useChatOutbox(
     let status = "";
     void act(async () => {
       try {
-        status = (await client.sendMessage(text, session, id)).status;
+        status = (
+          await client.sendMessage(
+            text,
+            session,
+            id,
+            attachments.map((file) => file.id),
+          )
+        ).status;
       } catch (error) {
         cache.setQueryData<Outgoing[]>(key, (rows) =>
           rows?.map((row) =>

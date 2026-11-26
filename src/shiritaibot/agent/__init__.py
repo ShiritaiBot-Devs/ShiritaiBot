@@ -9,6 +9,7 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
 from functools import partial
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
 
@@ -22,6 +23,7 @@ from shiritaibot.core import (
     PublicError,
     canonical,
     current_reply,
+    delegated_workspace,
     fingerprint,
     now,
     record_usage_for,
@@ -613,8 +615,16 @@ class AgentRuntime:
             token = current_reply.set(ctx.reply_anchor)
             locale, _ = await self.session_locale(ctx.session)
             try:
+                workspace = await self.store.get("web_workspace", ctx.session) if ctx.session.startswith("web:") else None
                 with record_usage_for(ctx.session), use_locale(locale):
-                    await self._turn(actor, ctx, text)
+                    if workspace:
+                        workspace_token = delegated_workspace.set((ctx.session, Path(workspace["path"])))
+                        try:
+                            await self._turn(actor, ctx, text)
+                        finally:
+                            delegated_workspace.reset(workspace_token)
+                    else:
+                        await self._turn(actor, ctx, text)
             finally:
                 current_reply.reset(token)
 
@@ -636,6 +646,11 @@ class AgentRuntime:
             self.registry.permissions.context(ctx), turn=ctx.turn if actor is None else uid()
         )
         execution_session = runtime_session(ctx)
+        web_context = (
+            {"track_web_context": True}
+            if actor is not None and not ctx.background and execution_session.startswith("web:")
+            else {}
+        )
         proactive = execution_session.startswith(PREPARE_SESSION)
         append = partial(
             self.store.append, execution_session, ctx.turn, memory_profile=ctx.memory_profile
@@ -820,6 +835,7 @@ class AgentRuntime:
                         settings=cfg,
                         scope=ctx.session,
                         tool_free=True,
+                        **web_context,
                     )
                     if chat_reply.text.strip() == WORK_HANDOFF and not chat_reply.calls:
                         chat_reply = None
@@ -889,6 +905,7 @@ class AgentRuntime:
                             [] if actor is None else request.tools,
                             settings=cfg,
                             scope=ctx.session,
+                            **web_context,
                         )
                     else:
                         reply = chat_reply
@@ -1066,6 +1083,8 @@ class AgentRuntime:
                 )
             body["finished"] = now().isoformat()
             await self.store.put("turn", ctx.turn, body, execution_session)
+            if ctx.session.startswith("web:") and not ctx.background and body["status"] in {"completed", "failed"}:
+                self.store.bus.emit({"kind": "web_task_finished", "id": ctx.turn, "session": ctx.session, "status": body["status"]})
             if self.short_term and body["summary_eligible"]:
                 await self.short_term.enqueue(ctx, body["status"])
                 body["summary_enqueued"] = True

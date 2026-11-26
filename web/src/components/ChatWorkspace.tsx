@@ -1,7 +1,7 @@
 import { LoadingBar } from "./LoadingBar";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Menu, Settings } from "lucide-react";
+import { Menu } from "lucide-react";
 import type { ApiClient } from "../api/client";
 import type { WebChat } from "../api/types";
 import { draftKey, modelKey, writeValue } from "../lib/composer";
@@ -187,6 +187,7 @@ export function ChatWorkspace({
         onSelect={select}
         onUpdate={updateChat}
         onDelete={removeChat}
+        onSettings={onOpenSettings}
         onNew={() => {
           setDrawerOpen(false);
           const id = "web:" + Date.now();
@@ -212,14 +213,6 @@ export function ChatWorkspace({
                 ? i18n.t("chat:workspace.newChat")
                 : sessionTitle(session))}
           </h1>
-          <button
-            type="button"
-            aria-label={i18n.t("chat:workspace.settings")}
-            className="icon-button"
-            onClick={onOpenSettings}
-          >
-            <Settings size={18} aria-hidden="true" />
-          </button>
         </header>
         <div
           className="chat-scroll"
@@ -284,9 +277,9 @@ export function ChatWorkspace({
         {session.startsWith("web:") ? (
           <ChatComposer
             key={session}
-            onSend={(message) => {
+            onSend={(message, attachments) => {
               stickRef.current = true;
-              send(message);
+              send(message, attachments);
             }}
             client={client}
             act={act}

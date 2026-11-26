@@ -36,10 +36,15 @@ FORMAT = 1
 MANIFESTS = ("metadata.yaml", "plugin.toml")
 
 
+def removed_builtin_plugin(home: Path, key: str) -> Path:
+    return home / "plugins" / ".removed-builtins" / key
+
+
 def plugin_paths(core: Path, home: Path) -> dict[str, Path]:
     """Mirror the host's source-first discovery without importing plugin code."""
     result = {}
-    for root in (core / "src/shiritaibot/plugin", home / "plugins"):
+    builtin = core / "src/shiritaibot/plugin"
+    for root in (builtin, home / "plugins"):
         if not root.is_dir():
             continue
         for directory in sorted(root.iterdir()):
@@ -48,6 +53,7 @@ def plugin_paths(core: Path, home: Path) -> dict[str, Path]:
                 and directory.is_dir()
                 and re.fullmatch(r"[a-z0-9_]{1,64}", directory.name)
                 and directory.name not in {"core", "__pycache__"}
+                and not (root == builtin and removed_builtin_plugin(home, directory.name).is_file())
                 and any((directory / name).is_file() for name in MANIFESTS)
             ):
                 result.setdefault(directory.name, directory.resolve())

@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from shiritaibot.core import PublicError, Tool, now, session_dir
+from shiritaibot.core import PublicError, Tool, delegated_workspace, now, session_dir
 from shiritaibot.core.process import run_process
 from shiritaibot.i18n import Text, t
 from shiritaibot.knowledge.tools import knowledge_tools
@@ -49,7 +49,12 @@ async def register_builtin(app) -> None:
             app.plugins.filter_shell(args["command"]),
         ]
         if isolate:
-            expected = app.home.resolve() / "workspaces" / workspace.name
+            selected = delegated_workspace.get()
+            expected = (
+                selected[1]
+                if selected and selected[0] == ctx.session and ctx.session.startswith("web:")
+                else app.home.resolve() / "workspaces" / workspace.name
+            )
             if workspace.resolve() != expected:
                 raise PublicError("tools.workspaceRedirected")
             command = await asyncio.to_thread(isolated_shell, command, expected)

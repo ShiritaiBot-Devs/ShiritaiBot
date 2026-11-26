@@ -30,6 +30,7 @@ from shiritaibot.llm.subscription import (
     SubscriptionAccounts,
     SubscriptionError,
 )
+from shiritaibot.store.statistics import tokens
 
 log = get_logger("llm.log.source")
 
@@ -670,6 +671,7 @@ class ProviderManager:
         scope: str | None = None,
         *,
         tool_free: bool = False,
+        track_web_context: bool = False,
     ) -> Reply:
         """Use an explicit session for usage attribution and QQ image resolution when given."""
         cfg = settings or self.config.value
@@ -731,7 +733,8 @@ class ProviderManager:
                 if isinstance(output_limit, int) and output_limit > 0
                 else model.max_output
             )
-            if model.max_context and estimated_tokens(body) + reserved_output > model.max_context:
+            estimate = estimated_tokens(body) if model.max_context or track_web_context else 0
+            if model.max_context and estimate + reserved_output > model.max_context:
                 context_skipped = True
                 log.warning(
                     Text("llm.log.contextTooLong", display_name=model.display_name, max_context=model.max_context), route
@@ -771,6 +774,14 @@ class ProviderManager:
                     response.extensions.get("model_timing"),
                     scope=scope,
                 )
+                if track_web_context and scope and scope.startswith("web:"):
+                    used = tokens(reply.usage or {}, protocol)["input_tokens"]
+                    await self.store.put("web_context", scope, {
+                        "model": model.display_name or model.model,
+                        "used": used or estimate,
+                        "limit": model.max_context or None,
+                        "estimated": not used,
+                    }, scope)
                 log.debug(
                     t("llm.replied", display_name=model.display_name, value=time.monotonic() - started)
                     + (t("llm.toolCalls", count=len(reply.calls)) if reply.calls else ""),

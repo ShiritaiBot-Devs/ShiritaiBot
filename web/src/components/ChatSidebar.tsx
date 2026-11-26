@@ -1,7 +1,8 @@
 ﻿import { useState } from "react";
-import { ChevronDown, ChevronRight, Pin, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, Pin, Plus, Settings } from "lucide-react";
 import type { SessionGroup, SessionGroupKey } from "../lib/sessions";
 import { ChatSessionActions, type ChatActions } from "./ChatSessionActions";
+import { DesktopSidebarDrag } from "./DesktopTitleBar";
 import i18n from "../i18n";
 
 interface ChatSidebarProps extends ChatActions {
@@ -11,6 +12,7 @@ interface ChatSidebarProps extends ChatActions {
   pending: Set<string>;
   onSelect: (id: string) => void;
   onNew: () => void;
+  onSettings: () => void;
 }
 
 export function ChatSidebar({
@@ -20,6 +22,7 @@ export function ChatSidebar({
   pending,
   onSelect,
   onNew,
+  onSettings,
   onUpdate,
   onDelete,
 }: ChatSidebarProps) {
@@ -36,6 +39,7 @@ export function ChatSidebar({
   }
   return (
     <div className="chat-sidebar">
+      <DesktopSidebarDrag />
       <div className="chat-brand">
         <strong>ShiritaiBot</strong>
         <small>{i18n.t("chat:sidebar.title")}</small>
@@ -126,6 +130,12 @@ export function ChatSidebar({
           </div>
         ))}
       </nav>
+      <div className="sidebar-mode-actions">
+        <button type="button" onClick={onSettings}>
+          <Settings size={16} aria-hidden="true" />
+          {i18n.t("chat:workspace.settings")}
+        </button>
+      </div>
     </div>
   );
 }

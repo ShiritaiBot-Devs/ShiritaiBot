@@ -35,7 +35,15 @@ from shiritaibot.config import (
     is_feishu_session,
     is_qq_official_session,
 )
-from shiritaibot.core import Context, ExternalEvent, Model, PublicError, canonical, logs
+from shiritaibot.core import (
+    Context,
+    ExternalEvent,
+    Model,
+    PublicError,
+    canonical,
+    logs,
+    session_dir,
+)
 from shiritaibot.core.process import run_process
 from shiritaibot.i18n import Text, localize, normalize, t, use_locale
 from shiritaibot.llm.subscription import LOGIN_SECONDS
@@ -52,6 +60,7 @@ from shiritaibot.store.statistics import (
 )
 from shiritaibot.tools.builtin import register_builtin
 from shiritaibot.updater import Updater
+from shiritaibot.web.chat_files import upload_attachment, workspace_for, workspace_suggestions
 from shiritaibot.web.exchange_rates import ExchangeRates
 from shiritaibot.web.feishu_qr import FeishuQrApply, FeishuQrRegistration, FeishuQrStart
 
@@ -66,8 +75,11 @@ class LogLevelInput(Model):
 
 class MessageInput(Model):
     client_id: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]{1,80}$")
-    text: str = Field(min_length=1, max_length=32000)
+    text: str = Field(max_length=32000)
     session: str = Field(default="web:owner", pattern=r"^web:[a-zA-Z0-9_-]{1,80}$")
+    attachments: list[Annotated[str, Field(pattern=r"^[a-f0-9]{32}$")]] = Field(
+        default_factory=list, max_length=20
+    )
 
 
 WebChatId = Annotated[str, Field(pattern=r"^web:[a-zA-Z0-9_-]{1,80}$")]
@@ -76,6 +88,11 @@ WebChatId = Annotated[str, Field(pattern=r"^web:[a-zA-Z0-9_-]{1,80}$")]
 class WebChatUpdate(Model):
     title: str | None = Field(default=None, min_length=1, max_length=100)
     pinned: bool | None = None
+
+
+class WebWorkspaceInput(Model):
+    path: str = Field(max_length=4096)
+    create: bool = False
 
 
 class RoutineInput(RoutineItem):
@@ -158,8 +175,10 @@ def create_app(
     log_level: str | None = None,
     request_restart: Callable[[], None] | None = None,
     updater: Updater | None = None,
+    *,
+    desktop: bool = False,
 ) -> FastAPI:
-    runtime = Application(home)
+    runtime = Application(home, desktop=desktop)
     feishu_qr = FeishuQrRegistration(runtime)
     manager = logs.LogManager(home, log_level)
     web_log = logs.get_logger("WebUI")
@@ -218,6 +237,12 @@ def create_app(
             raise HTTPException(401, t("web.token_required"))
 
     protected = [Depends(auth)]
+
+    async def source_deployment():
+        if desktop:
+            raise HTTPException(404)
+
+    source_update = [*protected, Depends(source_deployment)]
 
     @api.exception_handler(PublicError)
     async def public_error(request, exc):
@@ -382,11 +407,11 @@ def create_app(
             background=background,
         )
 
-    @api.get("/api/update/status", dependencies=protected)
+    @api.get("/api/update/status", dependencies=source_update)
     def update_status():
         return updater.status()
 
-    @api.get("/api/update/releases", dependencies=protected)
+    @api.get("/api/update/releases", dependencies=source_update)
     async def update_releases(
         page: int = Query(1, ge=1, le=1000),
         size: int = Query(8, ge=1, le=50),
@@ -395,15 +420,15 @@ def create_app(
     ):
         return await updater.releases(page, size, prerelease, refresh)
 
-    @api.get("/api/update/preview", dependencies=protected)
+    @api.get("/api/update/preview", dependencies=source_update)
     async def update_preview(refresh: bool = False):
         return {"commit": await updater.preview(refresh)}
 
-    @api.post("/api/update/inspect", dependencies=protected)
+    @api.post("/api/update/inspect", dependencies=source_update)
     async def update_inspect(body: UpdateInput):
         return await updater.inspect(body.kind, body.ref)
 
-    @api.post("/api/update/apply", dependencies=protected, status_code=202)
+    @api.post("/api/update/apply", dependencies=source_update, status_code=202)
     async def update_apply(body: UpdateInput):
         web_log.log(Text("web.log.update", kind=body.kind, ref=body.ref))
         return await updater.apply(body.kind, body.ref)
@@ -625,6 +650,56 @@ def create_app(
     async def web_chats():
         return await runtime.store.web_chats()
 
+    @api.get("/api/web-chats/{session}/workspace", dependencies=protected)
+    async def get_workspace(session: WebChatId):
+        path = await workspace_for(runtime.store, runtime.home, session)
+        return {"path": str(path), "custom": path != session_dir(runtime.home, "workspaces", session)}
+
+    @api.put("/api/web-chats/{session}/workspace", dependencies=protected)
+    async def set_workspace(session: WebChatId, body: WebWorkspaceInput):
+        value = body.path.strip()
+        path = Path(value)
+        if value:
+            if not path.is_absolute() or "\x00" in value:
+                raise HTTPException(422, t("web.workspaceUnavailable"))
+            try:
+                if not await asyncio.to_thread(path.is_dir):
+                    if await asyncio.to_thread(path.exists):
+                        raise HTTPException(422, t("web.workspaceUnavailable"))
+                    if not body.create:
+                        return {"missing": True, "path": value,
+                                "suggestions": await asyncio.to_thread(workspace_suggestions, path)}
+            except OSError as exc:
+                raise HTTPException(422, t("web.workspaceUnavailable")) from exc
+        async with runtime.runtime.submit_locks.setdefault(session, asyncio.Lock()):
+            if runtime.runtime.busy(session):
+                raise HTTPException(409, t("web.chatBusy"))
+            if value:
+                try:
+                    if body.create:
+                        await asyncio.to_thread(path.mkdir, parents=True, exist_ok=True)
+                    path = await asyncio.to_thread(path.resolve, strict=True)
+                    if not await asyncio.to_thread(path.is_dir):
+                        raise HTTPException(422, t("web.workspaceUnavailable"))
+                except (OSError, RuntimeError) as exc:
+                    raise HTTPException(422, t("web.workspaceUnavailable")) from exc
+            await runtime.store.update_web_chat(session, None, None)
+            if value:
+                await runtime.store.put("web_workspace", session, {"path": str(path)}, session)
+            else:
+                await runtime.store.delete("web_workspace", session)
+        return await get_workspace(session)
+
+    @api.post("/api/web-chats/{session}/attachments", dependencies=protected)
+    async def add_chat_attachment(session: WebChatId, request: Request, name: str = Query(max_length=250)):
+        workspace = await workspace_for(runtime.store, runtime.home, session)
+        document = await upload_attachment(request, workspace, name)
+        return await runtime.store.put("web_attachment", document["id"], document, session)
+
+    @api.get("/api/web-chats/{session}/context", dependencies=protected)
+    async def web_chat_context(session: WebChatId):
+        return await runtime.store.get("web_context", session)
+
     @api.get("/api/help-images/{key}", dependencies=protected)
     async def help_image(key: str):
         row = await runtime.store.get("help_image", key)
@@ -650,11 +725,25 @@ def create_app(
 
     @api.post("/api/messages", dependencies=protected)
     async def message(body: MessageInput):
+        if not body.text.strip() and not body.attachments:
+            raise HTTPException(422, t("web.chatEmptyMessage"))
+        text = body.text
+        if body.attachments:
+            workspace = await workspace_for(runtime.store, runtime.home, body.session)
+            attachments = []
+            for key in dict.fromkeys(body.attachments):
+                row = await runtime.store.get("web_attachment", key)
+                if not row or row["scope"] != body.session or row["workspace"] != str(workspace):
+                    raise HTTPException(422, t("web.chatAttachmentUnavailable"))
+                attachments.append(str(Path(row["path"]).relative_to(workspace).as_posix()))
+            text = "\n\n".join(filter(None, [text.strip(), t("web.chatAttachedFiles") + "\n" + "\n".join(
+                f"- {canonical(path)}" for path in attachments
+            )]))
         where = "" if body.session == "web:owner" else body.session
         web_log.log(logs.brief(body.text, 200), where, "web.log.owner")
         event = MessageEvent(
             session=body.session,
-            text=body.text.strip(),
+            text=text.strip(),
             sender_id="owner",
             sender_name=runtime.config.value.owner_name,
             platform="web",
@@ -675,7 +764,7 @@ def create_app(
                     True,
                     web_message_ids=(body.client_id,) if body.client_id else (),
                 ),
-                body.text,
+                text,
             )
         }
 

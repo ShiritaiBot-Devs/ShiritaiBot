@@ -1,5 +1,158 @@
 /* Chat mode: DSH-style sidebar + conversation column. */
 
+.sidebar-mode-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-mode-actions button[aria-current="page"] {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.chat-sidebar .sidebar-mode-actions {
+  margin-top: auto;
+}
+
+.composer-workspace {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.composer-workspace button {
+  min-width: 0;
+  font-size: 12px;
+}
+
+.composer-workspace-picker span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-upload {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  font-size: 22px;
+}
+
+.composer-upload:hover,
+.composer-upload:focus-within {
+  background: var(--button-hover);
+}
+
+.composer-upload input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.composer-context {
+  position: relative;
+}
+
+.composer-context button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+}
+
+.context-ring {
+  display: inline-block;
+  position: relative;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+
+.context-ring::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: inherit;
+  background: var(--panel);
+}
+
+.context-details {
+  display: none;
+  position: absolute;
+  inset: auto 0 calc(100% + 7px) auto;
+  z-index: 10;
+  width: max-content;
+  max-width: 240px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+
+.composer-context:hover .context-details,
+.composer-context:focus-within .context-details,
+.context-details.is-open {
+  display: grid;
+}
+
+.workspace-dialog {
+  width: min(520px, calc(100vw - 28px));
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.workspace-dialog::backdrop {
+  background: rgb(25 39 65 / 24%);
+}
+
+.workspace-dialog h2 {
+  margin: 0 0 12px;
+  font-size: 17px;
+}
+
+.workspace-dialog label,
+.desktop-data-setting {
+  display: grid;
+  gap: 7px;
+}
+
+.workspace-dialog ul {
+  padding: 0;
+  list-style: none;
+}
+
+.workspace-dialog li,
+.workspace-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.workspace-dialog-actions {
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.workspace-path {
+  overflow-wrap: anywhere;
+}
+
 .chat-workspace {
   display: grid;
   grid-template-columns: 260px 1fr;

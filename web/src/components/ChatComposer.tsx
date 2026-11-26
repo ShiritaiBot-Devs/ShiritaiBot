@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Send, Square, X } from "lucide-react";
 import type { ApiClient } from "../api/client";
+import type { ChatAttachment } from "../api/types";
 import type { Action } from "../pages/common";
 import { ComposerSelect } from "./ComposerSelect";
+import { ChatContextMeter, ChatWorkspacePicker } from "./ChatComposerTools";
 import { configuredModelName, groupModels, modelNameById } from "../lib/models";
 import {
   composerHeight,
@@ -28,12 +30,13 @@ export interface ChatComposerProps {
   session: string;
   assistantName: string;
   running?: boolean;
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments?: ChatAttachment[]) => void;
 }
 
 interface Queued {
   id: number;
   text: string;
+  attachments: ChatAttachment[];
 }
 
 export function ChatComposer({
@@ -47,6 +50,8 @@ export function ChatComposer({
   const [text, setText] = useState(() => readValue(draftKey(session)));
   const [lastSent, setLastSent] = useState("");
   const [queue, setQueue] = useState<Queued[]>([]);
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [sendMode, setSendMode] = useState<SendMode>(readSendMode);
   const [model, setModel] = useState(() => readValue(modelKey(session)));
   const [preset, setPreset] = useState<Preset | "">("");
@@ -86,7 +91,7 @@ export function ChatComposer({
     if (!settled || queue.length === 0) return;
     const [head] = queue;
     setQueue((items) => items.slice(1));
-    onSend(head.text);
+    onSend(head.text, head.attachments);
   }, [running, queue, onSend]);
 
   const providers = new Set(
@@ -153,17 +158,40 @@ export function ChatComposer({
 
   function send() {
     const message = text.trim();
-    if (!message) return;
+    if (uploading || (!message && !attachments.length)) return;
     setLastSent(message);
     setText("");
+    setAttachments([]);
     writeValue(draftKey(session), "");
     setDismissed(false);
     if (running && sendMode === "queue") {
       nextId.current += 1;
-      setQueue((items) => [...items, { id: nextId.current, text: message }]);
+      setQueue((items) => [
+        ...items,
+        { id: nextId.current, text: message, attachments },
+      ]);
       return;
     }
-    onSend(message);
+    onSend(message, attachments);
+  }
+
+  async function upload(files: File[]) {
+    if (uploading || !files?.length) return;
+    setUploading(true);
+    try {
+      await act(async () => {
+        if (attachments.length + files.length > 20)
+          throw new Error(i18n.t("composer:attachmentCount"));
+        for (const file of files) {
+          if (file.size > 250 * 1024 * 1024)
+            throw new Error(i18n.t("composer:attachmentSize"));
+          const item = await client.uploadChatAttachment(session, file);
+          setAttachments((items) => [...items, item]);
+        }
+      }, "");
+    } finally {
+      setUploading(false);
+    }
   }
 
   function chooseModel(id: string) {
@@ -243,11 +271,49 @@ export function ChatComposer({
         send();
       }}
     >
+      <ChatWorkspacePicker
+        client={client}
+        act={act}
+        session={session}
+        busy={running || uploading || Boolean(queue.length)}
+        onChange={() => setAttachments([])}
+      />
+      {(attachments.length > 0 || uploading) && (
+        <ul
+          className="composer-queue"
+          aria-label={i18n.t("composer:attachments")}
+        >
+          {attachments.map((file) => (
+            <li key={file.id}>
+              <span>{file.name}</span>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={i18n.t("composer:removeQueued", {
+                  text: file.name,
+                })}
+                onClick={() =>
+                  setAttachments((items) =>
+                    items.filter((item) => item.id !== file.id),
+                  )
+                }
+              >
+                <X size={13} aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+          {uploading && <li role="status">{i18n.t("composer:uploading")}</li>}
+        </ul>
+      )}
       {queue.length > 0 && (
         <ul className="composer-queue" aria-label={i18n.t("composer:queued")}>
           {queue.map((item) => (
             <li key={item.id}>
-              <span>{item.text}</span>
+              <span>
+                {[item.text, ...item.attachments.map((file) => file.name)]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
               <button
                 type="button"
                 className="icon-button"
@@ -308,6 +374,20 @@ export function ChatComposer({
       />
       <div className="composer-bar">
         <div className="composer-chips">
+          <label className="composer-upload" title={i18n.t("composer:attach")}>
+            <span aria-hidden="true">+</span>
+            <input
+              type="file"
+              multiple
+              aria-label={i18n.t("composer:attach")}
+              disabled={uploading}
+              onChange={(event) => {
+                const files = Array.from(event.currentTarget.files ?? []);
+                void upload(files);
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
           <ComposerSelect
             label={i18n.t("composer:model")}
             value={model}
@@ -338,6 +418,7 @@ export function ChatComposer({
           />
         </div>
         <div className="composer-actions">
+          <ChatContextMeter client={client} session={session} />
           {running && (
             <button
               type="button"
@@ -350,7 +431,7 @@ export function ChatComposer({
           <button
             type="submit"
             className="primary"
-            disabled={!text.trim()}
+            disabled={uploading || (!text.trim() && !attachments.length)}
             aria-label={i18n.t("composer:send")}
           >
             <Send size={17} />

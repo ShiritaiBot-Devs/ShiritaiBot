@@ -1,5 +1,6 @@
 import { PageTabs } from "../components/PageTabs";
 import { ModelOptions } from "../components/ModelOptions";
+import { DesktopSettings } from "../components/DesktopSettings";
 import { useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Field, FieldForm } from "../components/FieldForm";
@@ -66,6 +67,7 @@ export function SettingsPage({
         aria-labelledby="settings-tab-general"
         hidden={tab !== "general"}
       >
+        <DesktopSettings act={act} />
         <section className="settings-group">
           <h2>{t("language.title")}</h2>
           <div className="field-grid">

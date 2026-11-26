@@ -25,6 +25,12 @@
     "done": "Restart complete",
     "timeout": "The restart is taking too long. Check the service log, or refresh the page later."
   },
+  "desktop": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore window",
+    "close": "Close"
+  },
   "header": {
     "crumb": "Local console",
     "localOnly": "Local only",

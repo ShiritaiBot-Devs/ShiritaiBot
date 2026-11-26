@@ -4,6 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { createClient } from "../api/client";
 import { UiLanguageSelect } from "./LanguageSettings";
+import { DesktopSidebarDrag } from "./DesktopTitleBar";
 
 export function LoginView({
   authenticating = false,
@@ -34,6 +35,7 @@ export function LoginView({
 
   return (
     <div className="login">
+      <DesktopSidebarDrag />
       <div className="brand-mark">
         <img src="/icon.png" alt="" />
       </div>

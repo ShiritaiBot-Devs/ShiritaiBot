@@ -1,4 +1,17 @@
 {
+  "desktop": {
+    "title": "桌面应用",
+    "closeBehavior": "关闭窗口时",
+    "ask": "每次询问",
+    "quit": "退出",
+    "tray": "最小化到托盘",
+    "notifications": "会话任务结束时发送系统通知",
+    "windowsNotifications": "打开 Windows 通知设置",
+    "dataDirectory": "数据存储目录",
+    "chooseFolder": "选择文件夹",
+    "relaunch": "重启 ShiritaiBot",
+    "restartHint": "重启后使用新目录。现有数据保留在原目录。"
+  },
   "language": {
     "title": "语言",
     "botLabel": "机器人语言",

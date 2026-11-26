@@ -1,4 +1,9 @@
 {
+  "workspaceUnavailable": "请输入 ShiritaiBot 所在机器上可访问的绝对目录路径。",
+  "chatUploadTooLarge": "单个聊天附件最大为 250 MiB。",
+  "chatEmptyMessage": "请输入消息或添加附件。",
+  "chatAttachmentUnavailable": "当前会话工作区无法访问该附件，请重新上传。",
+  "chatAttachedFiles": "用户附加的文件（相对于会话工作目录的路径）",
   "token_required": "需要 WebUI 管理令牌",
   "providerMissing": "模型对应的提供商不存在，请检查配置",
   "modelNotSaved": "找不到已保存的模型，可能尚未保存或已改名。请刷新页面，使用测试当前配置。",

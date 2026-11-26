@@ -25,6 +25,12 @@
     "done": "重启完成",
     "timeout": "等待重启超时，请检查服务日志或稍后刷新页面。"
   },
+  "desktop": {
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "还原窗口",
+    "close": "关闭"
+  },
   "header": {
     "crumb": "本机控制台",
     "localOnly": "仅本机",

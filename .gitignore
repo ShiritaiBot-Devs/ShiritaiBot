@@ -10,6 +10,9 @@ data/plugins/srtb_plugin_chtnewiki/
 .env
 web/node_modules/
 web/dist/
+desktop/node_modules/
+desktop/build/
+desktop/dist/
 *.tsbuildinfo
 .claude/
 .local/

@@ -18,7 +18,7 @@ from shiritaibot.api.hook import tool_spec
 from shiritaibot.config import PluginConfig
 from shiritaibot.core import PublicError, uid
 from shiritaibot.core.logs import get_logger
-from shiritaibot.dependencies import RuntimeEnvironment
+from shiritaibot.dependencies import RuntimeEnvironment, removed_builtin_plugin
 from shiritaibot.i18n import Text, join_list, t
 from shiritaibot.plugin_api import PluginContext
 
@@ -30,7 +30,7 @@ log = get_logger("plugins.log.source")
 
 
 class PluginManager:
-    def __init__(self, home, config, registry, vault, store, emit):
+    def __init__(self, home, config, registry, vault, store, emit, *, desktop=False):
         self.home, self.config, self.registry, self.vault, self.store, self.emit = (
             home,
             config,
@@ -46,6 +46,7 @@ class PluginManager:
         self.manage_lock = asyncio.Lock()
         self.dependencies = RuntimeEnvironment(self.home)
         self.source_root = Path(__file__).parent.parent
+        self.desktop = desktop
         # Proactive notification channels per plugin; the engine reads this mapping directly.
         self.notifiers: dict[str, list] = {}
         self.resolve_interaction: Callable[[str], Awaitable[None]] | None = None
@@ -176,6 +177,10 @@ class PluginManager:
                             not directory.is_symlink()
                             and manifest_file(directory) is not None
                             and re.fullmatch(r"[a-z0-9_]{1,64}", directory.name)
+                            and not (
+                                root == self.source_root
+                                and removed_builtin_plugin(self.home, directory.name).is_file()
+                            )
                         ):
                             if directory.name in result:
                                 continue  # The source-tree plugin takes precedence over data/plugins.
@@ -300,9 +305,14 @@ class PluginManager:
                 self.unregister(key)
                 self._forget_modules(key)
                 if metadata:
-                    # Remove both copies to prevent a shadowed plugin reappearing on reload.
-                    for root in [self.source_root, self.home / "plugins"]:
-                        await asyncio.to_thread(remove_directory, root, key)
+                    if self.desktop:
+                        if manifest_file(self.source_root / key) is not None:
+                            marker = removed_builtin_plugin(self.home, key)
+                            marker.parent.mkdir(parents=True, exist_ok=True)
+                            marker.touch()
+                    else:
+                        await asyncio.to_thread(remove_directory, self.source_root, key)
+                    await asyncio.to_thread(remove_directory, self.home / "plugins", key)
                 settings = self.config.value.model_copy(deep=True)
                 settings.plugins = [p for p in settings.plugins if p.id != key]
                 await self.config.save(settings)

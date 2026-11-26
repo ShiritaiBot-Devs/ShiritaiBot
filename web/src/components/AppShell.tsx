@@ -1,4 +1,5 @@
 import { LoadingBar } from "./LoadingBar";
+import { DesktopSidebarDrag } from "./DesktopTitleBar";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -6,6 +7,7 @@ import {
   CloudDownload,
   MessageSquare,
   RotateCw,
+  Settings,
 } from "lucide-react";
 import { NAV_GROUPS, pageMeta } from "../navigation";
 import { UiLanguageSelect } from "./LanguageSettings";
@@ -47,6 +49,7 @@ export function AppShell({
   return (
     <div className="layout">
       <aside>
+        <DesktopSidebarDrag />
         <a
           className="brand"
           href="#/overview"
@@ -76,22 +79,24 @@ export function AppShell({
               <div className="nav-group-title" aria-hidden="true">
                 {t(`nav.${group.id}`)}
               </div>
-              {group.pages.map(({ id, icon: Icon }) => (
-                <button
-                  type="button"
-                  key={id}
-                  title={t(`pages.${id}.label`)}
-                  className={meta.id === id ? "active" : ""}
-                  aria-current={meta.id === id ? "page" : undefined}
-                  onClick={() => onNavigate(id)}
-                >
-                  <Icon size={18} aria-hidden="true" />
-                  <span>{t(`pages.${id}.label`)}</span>
-                  {id === "approvals" && pendingApprovals > 0 && (
-                    <b>{pendingApprovals}</b>
-                  )}
-                </button>
-              ))}
+              {group.pages
+                .filter(({ id }) => id !== "settings")
+                .map(({ id, icon: Icon }) => (
+                  <button
+                    type="button"
+                    key={id}
+                    title={t(`pages.${id}.label`)}
+                    className={meta.id === id ? "active" : ""}
+                    aria-current={meta.id === id ? "page" : undefined}
+                    onClick={() => onNavigate(id)}
+                  >
+                    <Icon size={18} aria-hidden="true" />
+                    <span>{t(`pages.${id}.label`)}</span>
+                    {id === "approvals" && pendingApprovals > 0 && (
+                      <b>{pendingApprovals}</b>
+                    )}
+                  </button>
+                ))}
             </div>
           ))}
         </nav>
@@ -127,6 +132,25 @@ export function AppShell({
               </>
             )}
           </button>
+          <div className="sidebar-mode-actions">
+            <button
+              type="button"
+              onClick={() => onNavigate("settings")}
+              aria-current={page === "settings" ? "page" : undefined}
+              title={t("pages.settings.label")}
+            >
+              <Settings size={16} aria-hidden="true" />
+              <span>{t("pages.settings.label")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={onOpenChat}
+              title={t("header.chatMode")}
+            >
+              <MessageSquare size={16} aria-hidden="true" />
+              <span>{t("header.chatMode")}</span>
+            </button>
+          </div>
         </div>
       </aside>
       <main id="main-content">
@@ -138,17 +162,6 @@ export function AppShell({
           </div>
           <div className="console-actions">
             <span className="local-badge">{t("header.localOnly")}</span>
-            <button
-              type="button"
-              className="chat-mode-button"
-              aria-label={t("header.chatMode")}
-              onClick={onOpenChat}
-            >
-              <MessageSquare size={14} aria-hidden="true" />
-              <span className="console-action-label">
-                {t("header.chatMode")}
-              </span>
-            </button>
             <button
               type="button"
               className="update-button"
