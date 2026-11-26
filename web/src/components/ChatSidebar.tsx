@@ -1,6 +1,7 @@
 ﻿import { useState } from "react";
 import { ChevronDown, ChevronRight, Pin, Plus, Settings } from "lucide-react";
 import type { SessionGroup, SessionGroupKey } from "../lib/sessions";
+import { BrandWordmark } from "./BrandWordmark";
 import { ChatSessionActions, type ChatActions } from "./ChatSessionActions";
 import { DesktopSidebarDrag } from "./DesktopTitleBar";
 import i18n from "../i18n";
@@ -41,7 +42,7 @@ export function ChatSidebar({
     <div className="chat-sidebar">
       <DesktopSidebarDrag />
       <div className="chat-brand">
-        <strong>ShiritaiBot</strong>
+        <BrandWordmark />
         <small>{i18n.t("chat:sidebar.title")}</small>
       </div>
       <button type="button" className="chat-new" onClick={onNew}>

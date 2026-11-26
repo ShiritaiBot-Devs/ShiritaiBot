@@ -1,4 +1,5 @@
 import { LoadingBar } from "./LoadingBar";
+import { BrandWordmark } from "./BrandWordmark";
 import { desktop, DesktopSidebarDrag } from "./DesktopTitleBar";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -62,9 +63,7 @@ export function AppShell({
             <img src="/icon.png" alt="" />
           </span>
           <span>
-            <span className="brand-name">
-              Shiritai<span>Bot</span>
-            </span>
+            <BrandWordmark />
             <small>{t("brand.console")}</small>
           </span>
         </a>

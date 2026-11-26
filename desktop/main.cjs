@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, shell, Tray } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, screen, shell, Tray } = require("electron");
 const { spawn } = require("node:child_process");
 const { mkdirSync } = require("node:fs");
 const { mkdir, readFile, readdir } = require("node:fs/promises");
@@ -11,6 +11,7 @@ const { closeBehaviors, dataFolder, loadPreferences, writePreferences } = requir
 
 const mac = process.platform === "darwin";
 const windows = process.platform === "win32";
+const trafficLightPosition = { x: 18, y: 14 };
 const dev = !app.isPackaged && app.commandLine.hasSwitch("desktop-dev");
 const root = dirname(__dirname);
 const runtime = join(app.isPackaged ? process.resourcesPath : join(__dirname, "build"), "runtime");
@@ -147,7 +148,7 @@ function createWindow() {
     icon,
     roundedCorners: true,
     ...(mac
-      ? { titleBarStyle: "hidden", trafficLightPosition: { x: 18, y: 14 } }
+      ? { titleBarStyle: "hidden", trafficLightPosition }
       : { frame: false }),
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
@@ -176,6 +177,71 @@ function createWindow() {
   const sendState = () => window.webContents.send("desktop:maximized", window.isMaximized());
   window.on("maximize", sendState);
   window.on("unmaximize", sendState);
+  if (mac && Number.parseInt(process.getSystemVersion(), 10) >= 26) {
+    const diameter = 14;
+    const spacing = 23;
+    let cursorPoll;
+    let trafficLights = "native";
+    const updateTrafficLights = () => {
+      const inactive = window.isVisible() && !window.isMinimized()
+        && !window.isFocused() && !window.isFullScreen();
+      let appearance = "native";
+      if (inactive) {
+        const cursor = screen.getCursorScreenPoint();
+        const bounds = window.getBounds();
+        const x = cursor.x - bounds.x - trafficLightPosition.x;
+        const y = cursor.y - bounds.y - trafficLightPosition.y;
+        appearance = x >= 0 && x < spacing * 2 + diameter && y >= 0 && y < diameter
+          ? "hover" : "idle";
+      }
+      if (trafficLights !== appearance) {
+        if (trafficLights === "native" || appearance === "native") {
+          window.setWindowButtonVisibility(appearance === "native");
+          if (appearance === "native" && !window.isFullScreen()) {
+            // AppKit can reset the custom position when the buttons become visible.
+            window.setWindowButtonPosition(trafficLightPosition);
+          }
+        }
+        trafficLights = appearance;
+        window.webContents.send("desktop:inactive-traffic-lights", trafficLights);
+      }
+      if (inactive && !cursorPoll) {
+        // A background window may not deliver mouse events to its web contents.
+        cursorPoll = setInterval(updateTrafficLights, 60);
+      } else if (!inactive && cursorPoll) {
+        clearInterval(cursorPoll);
+        cursorPoll = undefined;
+      }
+    };
+    for (const event of ["focus", "blur", "show", "hide", "minimize", "restore", "enter-full-screen", "leave-full-screen"]) {
+      window.on(event, updateTrafficLights);
+    }
+    window.once("closed", () => clearInterval(cursorPoll));
+    window.webContents.on("dom-ready", () => {
+      void window.webContents.insertCSS(`
+        html[data-inactive-traffic-lights]::before {
+          content: "";
+          position: fixed;
+          top: ${trafficLightPosition.y}px;
+          left: ${trafficLightPosition.x}px;
+          width: ${diameter}px;
+          height: ${diameter}px;
+          border-radius: 50%;
+          color: #cfd3da;
+          background: currentColor;
+          box-shadow: ${spacing}px 0, ${spacing * 2}px 0;
+          pointer-events: none;
+          z-index: 101;
+        }
+        html[data-inactive-traffic-lights="hover"]::before {
+          background: #ed6864;
+          box-shadow: ${spacing}px 0 #f2ca48, ${spacing * 2}px 0 #65c566;
+        }
+      `).catch(console.error);
+      updateTrafficLights();
+      window.webContents.send("desktop:inactive-traffic-lights", trafficLights);
+    });
+  }
   window.webContents.on("did-finish-load", () => showStartupStage(startupStage, startupIndexHost));
   void window.loadURL(startupUrl.href);
 }

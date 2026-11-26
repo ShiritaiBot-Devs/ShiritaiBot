@@ -183,7 +183,7 @@
   padding: 0 8px 14px;
 }
 
-.chat-brand strong {
+.chat-brand .brand-name {
   font-size: 15px;
   color: var(--text-strong);
 }
@@ -467,8 +467,8 @@
 }
 .chat-greeting h2 {
   margin: 0;
-  font-size: clamp(26px, 3vw, 38px);
-  letter-spacing: -0.04em;
+  font-size: 32px;
+  letter-spacing: 0;
 }
 .chat-greeting p {
   margin: 5px 0 0;
@@ -672,6 +672,10 @@
   }
 }
 @media (max-width: 900px) {
+  .chat-greeting h2 {
+    font-size: 26px;
+  }
+
   .chat-workspace {
     grid-template-columns: 1fr;
   }

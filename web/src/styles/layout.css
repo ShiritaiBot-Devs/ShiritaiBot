@@ -36,13 +36,16 @@ aside {
 }
 
 .brand-name {
-  display: block;
   font-family: "Manrope Variable", sans-serif;
-  font-size: 25px;
   font-weight: 850;
   letter-spacing: 0;
   line-height: 1.2;
   white-space: nowrap;
+}
+
+.brand .brand-name {
+  display: block;
+  font-size: 25px;
 }
 
 .brand-name > span {

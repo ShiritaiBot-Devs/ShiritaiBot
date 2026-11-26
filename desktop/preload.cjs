@@ -1,5 +1,11 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+ipcRenderer.on("desktop:inactive-traffic-lights", (_event, appearance) => {
+  const root = document.documentElement;
+  if (appearance === "native") root?.removeAttribute("data-inactive-traffic-lights");
+  else root?.setAttribute("data-inactive-traffic-lights", appearance);
+});
+
 contextBridge.exposeInMainWorld("shiritaiDesktop", {
   platform: process.platform,
   action: (name) => ipcRenderer.send("desktop:action", name),

@@ -7,6 +7,7 @@ import type { WebChat } from "../api/types";
 import { draftKey, modelKey, writeValue } from "../lib/composer";
 import { AgentTimeline } from "./AgentTimeline";
 import { ApprovalCard } from "./ApprovalCard";
+import { BrandWordmark } from "./BrandWordmark";
 import { ChatComposer } from "./ChatComposer";
 import { ChatSidebar } from "./ChatSidebar";
 import { useChatOutbox } from "../hooks/useChatOutbox";
@@ -252,7 +253,9 @@ export function ChatWorkspace({
             {empty && (
               <div className="chat-empty">
                 <div className="chat-greeting">
-                  <h2>Hi I'm ShiritaiBot</h2>
+                  <h2>
+                    Hi I'm <BrandWordmark />
+                  </h2>
                   <p>{i18n.t("chat:workspace.greeting")}</p>
                 </div>
                 {setup}
