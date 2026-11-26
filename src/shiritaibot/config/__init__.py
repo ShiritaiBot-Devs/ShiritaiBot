@@ -1307,6 +1307,13 @@ class Settings(Model):
         return self
 
 
+def settings_toml_data(value: Settings) -> dict:
+    data = value.model_dump()
+    for model in data["models"]:
+        model["extra_body"] = json.dumps(model["extra_body"], ensure_ascii=False)
+    return data
+
+
 class ConfigRevisionConflict(Exception):
     """The saved configuration changed since the caller read it."""
 
@@ -1353,10 +1360,7 @@ class ConfigService:
             def write() -> None:
                 self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
                 temp = self.path.with_suffix(".tmp")
-                data = value.model_dump()
-                for model in data["models"]:
-                    model["extra_body"] = json.dumps(model["extra_body"], ensure_ascii=False)
-                temp.write_text(tomli_w.dumps(data), encoding="utf-8")
+                temp.write_text(tomli_w.dumps(settings_toml_data(value)), encoding="utf-8")
                 os.chmod(temp, 0o600)
                 temp.replace(self.path)
 

@@ -1,4 +1,9 @@
 {
+  "configExported": "配置已导出到 {path}。",
+  "configImported": "配置已导入到 {path}。",
+  "configSensitive": "配置文件中可能包含 API 密钥，请勿分享给他人。",
+  "configReplace": "覆盖目标配置。",
+  "configExists": "{path} 已存在，请使用 --replace 确认覆盖。",
   "windowsEntry": "Windows 的 .cmd/.ps1 入口须改用原生 executable 或 node + CLI.js。",
   "tokenEmpty": "管理令牌文件为空：{path}",
   "tokenUnreadable": "无法读取管理令牌：{path}（{strerror}）。请使用启动时的 --home 目录。",

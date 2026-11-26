@@ -1,4 +1,9 @@
 {
+  "configExported": "Configuration exported to {path}.",
+  "configImported": "Configuration imported into {path}.",
+  "configSensitive": "The configuration file may contain API keys. Do not share it with others.",
+  "configReplace": "Replace the target configuration.",
+  "configExists": "{path} already exists. Use --replace to overwrite it.",
   "windowsEntry": "On Windows, .cmd/.ps1 entry points must be replaced with the native executable or node + CLI.js.",
   "tokenEmpty": "The admin token file is empty: {path}",
   "tokenUnreadable": "Can't read the admin token: {path} ({strerror}). Use the --home folder you start with.",

@@ -3,6 +3,7 @@ import os
 import socket
 import subprocess
 import sys
+from contextlib import asynccontextmanager
 from copy import copy, deepcopy
 from errno import EADDRINUSE, ECONNREFUSED
 from pathlib import Path
@@ -247,6 +248,95 @@ def token(
     if not value:
         raise typer.BadParameter(t("cli.tokenEmpty", locale=CLI_LOCALE, path=path))
     typer.echo(value)
+
+
+@cli.command()
+def export_config(
+    output: Path = typer.Argument(Path("shiritaibot-config.toml")),
+    home: Path = Path("data"),
+):
+    """Export the saved settings and their Vault credentials."""
+    import asyncio
+
+    from shiritaibot.config.transfer import export_settings
+    from shiritaibot.core import PublicError
+
+    async def build(settings) -> bytes:
+        if (home / "master.key").is_file() and (home / "state.sqlite3").is_file():
+            async with _config_vault(home) as vault:
+                return await export_settings(settings, vault)
+        return await export_settings(settings, None)
+
+    try:
+        settings, _ = _read_config_transfer(home / "config.toml")
+        content = asyncio.run(build(settings))
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+        descriptor = os.open(output, flags, 0o600)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(content)
+        except OSError:
+            output.unlink()
+            raise
+    except (OSError, PublicError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(1) from None
+    typer.echo(t("cli.configExported", locale=CLI_LOCALE, path=output))
+    typer.echo(t("cli.configSensitive", locale=CLI_LOCALE), err=True)
+
+
+@cli.command()
+def import_config(
+    source: Path,
+    home: Path = Path("data"),
+    replace: bool = typer.Option(False, "--replace", help=t("cli.configReplace", locale=CLI_LOCALE)),
+):
+    """Import settings into a stopped instance."""
+    import asyncio
+
+    from shiritaibot.config import ConfigService
+    from shiritaibot.config.transfer import restore_secrets
+    from shiritaibot.core import PublicError
+
+    config = ConfigService(home)
+
+    async def save(settings, secrets) -> None:
+        async with _config_vault(home) as vault:
+            settings = await restore_secrets(settings, secrets, vault)
+            await config.save(await vault.protect_settings(settings))
+
+    try:
+        if config.path.exists() and not replace:
+            raise PublicError("cli.configExists", path=config.path)
+        settings, secrets = _read_config_transfer(source)
+        asyncio.run(save(settings, secrets))
+    except (OSError, PublicError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(1) from None
+    typer.echo(t("cli.configImported", locale=CLI_LOCALE, path=config.path))
+
+
+def _read_config_transfer(path: Path):
+    from shiritaibot.config.transfer import MAX_CONFIG_BYTES, parse_settings
+
+    with path.open("rb") as stream:
+        return parse_settings(stream.read(MAX_CONFIG_BYTES + 1))
+
+
+@asynccontextmanager
+async def _config_vault(home: Path):
+    from shiritaibot.auth import Vault
+    from shiritaibot.core import EventBus
+    from shiritaibot.store import Store
+
+    store = Store(home, EventBus())
+    await store.open(recover=False)
+    try:
+        vault = Vault(home, store)
+        await vault.open()
+        yield vault
+    finally:
+        await store.close()
 
 
 @cli.command()

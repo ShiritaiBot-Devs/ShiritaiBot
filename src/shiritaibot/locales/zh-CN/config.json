@@ -1,4 +1,10 @@
 {
+  "transferTooLarge": "配置文件不能超过 16 MiB。",
+  "transferToml": "配置文件必须是有效的 UTF-8 TOML 文件。",
+  "transferVersion": "不支持此配置导出版本。",
+  "transferInvalid": "文件中没有有效的 ShiritaiBot 配置。",
+  "transferFields": "请检查以下配置字段：{fields}",
+  "transferCredentialUnreadable": "无法解密配置所引用的一项凭据。",
   "fileToml": "配置文件 {path} 的 TOML 格式无效，请检查文件语法",
   "fileInvalid": "配置文件 {path} 校验失败，请检查以下字段：{fields}",
   "providerUrl": "提供商「{id}」的接口地址（base_url）必须是 http:// 或 https://，且不能内嵌账号密码或查询参数",

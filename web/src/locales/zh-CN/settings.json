@@ -1,4 +1,14 @@
 {
+  "transfer": {
+    "title": "配置迁移",
+    "export": "导出配置",
+    "import": "导入配置",
+    "sensitive": "配置文件中可能包含 API 密钥，请勿分享给他人。",
+    "dirty": "请先保存或放弃未保存的修改，再导入配置。",
+    "confirm": "用 {{name}} 覆盖当前已保存的配置？",
+    "replace": "覆盖配置",
+    "imported": "配置已导入。"
+  },
   "desktop": {
     "title": "桌面应用",
     "closeBehavior": "关闭窗口时",

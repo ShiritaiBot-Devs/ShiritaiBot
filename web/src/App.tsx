@@ -467,7 +467,13 @@ function ConsoleApp() {
           />
         );
       case "settings":
-        return <SettingsPage {...configProps} />;
+        return (
+          <SettingsPage
+            {...configProps}
+            dirty={draft.dirty}
+            revision={draft.saved?.revision}
+          />
+        );
       default:
         return null;
     }

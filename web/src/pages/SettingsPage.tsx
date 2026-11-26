@@ -1,6 +1,7 @@
 import { PageTabs } from "../components/PageTabs";
 import { ModelOptions } from "../components/ModelOptions";
 import { DesktopSettings } from "../components/DesktopSettings";
+import { ConfigTransfer } from "../components/ConfigTransfer";
 import { useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Field, FieldForm } from "../components/FieldForm";
@@ -44,7 +45,9 @@ export function SettingsPage({
   act,
   config,
   setConfig,
-}: ConfigPageProps) {
+  dirty,
+  revision,
+}: ConfigPageProps & { dirty: boolean; revision?: string }) {
   const { t } = useTranslation("settings");
   const group = config.group_context;
   const setHeartflow = (heartflow: typeof group.heartflow) =>
@@ -263,6 +266,12 @@ export function SettingsPage({
             </>
           )}
         </section>
+        <ConfigTransfer
+          client={client}
+          act={act}
+          dirty={dirty}
+          revision={revision}
+        />
       </div>
       <div
         className="panel settings-card"

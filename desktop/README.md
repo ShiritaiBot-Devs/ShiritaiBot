@@ -13,6 +13,19 @@
 响应最快的源，后续会优先复用已准备好的环境。遇到解析或同步失败会切换到下一个源。
 设置了 `UV_DEFAULT_INDEX` 等 uv 源配置时使用指定的源。
 
+## 从 CLI 迁移配置
+
+在 CLI 的部署目录运行 `shiritaibot export-config`（源码运行使用
+`uv run shiritaibot export-config`）。如果启动时指定了 `--home`，导出时也传入同一目录。
+在桌面端打开「设置 → 通用」，滚动到底部，选择「导入配置」并打开导出的
+`shiritaibot-config.toml`。浏览器 WebUI 和桌面端都可以在此导入或导出已保存的配置。
+
+导出的文件包含配置引用的本地 Vault 凭据。配置文件中可能包含 API 密钥，请勿分享给他人。
+`env:` 引用需要在目标环境设置对应变量，ChatGPT 订阅需要在目标实例重新登录。
+
+要导入到 CLI 实例，先停止目标实例，再运行 `shiritaibot import-config shiritaibot-config.toml`。
+覆盖已有配置时加上 `--replace`。
+
 ## 本地开发
 
 安装 Node.js 24 和 uv 后，在仓库根目录运行：

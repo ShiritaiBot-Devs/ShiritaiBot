@@ -1,4 +1,10 @@
 {
+  "transferTooLarge": "The configuration file exceeds 16 MiB.",
+  "transferToml": "The configuration file must be valid UTF-8 TOML.",
+  "transferVersion": "This configuration export version is unsupported.",
+  "transferInvalid": "The file does not contain ShiritaiBot settings.",
+  "transferFields": "Check these configuration fields: {fields}",
+  "transferCredentialUnreadable": "A credential referenced by the configuration could not be decrypted.",
   "fileToml": "The settings file {path} isn't valid TOML. Check its syntax.",
   "fileInvalid": "The settings file {path} failed validation. Check these fields: {fields}",
   "providerUrl": "The base_url of provider \"{id}\" must start with http:// or https:// and can't contain credentials or query parameters",

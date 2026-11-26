@@ -36,6 +36,7 @@ from shiritaibot.config import (
     is_feishu_session,
     is_qq_official_session,
 )
+from shiritaibot.config.transfer import CONFIG_FILENAME, MAX_CONFIG_BYTES
 from shiritaibot.core import (
     Context,
     ExternalEvent,
@@ -449,25 +450,52 @@ def create_app(
                 adapter.update(app_secret="", app_secret_configured=configured)
         return data
 
-    @api.put("/api/config", dependencies=protected)
-    async def save_config(body: Settings, request: Request):
-        expected_version = None
+    def expected_config_version(request: Request) -> int | None:
         # Cloudflare may weaken ETags when compressing JSON. Prefer the opaque
         # application revision; retain If-Match for older WebUI clients.
         revision = request.headers.get("x-config-revision", request.headers.get("if-match"))
-        if revision is not None:
-            if revision != config_etag():
-                raise HTTPException(412, t("web.configChanged"))
-            expected_version = runtime.config.version
-        try:
-            await runtime.reconfigure(body, expected_version=expected_version)
-        except ConfigRevisionConflict:
-            raise HTTPException(412, t("web.configChanged")) from None
+        if revision is None:
+            return None
+        if revision != config_etag():
+            raise HTTPException(412, t("web.configChanged"))
+        return runtime.config.version
+
+    async def config_save_result():
         return {
             "ok": True,
             "version": runtime.config.version,
             "warnings": await runtime.diagnostics(),
         }
+
+    @api.put("/api/config", dependencies=protected)
+    async def save_config(body: Settings, request: Request):
+        try:
+            await runtime.reconfigure(body, expected_version=expected_config_version(request))
+        except ConfigRevisionConflict:
+            raise HTTPException(412, t("web.configChanged")) from None
+        return await config_save_result()
+
+    @api.get("/api/config/export", dependencies=protected)
+    async def export_config():
+        return Response(
+            await runtime.export_config(),
+            media_type="application/toml",
+            headers={"Content-Disposition": f'attachment; filename="{CONFIG_FILENAME}"'},
+        )
+
+    @api.post("/api/config/import", dependencies=protected)
+    async def import_config(request: Request):
+        expected_version = expected_config_version(request)
+        content = bytearray()
+        async for chunk in request.stream():
+            if len(content) + len(chunk) > MAX_CONFIG_BYTES:
+                raise HTTPException(413, t("config.transferTooLarge"))
+            content.extend(chunk)
+        try:
+            await runtime.import_config(bytes(content), expected_version=expected_version)
+        except ConfigRevisionConflict:
+            raise HTTPException(412, t("web.configChanged")) from None
+        return await config_save_result()
 
     @api.get("/api/diagnostics", dependencies=protected)
     async def diagnostics():

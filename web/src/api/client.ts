@@ -98,6 +98,8 @@ export interface ApiClient {
   configSnapshot(): Promise<ConfigSnapshot>;
   tools(session?: string): Promise<ToolCatalog>;
   saveConfig(settings: Settings, revision?: string): Promise<ConfigSaveResult>;
+  exportConfig(): Promise<Blob>;
+  importConfig(file: File, revision?: string): Promise<ConfigSaveResult>;
   startFeishuQr(
     domain: FeishuQrRegistration["domain"],
   ): Promise<FeishuQrRegistration>;
@@ -311,8 +313,15 @@ export function createClient(getToken: () => string): ApiClient {
     } catch {
       throw new ApiError(i18n.t("common:errors.offline"), 0);
     }
-    if (!response.ok)
-      throw new ApiError(messageFor(response.status, null), response.status);
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as {
+        detail?: unknown;
+      } | null;
+      throw new ApiError(
+        messageFor(response.status, payload?.detail),
+        response.status,
+      );
+    }
     return response.blob();
   }
 
@@ -354,6 +363,9 @@ export function createClient(getToken: () => string): ApiClient {
     },
     saveConfig: (settings, revision) =>
       request<ConfigSaveResult>("/config", "PUT", settings, revision),
+    exportConfig: () => requestBlob("/config/export"),
+    importConfig: (file, revision) =>
+      request<ConfigSaveResult>("/config/import", "POST", file, revision),
     startFeishuQr: (domain) =>
       request("/adapters/feishu/qr", "POST", { domain }),
     feishuQrStatus: (id) =>

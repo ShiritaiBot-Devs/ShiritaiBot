@@ -1,4 +1,14 @@
 {
+  "transfer": {
+    "title": "Configuration transfer",
+    "export": "Export configuration",
+    "import": "Import configuration",
+    "sensitive": "The configuration file may contain API keys. Do not share it with others.",
+    "dirty": "Save or discard unsaved changes before importing.",
+    "confirm": "Replace your saved configuration with {{name}}?",
+    "replace": "Replace configuration",
+    "imported": "Configuration imported."
+  },
   "desktop": {
     "title": "Desktop",
     "closeBehavior": "When closing the window",

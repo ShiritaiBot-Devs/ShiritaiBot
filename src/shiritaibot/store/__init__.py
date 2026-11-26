@@ -44,7 +44,7 @@ class Store:
         self.lock = asyncio.Lock()
         self.db: aiosqlite.Connection
 
-    async def open(self) -> None:
+    async def open(self, *, recover: bool = True) -> None:
         await asyncio.to_thread(self.home.mkdir, parents=True, exist_ok=True)
         self.db = await aiosqlite.connect(self.home / "state.sqlite3")
         self.db.row_factory = aiosqlite.Row
@@ -55,6 +55,8 @@ class Store:
         for path in sorted((Path(__file__).parent / "migrations").glob("*.sql")):
             await self.db.executescript(await asyncio.to_thread(path.read_text, encoding="utf-8"))
         await self.db.commit()
+        if not recover:
+            return
         for kind in ["turn", "subagent_run", "approval"]:
             while rows := await self.with_status(
                 kind, ("running", "waiting_approval", "pending", "queued")

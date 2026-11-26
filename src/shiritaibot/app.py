@@ -16,6 +16,7 @@ from shiritaibot.config import (
     is_feishu_session,
     is_qq_official_session,
 )
+from shiritaibot.config.transfer import export_settings, parse_settings, restore_secrets
 from shiritaibot.core import EventBus, PublicError
 from shiritaibot.core.logs import describe_session, get_logger
 from shiritaibot.emotion import EmotionManager
@@ -371,6 +372,20 @@ class Application:
                 raise ConfigRevisionConflict
             await self._reconfigure_locked(settings, expected_version=expected_version)
 
+    async def export_config(self) -> bytes:
+        async with self.configure_lock:
+            return await export_settings(self.config.value, self.vault)
+
+    async def import_config(self, content: bytes, *, expected_version: int | None) -> None:
+        settings, secrets = await asyncio.to_thread(parse_settings, content)
+        async with self.configure_lock:
+            if expected_version is not None and self.config.version != expected_version:
+                raise ConfigRevisionConflict
+            settings = await restore_secrets(settings, secrets, self.vault)
+            await self._reconfigure_locked(
+                settings, expected_version=expected_version, preserve_adapter_secrets=False
+            )
+
     async def add_feishu_adapter(self, adapter: AdapterConfig) -> int:
         async with self.configure_lock:
             current = self.config.value
@@ -395,6 +410,7 @@ class Application:
         *,
         restart_adapters: bool = True,
         expected_version: int | None = None,
+        preserve_adapter_secrets: bool = True,
     ) -> None:
         log.log("app.log.reloading")
         previous = self.config.value
@@ -404,11 +420,12 @@ class Application:
             for item in previous.adapters
             if item.type in {"feishu", "qq_official"}
         }
-        for item in settings.adapters:
-            if item.type in {"feishu", "qq_official"} and not item.app_secret:
-                item.app_secret = saved_secrets.get(
-                    (item.type, item.id, item.app_id, item.domain), ""
-                )
+        if preserve_adapter_secrets:
+            for item in settings.adapters:
+                if item.type in {"feishu", "qq_official"} and not item.app_secret:
+                    item.app_secret = saved_secrets.get(
+                        (item.type, item.id, item.app_id, item.domain), ""
+                    )
         settings = await self.vault.protect_settings(settings, await self.plugins.schemas())
         await self.open_memory_profiles(settings)
         await self.open_knowledge_libraries(settings)
