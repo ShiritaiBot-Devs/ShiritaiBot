@@ -277,6 +277,10 @@ def qq_tools(app) -> list[Tool]:
                 raise PublicError("tools.qq.targetIdRequired")
             return bot_for(ctx, args), target, args["id"]
 
+        if own_chat(ctx) is None:
+            # Background and web sessions have no chat to fall back on: "current" is meaningless.
+            raise PublicError("tools.qq.noOwnChat")
+
         scope = own_private(ctx) if sending and not owner_agent(ctx) else own_chat(ctx)
         if scope is None or (
             target not in ("current", scope[0])

@@ -259,3 +259,24 @@ def test_owner_agent_can_still_send_to_an_explicit_recipient(tmp_path):
     bot.call.assert_awaited_once_with("send_private_msg", {"user_id": 999, "message": [
         {"type": "text", "data": {"text": "hello"}},
     ]})
+
+
+def test_background_owner_session_has_no_current_chat(tmp_path):
+    _, bot, tools = _app(tmp_path)
+    ctx = Context("background:proactive:e3b0c442", "owner", "agent", True, False, True)
+
+    with pytest.raises(PublicError, match="没有所属的 QQ 聊天"):
+        asyncio.run(tools["qq_message_send"].handler(ctx, {"text": "hi"}))
+    with pytest.raises(PublicError, match="没有所属的 QQ 聊天"):
+        asyncio.run(tools["qq_message_history"].handler(ctx, {}))
+    # Member sessions with a chat binding keep the old message.
+    with pytest.raises(PublicError, match="当前 QQ 私聊"):
+        asyncio.run(tools["qq_message_send"].handler(_friend_ctx("group:qq-main:123"), {"text": "x"}))
+
+    bot.call.return_value = {"message_id": 21}
+    assert asyncio.run(tools["qq_message_send"].handler(
+        ctx, {"target": "private", "id": 615592777, "text": "hi"}
+    )) == {"message_id": 21}
+    bot.call.assert_awaited_once_with("send_private_msg", {"user_id": 615592777, "message": [
+        {"type": "text", "data": {"text": "hi"}},
+    ]})
